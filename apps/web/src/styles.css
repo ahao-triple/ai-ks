@@ -175,6 +175,30 @@ button:disabled {
   background: var(--primary-hover);
 }
 
+.secondary-action {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--foreground);
+  padding: 10px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.secondary-action:hover {
+  border-color: var(--primary);
+  color: var(--primary-hover);
+}
+
+.secondary-action.full {
+  width: 100%;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

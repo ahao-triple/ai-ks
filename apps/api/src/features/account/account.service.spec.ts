@@ -44,6 +44,34 @@ describe('AccountService', () => {
       }),
     ).rejects.toThrow('用户名已存在，请换一个用户名');
   });
+
+  it('logs in with username and password', async () => {
+    const prisma = createFakePrisma();
+    const service = new AccountService(prisma);
+
+    const user = await service.register({
+      password: 'secret123',
+      username: 'alice',
+    });
+
+    await expect(
+      service.login({
+        password: 'wrong123',
+        username: 'alice',
+      }),
+    ).rejects.toThrow('账号或密码错误');
+
+    await expect(
+      service.login({
+        password: 'secret123',
+        username: 'alice',
+      }),
+    ).resolves.toEqual({
+      id: user.id,
+      readableId: user.readableId,
+      username: 'alice',
+    });
+  });
 });
 
 type FakeUser = {
@@ -179,7 +207,21 @@ function createFakePrisma() {
         users.set(user.id, user);
         return user;
       },
-      findUnique: async ({ where }: any) => users.get(where.id) ?? null,
+      findUnique: async ({ where }: any) => {
+        if ('id' in where) {
+          return users.get(where.id) ?? null;
+        }
+
+        if ('username' in where) {
+          return (
+            Array.from(users.values()).find(
+              (user) => user.username === where.username,
+            ) ?? null
+          );
+        }
+
+        return null;
+      },
     },
   } as any;
 }

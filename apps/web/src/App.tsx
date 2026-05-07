@@ -219,6 +219,17 @@ export function App() {
     });
   }
 
+  async function loginAccount() {
+    await runAction('login', async () => {
+      const result = await apiPost<AccountResult>('/accounts/login', {
+        password,
+        username,
+      });
+      setAccount(result);
+      setNotice('账号登录成功');
+    });
+  }
+
   async function bindAccountOpenId() {
     if (!account) {
       return;
@@ -474,6 +485,14 @@ export function App() {
               type="button"
             >
               注册账号
+            </button>
+            <button
+              className="secondary-action full"
+              disabled={!username || !password || busyAction === 'login'}
+              onClick={loginAccount}
+              type="button"
+            >
+              登录账号
             </button>
             <button
               className="primary-action full"

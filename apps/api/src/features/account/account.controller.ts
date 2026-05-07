@@ -9,6 +9,8 @@ const registerSchema = z.object({
   username: z.string().min(3),
 });
 
+const loginSchema = registerSchema;
+
 const bindOpenIdSchema = z.object({
   identity: z.string().min(1),
 });
@@ -21,6 +23,12 @@ export class AccountController {
   async register(@Body() body: unknown) {
     const input = registerSchema.parse(body);
     return this.accountService.register(input);
+  }
+
+  @Post('login')
+  async login(@Body() body: unknown) {
+    const input = loginSchema.parse(body);
+    return this.accountService.login(input);
   }
 
   @Post(':userId/open-ids')

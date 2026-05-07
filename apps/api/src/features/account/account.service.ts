@@ -3,8 +3,9 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
-import { hash } from 'bcryptjs';
+import { compare, hash } from 'bcryptjs';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { generateReadableId } from '../../domain/identity/readable-id';
 
@@ -14,6 +15,11 @@ type AccountPrisma = Pick<
 >;
 
 export type RegisterAccountInput = {
+  username: string;
+  password: string;
+};
+
+export type LoginAccountInput = {
   username: string;
   password: string;
 };
@@ -35,6 +41,24 @@ export class AccountService {
 
   async register(input: RegisterAccountInput) {
     const user = await this.createUserAccount(input);
+
+    return {
+      id: user.id,
+      readableId: user.readableId,
+      username: user.username,
+    };
+  }
+
+  async login(input: LoginAccountInput) {
+    const user = await this.prisma.userAccount.findUnique({
+      where: {
+        username: input.username,
+      },
+    });
+
+    if (!user || !(await compare(input.password, user.passwordHash))) {
+      throw new UnauthorizedException('账号或密码错误');
+    }
 
     return {
       id: user.id,
