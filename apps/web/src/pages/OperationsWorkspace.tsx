@@ -16,12 +16,24 @@ import type {
   GameSessionResult,
 } from '../types/api';
 
+export type OperationsWorkspaceBusyAction =
+  | ''
+  | 'admin-withdrawals'
+  | 'audit-logs'
+  | 'refresh'
+  | 'session'
+  | `approve-${string}`
+  | `close-${string}`
+  | `detail-${string}`
+  | `pay-failed-${string}`
+  | `pay-success-${string}`;
+
 export interface OperationsWorkspaceProps {
   adminName: string;
   adminWithdrawalStatus: string;
   adminWithdrawals: AdminWithdrawalBatch[];
   auditLogs: AuditLogRow[];
-  busyAction: string;
+  busyAction: OperationsWorkspaceBusyAction;
   gameAppId: string;
   games: DemoGame[];
   jsCode: string;
@@ -79,6 +91,8 @@ export function OperationsWorkspace({
   selectedWithdrawalDetail,
   session,
 }: OperationsWorkspaceProps) {
+  const workspaceBusy = busyAction !== '';
+
   return (
     <div className="view-stack">
       <section className="metric-grid" aria-label="联调状态">
@@ -129,7 +143,7 @@ export function OperationsWorkspace({
               ))}
             </datalist>
             <Button
-              disabled={!gameAppId || !jsCode || busyAction === 'session'}
+              disabled={!gameAppId || !jsCode || workspaceBusy}
               icon={<Send size={16} />}
               onClick={onCreateSession}
             >
@@ -150,7 +164,7 @@ export function OperationsWorkspace({
               ]}
             />
             <Button
-              disabled={!gameAppId || busyAction === 'refresh'}
+              disabled={!gameAppId || workspaceBusy}
               icon={<RefreshCw size={16} />}
               onClick={onRefreshEcpm}
             >
@@ -181,21 +195,21 @@ export function OperationsWorkspace({
         actions={
           <div className="button-row">
             <Button
-              disabled={busyAction === 'admin-withdrawals'}
+              disabled={workspaceBusy}
               onClick={() => onLoadWithdrawals('PENDING_REVIEW')}
               variant="secondary"
             >
               待审核
             </Button>
             <Button
-              disabled={busyAction === 'admin-withdrawals'}
+              disabled={workspaceBusy}
               onClick={() => onLoadWithdrawals('APPROVED')}
               variant="secondary"
             >
               已审核
             </Button>
             <Button
-              disabled={busyAction === 'admin-withdrawals'}
+              disabled={workspaceBusy}
               onClick={() => onLoadWithdrawals('FAILED')}
               variant="secondary"
             >
@@ -223,7 +237,7 @@ export function OperationsWorkspace({
       <Panel
         actions={
           <Button
-            disabled={busyAction === 'audit-logs'}
+            disabled={workspaceBusy}
             icon={<RefreshCw size={16} />}
             onClick={onLoadAuditLogs}
             variant="secondary"

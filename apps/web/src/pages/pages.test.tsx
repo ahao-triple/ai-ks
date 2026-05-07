@@ -164,4 +164,41 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('提现审核');
     expect(html).toContain('审计日志');
   });
+
+  it('disables all top-level actions while an operations action is busy', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        adminName="admin"
+        adminWithdrawalStatus="PENDING_REVIEW"
+        adminWithdrawals={[]}
+        auditLogs={[]}
+        busyAction="refresh"
+        gameAppId="game-1"
+        games={[
+          {
+            companyName: 'Demo Studio',
+            gameAppId: 'game-1',
+            id: 'game-row-1',
+            name: 'Demo Game',
+          },
+        ]}
+        jsCode="mock-js-code-001"
+        onApproveWithdrawal={() => undefined}
+        onCloseWithdrawal={() => undefined}
+        onCreateSession={() => undefined}
+        onGameChange={() => undefined}
+        onJsCodeChange={() => undefined}
+        onLoadAuditLogs={() => undefined}
+        onLoadWithdrawalDetail={() => undefined}
+        onLoadWithdrawals={() => undefined}
+        onPayWithdrawal={() => undefined}
+        onRefreshEcpm={() => undefined}
+        sampleJsCodes={[]}
+      />,
+    );
+
+    expect(html.match(/<button\b[^>]*disabled=""/g)).toHaveLength(6);
+    expect(html).toContain('换取 open_id');
+    expect(html).toContain('刷新日志');
+  });
 });
