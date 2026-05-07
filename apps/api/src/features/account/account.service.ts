@@ -1,4 +1,9 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { hash } from 'bcryptjs';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { generateReadableId } from '../../domain/identity/readable-id';
@@ -29,19 +34,31 @@ export class AccountService {
   constructor(@Inject(PrismaService) private readonly prisma: AccountPrisma) {}
 
   async register(input: RegisterAccountInput) {
-    const user = await this.prisma.userAccount.create({
-      data: {
-        passwordHash: await hash(input.password, 10),
-        readableId: generateReadableId(`user:${input.username}`),
-        username: input.username,
-      },
-    });
+    const user = await this.createUserAccount(input);
 
     return {
       id: user.id,
       readableId: user.readableId,
       username: user.username,
     };
+  }
+
+  private async createUserAccount(input: RegisterAccountInput) {
+    try {
+      return await this.prisma.userAccount.create({
+        data: {
+          passwordHash: await hash(input.password, 10),
+          readableId: generateReadableId(`user:${input.username}`),
+          username: input.username,
+        },
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        throw new ConflictException('用户名已存在，请换一个用户名');
+      }
+
+      throw error;
+    }
   }
 
   async bindOpenId(input: BindOpenIdInput) {
@@ -149,4 +166,13 @@ export class AccountService {
 
 function sum(values: bigint[]) {
   return values.reduce((total, value) => total + value, 0n);
+}
+
+function isUniqueConstraintError(error: unknown) {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'code' in error &&
+    error.code === 'P2002'
+  );
 }

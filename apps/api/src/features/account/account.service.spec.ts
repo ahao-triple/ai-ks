@@ -27,6 +27,23 @@ describe('AccountService', () => {
     expect(result.openIds).toEqual(['open_a']);
     expect(result.rows).toHaveLength(1);
   });
+
+  it('returns a business error when the username already exists', async () => {
+    const prisma = createFakePrisma();
+    const service = new AccountService(prisma);
+
+    await service.register({
+      password: 'secret123',
+      username: 'alice',
+    });
+
+    await expect(
+      service.register({
+        password: 'another123',
+        username: 'alice',
+      }),
+    ).rejects.toThrow('用户名已存在，请换一个用户名');
+  });
 });
 
 type FakeUser = {
@@ -132,6 +149,21 @@ function createFakePrisma() {
     },
     userAccount: {
       create: async ({ data }: any) => {
+        if (
+          Array.from(users.values()).some(
+            (user) => user.username === data.username,
+          )
+        ) {
+          const error = new Error('Unique constraint failed');
+          Object.assign(error, {
+            code: 'P2002',
+            meta: {
+              target: ['username'],
+            },
+          });
+          throw error;
+        }
+
         const user = {
           id: `user-${users.size + 1}`,
           alipayAccount: null,

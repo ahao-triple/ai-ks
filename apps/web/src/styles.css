@@ -340,6 +340,11 @@ button:disabled {
   color: var(--danger);
 }
 
+.alert.success {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
 .table {
   display: grid;
 }

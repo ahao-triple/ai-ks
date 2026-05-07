@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Banknote,
   Building2,
@@ -137,7 +137,9 @@ export function App() {
   const [accountEarnings, setAccountEarnings] =
     useState<AccountEarningsResult>();
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [busyAction, setBusyAction] = useState('');
+  const busyRef = useRef(false);
 
   const navItems = navByRole[activeRole];
   const selectedGame = useMemo(
@@ -178,6 +180,7 @@ export function App() {
       });
       setSession(result);
       setIdentity(result.openId);
+      setNotice('open_id 获取成功');
     });
   }
 
@@ -191,6 +194,7 @@ export function App() {
         },
       );
       setRefreshResult(result);
+      setNotice(`ECPM 刷新成功，写入 ${result.savedCount} 条明细`);
     });
   }
 
@@ -200,6 +204,7 @@ export function App() {
         `/user/earnings?identity=${encodeURIComponent(identity)}`,
       );
       setEarnings(result);
+      setNotice('收益查询成功');
     });
   }
 
@@ -210,6 +215,7 @@ export function App() {
         username,
       });
       setAccount(result);
+      setNotice('账号注册成功');
     });
   }
 
@@ -222,6 +228,7 @@ export function App() {
       await apiPost(`/accounts/${account.id}/open-ids`, {
         identity: session?.openId ?? identity,
       });
+      setNotice('open_id 绑定成功');
     });
   }
 
@@ -235,12 +242,19 @@ export function App() {
         `/accounts/${account.id}/earnings`,
       );
       setAccountEarnings(result);
+      setNotice('账号收益查询成功');
     });
   }
 
   async function runAction(name: string, action: () => Promise<void>) {
+    if (busyRef.current) {
+      return;
+    }
+
+    busyRef.current = true;
     setBusyAction(name);
     setError('');
+    setNotice('');
     try {
       await action();
     } catch (nextError) {
@@ -248,6 +262,7 @@ export function App() {
         nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
       );
     } finally {
+      busyRef.current = false;
       setBusyAction('');
     }
   }
@@ -305,6 +320,7 @@ export function App() {
         </header>
 
         {error ? <div className="alert danger">{error}</div> : null}
+        {notice ? <div className="alert success">{notice}</div> : null}
 
         <section className="metric-grid" aria-label="关键指标">
           <article className="metric-card">
@@ -538,10 +554,46 @@ async function apiPost<T>(path: string, body: unknown): Promise<T> {
 }
 
 async function readResponse<T>(response: Response): Promise<T> {
-  const payload = await response.json();
+  const payload = await readPayload(response);
   if (!response.ok) {
-    throw new Error(JSON.stringify(payload));
+    throw new Error(readApiErrorMessage(payload, response.status));
   }
 
   return payload as T;
+}
+
+async function readPayload(response: Response): Promise<unknown> {
+  const contentType = response.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    return response.text();
+  }
+
+  return response.json();
+}
+
+function readApiErrorMessage(payload: unknown, status: number) {
+  if (payload && typeof payload === 'object' && 'message' in payload) {
+    const message = (payload as { message?: unknown }).message;
+    if (Array.isArray(message)) {
+      return message.join('；');
+    }
+
+    if (typeof message === 'string' && message.length > 0) {
+      return message;
+    }
+  }
+
+  if (typeof payload === 'string' && payload.length > 0) {
+    return payload;
+  }
+
+  if (status === 409) {
+    return '数据已存在，请勿重复提交';
+  }
+
+  if (status === 400) {
+    return '请求参数错误，请检查输入';
+  }
+
+  return '请求失败，请稍后重试';
 }
