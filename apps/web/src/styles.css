@@ -372,6 +372,10 @@ select {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.tool-grid .readout-grid {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
 .button-row {
   display: flex;
   flex-wrap: wrap;
@@ -764,9 +768,10 @@ select {
 
 .readout strong {
   min-width: 0;
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   font-size: 14px;
   font-weight: 650;
+  word-break: normal;
 }
 
 .data-table-wrap {
