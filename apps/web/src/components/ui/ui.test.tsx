@@ -8,7 +8,7 @@ import {
   MetricCard,
   Panel,
   StatusBadge,
-} from './index';
+} from '.';
 
 describe('UI primitives', () => {
   it('renders a primary Button with its classes and children', () => {
