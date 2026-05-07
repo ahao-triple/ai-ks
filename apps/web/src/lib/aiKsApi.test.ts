@@ -1,6 +1,7 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { aiKsApi } from './aiKsApi';
 import { API_BASE_URL } from './api';
+import type { AdminWithdrawalBatch } from '../types/api';
 
 const originalFetch = globalThis.fetch;
 
@@ -67,5 +68,36 @@ describe('aiKsApi', () => {
         method: 'GET',
       },
     );
+  });
+
+  it('encodes withdrawal batch id path segments for mutations', async () => {
+    mockJsonResponse({ id: 'batch 1/2', status: 'PENDING' });
+
+    await aiKsApi.payWithdrawal('admin-token', 'batch 1/2', 'success');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/withdrawals/batch%201%2F2/pay`,
+      {
+        body: expect.any(String),
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      },
+    );
+    const requestInit = vi.mocked(globalThis.fetch).mock.calls[0]?.[1];
+    expect(JSON.parse(requestInit?.body as string)).toEqual({
+      mockResult: 'success',
+    });
+  });
+
+  it('types withdrawal mutations as withdrawal batches', () => {
+    expectTypeOf(aiKsApi.approveWithdrawal)
+      .returns.resolves.toEqualTypeOf<AdminWithdrawalBatch>();
+    expectTypeOf(aiKsApi.payWithdrawal)
+      .returns.resolves.toEqualTypeOf<AdminWithdrawalBatch>();
+    expectTypeOf(aiKsApi.closeWithdrawal)
+      .returns.resolves.toEqualTypeOf<AdminWithdrawalBatch>();
   });
 });

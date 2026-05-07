@@ -3,6 +3,7 @@ import type {
   AccountEarningsResult,
   AccountResult,
   AdminAuthResult,
+  AdminWithdrawalBatch,
   AdminWithdrawalDetailResult,
   AdminWithdrawalListResult,
   AlipayProfile,
@@ -16,6 +17,10 @@ import type {
   SettlementResult,
   WithdrawalResult,
 } from '../types/api';
+
+function withdrawalPath(batchId: string, suffix = '') {
+  return `/admin/withdrawals/${encodeURIComponent(batchId)}${suffix}`;
+}
 
 export const aiKsApi = {
   getDemoContext() {
@@ -128,17 +133,20 @@ export const aiKsApi = {
 
   getWithdrawalDetail(adminAccessToken: string, batchId: string) {
     return requestJson<AdminWithdrawalDetailResult>(
-      `/admin/withdrawals/${batchId}`,
+      withdrawalPath(batchId),
       { accessToken: adminAccessToken },
     );
   },
 
   approveWithdrawal(adminAccessToken: string, batchId: string) {
-    return requestJson('/admin/withdrawals/' + batchId + '/approve', {
-      accessToken: adminAccessToken,
-      body: {},
-      method: 'POST',
-    });
+    return requestJson<AdminWithdrawalBatch>(
+      withdrawalPath(batchId, '/approve'),
+      {
+        accessToken: adminAccessToken,
+        body: {},
+        method: 'POST',
+      },
+    );
   },
 
   payWithdrawal(
@@ -146,7 +154,7 @@ export const aiKsApi = {
     batchId: string,
     mockResult: 'failed' | 'success',
   ) {
-    return requestJson('/admin/withdrawals/' + batchId + '/pay', {
+    return requestJson<AdminWithdrawalBatch>(withdrawalPath(batchId, '/pay'), {
       accessToken: adminAccessToken,
       body: { mockResult },
       method: 'POST',
@@ -154,7 +162,7 @@ export const aiKsApi = {
   },
 
   closeWithdrawal(adminAccessToken: string, batchId: string) {
-    return requestJson('/admin/withdrawals/' + batchId + '/close', {
+    return requestJson<AdminWithdrawalBatch>(withdrawalPath(batchId, '/close'), {
       accessToken: adminAccessToken,
       body: {},
       method: 'POST',
