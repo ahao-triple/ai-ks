@@ -29,6 +29,32 @@ describe('LoginPage', () => {
     expect(html).toContain('登录');
     expect(html).not.toContain('收益明细');
   });
+
+  it('disables guest entry while account login is busy', () => {
+    const html = renderToStaticMarkup(
+      <LoginPage
+        adminPassword="admin123456"
+        adminUsername="admin"
+        busyAction="login"
+        mode="account"
+        onAdminPasswordChange={() => undefined}
+        onAdminUsernameChange={() => undefined}
+        onGuestEnter={() => undefined}
+        onLoginAdmin={() => undefined}
+        onLoginAccount={() => undefined}
+        onModeChange={() => undefined}
+        onPasswordChange={() => undefined}
+        onRegister={() => undefined}
+        onUsernameChange={() => undefined}
+        password="demo123456"
+        username="demo_user"
+      />,
+    );
+
+    expect(html).toContain(
+      '<button class="ui-button ui-button-ghost" type="button" disabled="">游客登录</button>',
+    );
+  });
 });
 
 describe('GuestQueryPage', () => {

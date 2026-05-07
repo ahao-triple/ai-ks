@@ -3,11 +3,12 @@ import { AuthLayout } from '../layouts/AuthLayout';
 import { Button, InputField } from '../components/ui';
 
 export type LoginMode = 'account' | 'admin';
+export type LoginBusyAction = '' | 'admin-login' | 'login' | 'register';
 
 export interface LoginPageProps {
   adminPassword: string;
   adminUsername: string;
-  busyAction: string;
+  busyAction: LoginBusyAction;
   mode: LoginMode;
   onAdminPasswordChange(value: string): void;
   onAdminUsernameChange(value: string): void;
@@ -45,6 +46,7 @@ export function LoginPage({
   const canSubmit =
     activeUsername.trim().length > 0 && activePassword.trim().length > 0;
   const loginBusyAction = isAdmin ? 'admin-login' : 'login';
+  const authBusy = busyAction !== '';
 
   return (
     <AuthLayout>
@@ -56,6 +58,7 @@ export function LoginPage({
       <div className="segmented-control" role="tablist" aria-label="登录方式">
         <Button
           aria-pressed={!isAdmin}
+          disabled={authBusy}
           onClick={() => onModeChange('account')}
           variant={!isAdmin ? 'primary' : 'secondary'}
         >
@@ -63,6 +66,7 @@ export function LoginPage({
         </Button>
         <Button
           aria-pressed={isAdmin}
+          disabled={authBusy}
           onClick={() => onModeChange('admin')}
           variant={isAdmin ? 'primary' : 'secondary'}
         >
@@ -83,7 +87,7 @@ export function LoginPage({
           value={activePassword}
         />
         <Button
-          disabled={!canSubmit || busyAction === loginBusyAction}
+          disabled={authBusy || !canSubmit}
           icon={<LogIn size={16} />}
           onClick={isAdmin ? onLoginAdmin : onLoginAccount}
         >
@@ -91,7 +95,7 @@ export function LoginPage({
         </Button>
         {!isAdmin ? (
           <Button
-            disabled={!canSubmit || busyAction === 'register'}
+            disabled={authBusy || !canSubmit}
             icon={<UserPlus size={16} />}
             onClick={onRegister}
             variant="secondary"
@@ -99,7 +103,7 @@ export function LoginPage({
             {busyAction === 'register' ? '注册中' : '注册'}
           </Button>
         ) : null}
-        <Button onClick={onGuestEnter} variant="ghost">
+        <Button disabled={authBusy} onClick={onGuestEnter} variant="ghost">
           游客登录
         </Button>
       </div>
