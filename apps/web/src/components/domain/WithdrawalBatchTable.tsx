@@ -29,6 +29,7 @@ function renderActions(
   props: WithdrawalBatchTableProps,
 ) {
   const { busyAction, onApprove, onClose, onDetail, onPay } = props;
+  const isActionBusy = busyAction !== '';
 
   return (
     <span className="inline-actions">
@@ -44,7 +45,7 @@ function renderActions(
         <>
           <Button
             compact
-            disabled={busyAction === `pay-success-${row.id}`}
+            disabled={isActionBusy}
             onClick={() => onPay(row.id, 'success')}
             variant="secondary"
           >
@@ -52,7 +53,7 @@ function renderActions(
           </Button>
           <Button
             compact
-            disabled={busyAction === `pay-failed-${row.id}`}
+            disabled={isActionBusy}
             onClick={() => onPay(row.id, 'failed')}
             variant="secondary"
           >
@@ -62,22 +63,22 @@ function renderActions(
       ) : row.status === 'FAILED' ? (
         <Button
           compact
-          disabled={busyAction === `close-${row.id}`}
+          disabled={isActionBusy}
           onClick={() => onClose(row.id)}
           variant="secondary"
         >
           {busyAction === `close-${row.id}` ? '关闭中' : '关闭'}
         </Button>
-      ) : (
+      ) : row.status === 'PENDING_REVIEW' ? (
         <Button
           compact
-          disabled={busyAction === `approve-${row.id}`}
+          disabled={isActionBusy}
           onClick={() => onApprove(row.id)}
           variant="secondary"
         >
           {busyAction === `approve-${row.id}` ? '审核中' : '通过'}
         </Button>
-      )}
+      ) : null}
     </span>
   );
 }
