@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { resolveWorkspaceEnvPath } from './common/env/workspace-env';
 import { PrismaModule } from './common/prisma/prisma.module';
+import { AccountModule } from './features/account/account.module';
 import { DemoModule } from './features/demo/demo.module';
 import { GameSessionModule } from './features/game/game-session.module';
 import { KuaishouRefreshModule } from './features/kuaishou-admin/kuaishou-refresh.module';
@@ -16,6 +17,7 @@ import { HealthModule } from './health/health.module';
     }),
     PrismaModule,
     HealthModule,
+    AccountModule,
     DemoModule,
     GameSessionModule,
     KuaishouRefreshModule,

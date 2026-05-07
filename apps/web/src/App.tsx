@@ -62,6 +62,21 @@ type EarningsResult = {
   rows: EcpmRow[];
 };
 
+type AccountResult = {
+  id: string;
+  readableId: string;
+  username: string;
+};
+
+type AccountEarningsResult = {
+  date: string;
+  openIds: string[];
+  totalRawCost: MoneyValue;
+  totalDisplayAmount: MoneyValue;
+  rows: EcpmRow[];
+  userId: string;
+};
+
 type EcpmRow = {
   platformEventId: string;
   gameAppId: string;
@@ -116,6 +131,11 @@ export function App() {
   const [refreshResult, setRefreshResult] = useState<EcpmRefreshResult>();
   const [identity, setIdentity] = useState('');
   const [earnings, setEarnings] = useState<EarningsResult>();
+  const [username, setUsername] = useState('demo_user');
+  const [password, setPassword] = useState('demo123456');
+  const [account, setAccount] = useState<AccountResult>();
+  const [accountEarnings, setAccountEarnings] =
+    useState<AccountEarningsResult>();
   const [error, setError] = useState('');
   const [busyAction, setBusyAction] = useState('');
 
@@ -180,6 +200,41 @@ export function App() {
         `/user/earnings?identity=${encodeURIComponent(identity)}`,
       );
       setEarnings(result);
+    });
+  }
+
+  async function registerAccount() {
+    await runAction('register', async () => {
+      const result = await apiPost<AccountResult>('/accounts/register', {
+        password,
+        username,
+      });
+      setAccount(result);
+    });
+  }
+
+  async function bindAccountOpenId() {
+    if (!account) {
+      return;
+    }
+
+    await runAction('bind', async () => {
+      await apiPost(`/accounts/${account.id}/open-ids`, {
+        identity: session?.openId ?? identity,
+      });
+    });
+  }
+
+  async function queryAccountEarnings() {
+    if (!account) {
+      return;
+    }
+
+    await runAction('account-query', async () => {
+      const result = await apiGet<AccountEarningsResult>(
+        `/accounts/${account.id}/earnings`,
+      );
+      setAccountEarnings(result);
     });
   }
 
@@ -371,6 +426,69 @@ export function App() {
               </button>
             </div>
           </article>
+        </section>
+
+        <section className="panel account-panel">
+          <div className="panel-heading">
+            <div>
+              <h2>账号绑定</h2>
+              <p>注册后绑定多个 open_id</p>
+            </div>
+          </div>
+          <div className="account-grid">
+            <label className="field">
+              <span>账号</span>
+              <input
+                onChange={(event) => setUsername(event.target.value)}
+                value={username}
+              />
+            </label>
+            <label className="field">
+              <span>密码</span>
+              <input
+                onChange={(event) => setPassword(event.target.value)}
+                type="password"
+                value={password}
+              />
+            </label>
+            <button
+              className="primary-action full"
+              disabled={!username || !password || busyAction === 'register'}
+              onClick={registerAccount}
+              type="button"
+            >
+              注册账号
+            </button>
+            <button
+              className="primary-action full"
+              disabled={!account || !session || busyAction === 'bind'}
+              onClick={bindAccountOpenId}
+              type="button"
+            >
+              绑定 open_id
+            </button>
+            <button
+              className="primary-action full"
+              disabled={!account || busyAction === 'account-query'}
+              onClick={queryAccountEarnings}
+              type="button"
+            >
+              查询账号收益
+            </button>
+            <div className="readonly-box">
+              <span>当前账号</span>
+              <strong>
+                {account
+                  ? `${account.username} / ${account.readableId}`
+                  : '未注册'}
+              </strong>
+            </div>
+          </div>
+          <div className="account-summary">
+            <span>账号聚合展示金额</span>
+            <strong>¥ {accountEarnings?.totalDisplayAmount.yuan ?? '0.00'}</strong>
+            <span>{accountEarnings?.openIds.length ?? 0} 个 open_id</span>
+          </div>
         </section>
 
         <section className="panel">

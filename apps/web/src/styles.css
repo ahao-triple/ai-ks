@@ -222,6 +222,38 @@ button:disabled {
   margin-bottom: 20px;
 }
 
+.account-panel {
+  margin-bottom: 20px;
+}
+
+.account-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.account-grid .field {
+  grid-column: span 2;
+}
+
+.account-summary {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+}
+
+.account-summary span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.account-summary strong {
+  font-size: 20px;
+}
+
 .panel {
   overflow: hidden;
 }
@@ -393,6 +425,19 @@ button:disabled {
 
   .workbench-grid {
     grid-template-columns: 1fr;
+  }
+
+  .account-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .account-grid .field {
+    grid-column: auto;
+  }
+
+  .account-summary {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .topbar {
