@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { LoginPage } from './LoginPage';
 import { GuestQueryPage } from './GuestQueryPage';
 import { AccountWorkspace } from './AccountWorkspace';
+import { OperationsWorkspace } from './OperationsWorkspace';
 
 describe('LoginPage', () => {
   it('renders a clean login page with guest entry', () => {
@@ -129,5 +130,38 @@ describe('AccountWorkspace', () => {
     expect(html.match(/<button\b[^>]*disabled=""/g)).toHaveLength(5);
     expect(html).toContain('提交中');
     expect(html).toContain('确认结算');
+  });
+});
+
+describe('OperationsWorkspace', () => {
+  it('renders admin operations sections', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        adminName=""
+        adminWithdrawalStatus="PENDING_REVIEW"
+        adminWithdrawals={[]}
+        auditLogs={[]}
+        busyAction=""
+        gameAppId=""
+        games={[]}
+        jsCode=""
+        onApproveWithdrawal={() => undefined}
+        onCloseWithdrawal={() => undefined}
+        onCreateSession={() => undefined}
+        onGameChange={() => undefined}
+        onJsCodeChange={() => undefined}
+        onLoadAuditLogs={() => undefined}
+        onLoadWithdrawalDetail={() => undefined}
+        onLoadWithdrawals={() => undefined}
+        onPayWithdrawal={() => undefined}
+        onRefreshEcpm={() => undefined}
+        sampleJsCodes={[]}
+      />,
+    );
+
+    expect(html).toContain('游戏端登录');
+    expect(html).toContain('快手 ECPM');
+    expect(html).toContain('提现审核');
+    expect(html).toContain('审计日志');
   });
 });
