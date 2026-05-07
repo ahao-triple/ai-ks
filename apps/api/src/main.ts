@@ -1,10 +1,16 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { resolveConfiguredPort } from './common/env/port';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
-  await app.listen(process.env.PORT ? Number(process.env.PORT) : 3000);
+  const port = resolveConfiguredPort({
+    defaultPort: 3000,
+    env: process.env,
+    name: 'API_PORT',
+  });
+  await app.listen(port);
 }
 
 void bootstrap();
