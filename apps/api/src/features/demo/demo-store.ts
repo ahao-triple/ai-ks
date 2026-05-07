@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { SettlementStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { generateReadableId } from '../../domain/identity/readable-id';
@@ -79,7 +79,7 @@ export type QueryEarningsInput = {
 
 @Injectable()
 export class DemoStore {
-  constructor(private readonly prisma: DemoPrisma) {}
+  constructor(@Inject(PrismaService) private readonly prisma: DemoPrisma) {}
 
   async ensureDemoData() {
     await this.prisma.company.upsert({
