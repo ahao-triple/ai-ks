@@ -9,13 +9,21 @@ import type {
   WithdrawalResult,
 } from '../types/api';
 
+export type AccountWorkspaceBusyAction =
+  | ''
+  | 'account-query'
+  | 'alipay'
+  | 'bind'
+  | 'settlement'
+  | 'withdrawal';
+
 export interface AccountWorkspaceProps {
   account?: AccountResult;
   accountEarnings?: AccountEarningsResult;
   alipayAccount: string;
   alipayRealName: string;
   bindIdentity: string;
-  busyAction: string;
+  busyAction: AccountWorkspaceBusyAction;
   onAlipayAccountChange(value: string): void;
   onAlipayRealNameChange(value: string): void;
   onBindIdentityChange(value: string): void;
@@ -50,6 +58,8 @@ export function AccountWorkspace({
   withdrawal,
   withdrawalAmountYuan,
 }: AccountWorkspaceProps) {
+  const workspaceBusy = busyAction !== '';
+
   return (
     <div className="view-stack">
       <section className="metric-grid metric-grid-four" aria-label="账号概览">
@@ -89,14 +99,14 @@ export function AccountWorkspace({
             />
             <div className="button-row">
               <Button
-                disabled={!account || !bindIdentity.trim() || busyAction === 'bind'}
+                disabled={!account || !bindIdentity.trim() || workspaceBusy}
                 icon={<Link2 size={16} />}
                 onClick={onBindOpenId}
               >
                 {busyAction === 'bind' ? '绑定中' : '绑定 ID'}
               </Button>
               <Button
-                disabled={!account || busyAction === 'account-query'}
+                disabled={!account || workspaceBusy}
                 icon={<WalletCards size={16} />}
                 onClick={onQueryAccountEarnings}
                 variant="secondary"
@@ -129,7 +139,7 @@ export function AccountWorkspace({
                 !account ||
                 !alipayAccount.trim() ||
                 !alipayRealName.trim() ||
-                busyAction === 'alipay'
+                workspaceBusy
               }
               icon={<WalletCards size={16} />}
               onClick={onUpdateAlipayProfile}
@@ -155,7 +165,7 @@ export function AccountWorkspace({
                 disabled={
                   !account ||
                   !withdrawalAmountYuan.trim() ||
-                  busyAction === 'withdrawal'
+                  workspaceBusy
                 }
                 icon={<Send size={16} />}
                 onClick={onRequestWithdrawal}
@@ -163,7 +173,7 @@ export function AccountWorkspace({
                 {busyAction === 'withdrawal' ? '提交中' : '提交提现'}
               </Button>
               <Button
-                disabled={!account || busyAction === 'settlement'}
+                disabled={!account || workspaceBusy}
                 icon={<WalletCards size={16} />}
                 onClick={onConfirmSettlement}
                 variant="secondary"

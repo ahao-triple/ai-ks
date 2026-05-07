@@ -100,4 +100,34 @@ describe('AccountWorkspace', () => {
     expect(html).toContain('提现申请');
     expect(html).toContain('账号收益明细');
   });
+
+  it('disables all account actions while one workspace action is busy', () => {
+    const html = renderToStaticMarkup(
+      <AccountWorkspace
+        account={{
+          id: 'account-1',
+          readableId: '1234567',
+          username: 'demo_user',
+        }}
+        alipayAccount="demo@example.com"
+        alipayRealName="Demo User"
+        bindIdentity="open-id-1"
+        busyAction="withdrawal"
+        onAlipayAccountChange={() => undefined}
+        onAlipayRealNameChange={() => undefined}
+        onBindIdentityChange={() => undefined}
+        onBindOpenId={() => undefined}
+        onConfirmSettlement={() => undefined}
+        onQueryAccountEarnings={() => undefined}
+        onRequestWithdrawal={() => undefined}
+        onUpdateAlipayProfile={() => undefined}
+        onWithdrawalAmountChange={() => undefined}
+        withdrawalAmountYuan="10.00"
+      />,
+    );
+
+    expect(html.match(/<button\b[^>]*disabled=""/g)).toHaveLength(5);
+    expect(html).toContain('提交中');
+    expect(html).toContain('确认结算');
+  });
 });
