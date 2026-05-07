@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PrincipalType {
+  USER
+  AGENT
+  COMPANY_ADMIN
+  SUPER_ADMIN
+}
+
+enum WithdrawalDetailType {
+  USER
+  DIRECT_AGENT
+  PARENT_AGENT
+  DEFAULT_AGENT
+  FEE
+}
+
+enum WithdrawalDetailStatus {
+  PENDING_REVIEW
+  APPROVED
+  PAYING
+  PAID
+  FAILED
+  MANUAL_PROCESSING
+  CLOSED
+}
+
+enum SettlementStatus {
+  RAW
+  PENDING
+  SETTLED
+  PAUSED
+  CLOSED
+}
+
+model Company {
+  id        String    @id @default(uuid())
+  name      String
+  balanceLi BigInt    @default(0) @map("balance_li")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  games  Game[]
+  admins CompanyAdminScope[]
+
+  @@map("companies")
+}
+
+model Game {
+  id               String    @id @default(uuid())
+  companyId        String    @map("company_id")
+  name             String
+  gameAppId        String    @unique @map("game_app_id")
+  gameSecret       String    @map("game_secret")
+  budgetLi         BigInt    @default(0) @map("budget_li")
+  settlementPaused Boolean   @default(false) @map("settlement_paused")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  deletedAt        DateTime? @map("deleted_at")
+
+  company  Company      @relation(fields: [companyId], references: [id])
+  openIds  GameOpenId[]
+  rawEcpms RawEcpm[]
+
+  @@index([companyId])
+  @@map("games")
+}
+
+model UserAccount {
+  id                 String    @id @default(uuid())
+  username           String    @unique
+  passwordHash       String    @map("password_hash")
+  readableId         String    @unique @map("readable_id")
+  currentAgentId     String?   @map("current_agent_id")
+  alipayAccount      String?   @map("alipay_account")
+  alipayRealName     String?   @map("alipay_real_name")
+  availableBalanceLi BigInt    @default(0) @map("available_balance_li")
+  frozenBalanceLi    BigInt    @default(0) @map("frozen_balance_li")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  deletedAt          DateTime? @map("deleted_at")
+
+  currentAgent  Agent?                    @relation(fields: [currentAgentId], references: [id])
+  openIds       GameOpenId[]
+  agentBindings UserAgentBindingHistory[]
+
+  @@index([currentAgentId])
+  @@map("user_accounts")
+}
+
+model Agent {
+  id             String    @id @default(uuid())
+  username       String    @unique
+  passwordHash   String    @map("password_hash")
+  invitationCode String    @unique @map("invitation_code")
+  parentAgentId  String?   @map("parent_agent_id")
+  alipayAccount  String?   @map("alipay_account")
+  alipayRealName String?   @map("alipay_real_name")
+  enabled        Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  deletedAt      DateTime? @map("deleted_at")
+
+  parentAgent Agent?        @relation("AgentTree", fields: [parentAgentId], references: [id])
+  childAgents Agent[]       @relation("AgentTree")
+  users       UserAccount[]
+
+  @@index([parentAgentId])
+  @@map("agents")
+}
+
+model GameOpenId {
+  id         String   @id @default(uuid())
+  gameId     String   @map("game_id")
+  userId     String?  @map("user_id")
+  openId     String   @unique @map("open_id")
+  readableId String   @unique @map("readable_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  game     Game         @relation(fields: [gameId], references: [id])
+  user     UserAccount? @relation(fields: [userId], references: [id])
+  rawEcpms RawEcpm[]
+
+  @@index([gameId])
+  @@index([userId])
+  @@map("game_open_ids")
+}
+
+model RawEcpm {
+  id              String           @id @default(uuid())
+  gameId          String           @map("game_id")
+  openIdRecordId  String?          @map("open_id_record_id")
+  platformEventId String           @map("platform_event_id")
+  openId          String           @map("open_id")
+  rawCostLi       BigInt           @map("raw_cost_li")
+  displayAmountLi BigInt           @map("display_amount_li")
+  eventTime       DateTime         @map("event_time")
+  status          SettlementStatus @default(PENDING)
+  configSnapshot  Json             @map("config_snapshot")
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  game         Game        @relation(fields: [gameId], references: [id])
+  openIdRecord GameOpenId? @relation(fields: [openIdRecordId], references: [id])
+
+  @@unique([gameId, platformEventId])
+  @@index([openId])
+  @@index([eventTime])
+  @@map("raw_ecpms")
+}
+
+model UserAgentBindingHistory {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  fromAgentId String?  @map("from_agent_id")
+  toAgentId   String?  @map("to_agent_id")
+  source      String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  user UserAccount @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("user_agent_binding_history")
+}
+
+model CompanyAdminScope {
+  id             String   @id @default(uuid())
+  companyId      String   @map("company_id")
+  principalId    String   @map("principal_id")
+  gameIds        String[] @map("game_ids")
+  operationCodes String[] @map("operation_codes")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  company Company @relation(fields: [companyId], references: [id])
+
+  @@index([companyId])
+  @@index([principalId])
+  @@map("company_admin_scopes")
+}
+
+model WithdrawalBatch {
+  id            String   @id @default(uuid())
+  userId        String   @map("user_id")
+  status        String
+  totalAmountLi BigInt   @map("total_amount_li")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  details WithdrawalDetail[]
+
+  @@index([userId])
+  @@map("withdrawal_batches")
+}
+
+model WithdrawalDetail {
+  id                     String                 @id @default(uuid())
+  batchId                String                 @map("batch_id")
+  type                   WithdrawalDetailType
+  status                 WithdrawalDetailStatus @default(PENDING_REVIEW)
+  amountLi               BigInt                 @map("amount_li")
+  recipientAlipay        String                 @map("recipient_alipay")
+  recipientName          String                 @map("recipient_name")
+  configSnapshot         Json                   @map("config_snapshot")
+  alipayRequestSnapshot  Json?                  @map("alipay_request_snapshot")
+  alipayResponseSnapshot Json?                  @map("alipay_response_snapshot")
+  errorCode              String?                @map("error_code")
+  errorMessage           String?                @map("error_message")
+  createdAt              DateTime               @default(now()) @map("created_at")
+  updatedAt              DateTime               @updatedAt @map("updated_at")
+
+  batch WithdrawalBatch @relation(fields: [batchId], references: [id])
+
+  @@index([batchId])
+  @@index([status])
+  @@map("withdrawal_details")
+}
