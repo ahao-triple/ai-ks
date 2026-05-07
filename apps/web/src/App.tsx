@@ -51,6 +51,8 @@ type AppBusyAction =
   | OperationsWorkspaceBusyAction
   | 'query';
 
+type AuthScope = 'account' | 'admin' | 'none';
+
 export function App() {
   const [activeView, setActiveView] = useState<ViewKey>('query');
   const [loginMode, setLoginMode] = useState<LoginMode>('account');
@@ -61,7 +63,7 @@ export function App() {
   const [sampleJsCodes, setSampleJsCodes] = useState<string[]>([]);
   const [status, setStatus] = useState<IntegrationStatus>();
   const [gameAppId, setGameAppId] = useState('');
-  const [jsCode, setJsCode] = useState('mock-js-code-001');
+  const [jsCode, setJsCode] = useState('');
   const [gameSession, setGameSession] = useState<GameSessionResult>();
   const [refreshResult, setRefreshResult] = useState<EcpmRefreshResult>();
   const [identity, setIdentity] = useState('');
@@ -127,6 +129,10 @@ export function App() {
       setSampleJsCodes(context.sampleJsCodes);
       setStatus(integrationStatus);
       setGameAppId((current) => current || context.games[0]?.gameAppId || '');
+      setJsCode(
+        (current) =>
+          current || context.sampleJsCodes[0] || 'mock-js-code-001',
+      );
 
       if (accessToken) {
         try {
@@ -138,11 +144,31 @@ export function App() {
             mode: 'account',
           });
           setActiveView('account');
+        } catch (nextError) {
+          if (nextError instanceof ApiError && nextError.status === 401) {
+            clearAccountAuth();
+          } else {
+            setError(
+              nextError instanceof Error
+                ? nextError.message
+                : '请求失败，请检查 API',
+            );
+          }
+          return;
+        }
+
+        try {
           await loadAlipayProfile(accessToken);
-        } catch {
-          clearStoredToken(ACCOUNT_AUTH_STORAGE_KEY);
-          setAccessToken('');
-          setAccount(undefined);
+        } catch (nextError) {
+          if (nextError instanceof ApiError && nextError.status === 401) {
+            clearAccountAuth();
+          } else {
+            setError(
+              nextError instanceof Error
+                ? nextError.message
+                : '请求失败，请检查 API',
+            );
+          }
         }
       }
     } catch (nextError) {
@@ -157,6 +183,7 @@ export function App() {
   async function runAction(
     name: AppBusyAction,
     action: () => Promise<void>,
+    authScope: AuthScope = 'none',
   ) {
     if (busyRef.current) {
       return;
@@ -171,7 +198,7 @@ export function App() {
       await action();
     } catch (nextError) {
       if (nextError instanceof ApiError && nextError.status === 401) {
-        handleUnauthorized();
+        handleUnauthorized(authScope);
         setError(nextError.message);
       } else if (nextError instanceof Error) {
         setError(nextError.message);
@@ -184,19 +211,36 @@ export function App() {
     }
   }
 
-  function handleUnauthorized() {
-    if (appSession.mode === 'admin') {
-      clearStoredToken(ADMIN_AUTH_STORAGE_KEY);
-      setAdminAccessToken('');
-      setAdminName('');
+  function handleUnauthorized(authScope: AuthScope) {
+    if (authScope === 'account') {
+      clearAccountAuth();
     }
 
-    if (appSession.mode === 'account') {
-      clearStoredToken(ACCOUNT_AUTH_STORAGE_KEY);
-      setAccessToken('');
-      setAccount(undefined);
+    if (authScope === 'admin') {
+      clearAdminAuth();
     }
+  }
 
+  function clearAccountAuth() {
+    clearStoredToken(ACCOUNT_AUTH_STORAGE_KEY);
+    setAccessToken('');
+    setAccount(undefined);
+    setAccountEarnings(undefined);
+    setAlipayAccount('');
+    setAlipayRealName('');
+    setWithdrawal(undefined);
+    setSettlement(undefined);
+    setAppSession(createSignedOutSession());
+    setActiveView('query');
+  }
+
+  function clearAdminAuth() {
+    clearStoredToken(ADMIN_AUTH_STORAGE_KEY);
+    setAdminAccessToken('');
+    setAdminName('');
+    setAdminWithdrawals([]);
+    setAuditLogs([]);
+    setSelectedWithdrawalDetail(undefined);
     setAppSession(createSignedOutSession());
     setActiveView('query');
   }
@@ -220,7 +264,7 @@ export function App() {
       const result = await aiKsApi.registerAccount({ password, username });
       await persistAccountAuth(result.accessToken, result.account);
       setNotice('账号注册成功');
-    });
+    }, 'account');
   }
 
   async function loginAccount() {
@@ -228,7 +272,7 @@ export function App() {
       const result = await aiKsApi.loginAccount({ password, username });
       await persistAccountAuth(result.accessToken, result.account);
       setNotice('账号登录成功');
-    });
+    }, 'account');
   }
 
   async function loginAdmin() {
@@ -247,7 +291,7 @@ export function App() {
       });
       setActiveView('operations');
       setNotice('管理员登录成功');
-    });
+    }, 'admin');
   }
 
   async function persistAccountAuth(token: string, nextAccount: AccountResult) {
@@ -271,12 +315,19 @@ export function App() {
     clearStoredToken(ADMIN_AUTH_STORAGE_KEY);
     setAccessToken('');
     setAdminAccessToken('');
+    setUsername('');
+    setPassword('');
+    setAdminUsername('');
+    setAdminPassword('');
     setAccount(undefined);
     setAdminName('');
     setAppSession(createSignedOutSession());
     setActiveView('query');
     setGameSession(undefined);
     setRefreshResult(undefined);
+    setIdentity('');
+    setBindIdentity('');
+    setEarnings(undefined);
     setAccountEarnings(undefined);
     setAlipayAccount('');
     setAlipayRealName('');
@@ -309,7 +360,7 @@ export function App() {
       const result = await aiKsApi.refreshEcpm(adminAccessToken, gameAppId);
       setRefreshResult(result);
       setNotice(`ECPM 刷新成功，写入 ${result.savedCount} 条明细`);
-    });
+    }, 'admin');
   }
 
   async function bindAccountOpenId() {
@@ -329,7 +380,7 @@ export function App() {
       const result = await aiKsApi.getAccountEarnings(accessToken);
       setAccountEarnings(result);
       setNotice('open_id 绑定成功');
-    });
+    }, 'account');
   }
 
   async function queryAccountEarnings() {
@@ -342,7 +393,7 @@ export function App() {
       const result = await aiKsApi.getAccountEarnings(accessToken);
       setAccountEarnings(result);
       setNotice('账号收益查询成功');
-    });
+    }, 'account');
   }
 
   async function loadAlipayProfile(token: string) {
@@ -365,7 +416,7 @@ export function App() {
       setAlipayAccount(profile.alipayAccount ?? '');
       setAlipayRealName(profile.alipayRealName ?? '');
       setNotice('支付宝资料已保存');
-    });
+    }, 'account');
   }
 
   async function requestWithdrawal() {
@@ -381,7 +432,7 @@ export function App() {
       );
       setWithdrawal(result);
       setNotice('提现申请已提交，等待审核');
-    });
+    }, 'account');
   }
 
   async function confirmSettlement() {
@@ -398,7 +449,7 @@ export function App() {
       );
       const earningsResult = await aiKsApi.getAccountEarnings(accessToken);
       setAccountEarnings(earningsResult);
-    });
+    }, 'account');
   }
 
   async function loadAdminWithdrawals(statusFilter = adminWithdrawalStatus) {
@@ -415,7 +466,7 @@ export function App() {
       setAdminWithdrawals(result.batches);
       setAdminWithdrawalStatus(statusFilter);
       setNotice(`提现批次 ${result.batches.length} 笔`);
-    });
+    }, 'admin');
   }
 
   async function approveAdminWithdrawal(batchId: string) {
@@ -432,8 +483,9 @@ export function App() {
       setAdminWithdrawals((current) =>
         current.filter((batch) => batch.id !== result.id),
       );
+      clearSelectedWithdrawalDetail(result.id);
       setNotice(`提现批次 ${result.id} 已审核通过`);
-    });
+    }, 'admin');
   }
 
   async function payAdminWithdrawal(
@@ -454,12 +506,13 @@ export function App() {
       setAdminWithdrawals((current) =>
         current.filter((batch) => batch.id !== result.id),
       );
+      clearSelectedWithdrawalDetail(result.id);
       setNotice(
         mockResult === 'failed'
           ? `提现批次 ${result.id} 已标记失败`
           : `提现批次 ${result.id} 已打款`,
       );
-    });
+    }, 'admin');
   }
 
   async function closeAdminWithdrawal(batchId: string) {
@@ -473,8 +526,9 @@ export function App() {
       setAdminWithdrawals((current) =>
         current.filter((batch) => batch.id !== result.id),
       );
+      clearSelectedWithdrawalDetail(result.id);
       setNotice(`提现批次 ${result.id} 已关闭并退回冻结金额`);
-    });
+    }, 'admin');
   }
 
   async function loadWithdrawalDetail(batchId: string) {
@@ -490,7 +544,7 @@ export function App() {
       );
       setSelectedWithdrawalDetail(result);
       setNotice(`已加载提现批次 ${batchId}`);
-    });
+    }, 'admin');
   }
 
   async function loadAuditLogs() {
@@ -503,7 +557,13 @@ export function App() {
       const result = await aiKsApi.getAuditLogs(adminAccessToken);
       setAuditLogs(result.logs);
       setNotice(`审计日志 ${result.logs.length} 条`);
-    });
+    }, 'admin');
+  }
+
+  function clearSelectedWithdrawalDetail(batchId: string) {
+    setSelectedWithdrawalDetail((current) =>
+      current?.batch.id === batchId ? undefined : current,
+    );
   }
 
   const alerts = (
