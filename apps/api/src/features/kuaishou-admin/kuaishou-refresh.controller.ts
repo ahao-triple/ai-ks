@@ -1,6 +1,7 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
 import { KuaishouEcpmClient } from '../../integrations/kuaishou/kuaishou-ecpm.client';
+import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 import { DemoStore } from '../demo/demo-store';
 import { presentEcpmRow } from '../demo/money-presenter';
 
@@ -11,6 +12,7 @@ const refreshEcpmSchema = z.object({
 });
 
 @Controller('admin/kuaishou')
+@UseGuards(AdminJwtGuard)
 export class KuaishouRefreshController {
   constructor(
     private readonly demoStore: DemoStore,

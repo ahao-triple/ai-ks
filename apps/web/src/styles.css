@@ -393,6 +393,17 @@ button:disabled {
   flex: 1 1 150px;
 }
 
+.compact-action {
+  min-height: 32px;
+  padding: 5px 10px;
+}
+
+.inline-actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .readout {
   display: grid;
   gap: 6px;

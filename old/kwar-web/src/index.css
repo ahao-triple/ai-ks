@@ -1,0 +1,55 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.fixed-header-table {
+    @apply overflow-x-auto;
+}
+
+.fixed-header-table table {
+    @apply w-full;
+}
+
+.fixed-header-table thead {
+    @apply sticky top-0 z-10 bg-content1;
+}
+
+.fixed-header-table th {
+    @apply whitespace-nowrap;
+}
+
+.fixed-header-table td {
+    @apply whitespace-nowrap;
+}
+
+.sidebar-link {
+    @apply flex items-center gap-2 px-4 py-2 rounded-lg transition-colors;
+}
+
+.sidebar-link.active {
+    @apply bg-primary text-white;
+}
+
+.sidebar-link:not(.active) {
+    @apply text-default-600 hover:bg-default-100;
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        @apply fixed left-0 top-0 h-full z-50 transform -translate-x-full transition-transform;
+        width: 240px;
+    }
+
+    .sidebar.open {
+        @apply translate-x-0;
+    }
+
+    .content-with-sidebar {
+        @apply ml-0;
+    }
+}
+.auto-width-toast {
+    min-width: 1px;
+    max-width: 90vw;
+    width: max-content !important;
+}

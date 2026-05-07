@@ -222,3 +222,20 @@ model WithdrawalDetail {
   @@index([status])
   @@map("withdrawal_details")
 }
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorType  String   @map("actor_type")
+  actorId    String   @map("actor_id")
+  action     String
+  targetType String   @map("target_type")
+  targetId   String   @map("target_id")
+  metadata   Json
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([actorType, actorId])
+  @@index([action])
+  @@index([targetType, targetId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

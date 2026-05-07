@@ -1,0 +1,47 @@
+{
+    "name": "kwai-web",
+    "private": true,
+    "version": "0.0.0",
+    "type": "module",
+    "scripts": {
+        "dev": "vite",
+        "build": "tsc && vite build",
+        "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+        "preview": "vite preview"
+    },
+    "dependencies": {
+        "@heroui/react": "2.7.5",
+        "@heroui/system": "^2.4.12",
+        "@heroui/table": "^2.2.15",
+        "@heroui/theme": "^2.4.12",
+        "@heroui/toast": "^2.0.6",
+        "@heroui/use-theme": "2.1.6",
+        "@iconify/react": "latest",
+        "@internationalized/date": "^3.8.2",
+        "dotenv": "^16.4.7",
+        "framer-motion": "^11.18.2",
+        "moment-timezone": "^0.5.48",
+        "react": "^19.0.0",
+        "react-dom": "^19.0.0",
+        "react-router-dom": "5.3.4"
+    },
+    "devDependencies": {
+        "@eslint/js": "^9.31.0",
+        "@types/node": "^22.13.11",
+        "@types/react": "^18.3.18",
+        "@types/react-dom": "^18.3.5",
+        "@types/react-router-dom": "^5.3.3",
+        "@vitejs/plugin-react": "^4.3.4",
+        "autoprefixer": "10.4.20",
+        "eslint": "^9.31.0",
+        "eslint-plugin-prettier": "^5.5.1",
+        "eslint-plugin-spellcheck": "^0.0.20",
+        "postcss": "8.4.49",
+        "prettier": "^3.6.2",
+        "tailwindcss": "3.4.17",
+        "typescript": "5.7.3",
+        "typescript-eslint": "^8.36.0",
+        "vite": "^6.3.5",
+        "vite-plugin-svg-icons": "^2.0.1"
+    }
+}
