@@ -573,7 +573,6 @@ select {
   pointer-events: none;
 }
 
-.ui-input-trailing + input,
 .ui-input-control:has(.ui-input-trailing) input {
   padding-right: 48px;
 }
@@ -646,6 +645,10 @@ select {
   gap: 14px;
   min-width: 0;
   padding: 16px;
+}
+
+.ui-panel-body:has(> .ui-data-table) {
+  overflow-x: auto;
 }
 
 .ui-metric-card {
@@ -779,8 +782,7 @@ select {
 .data-table {
   width: 100%;
   min-width: 720px;
-  border-collapse: separate;
-  border-spacing: 0;
+  border-collapse: collapse;
   background: var(--surface);
   color: var(--foreground);
   font-size: 13px;
@@ -832,19 +834,6 @@ select {
 .ui-data-table-empty {
   color: var(--muted);
   text-align: center !important;
-}
-
-.ui-panel-body > .ui-data-table {
-  display: block;
-  overflow-x: auto;
-}
-
-.ui-panel-body > .ui-data-table thead,
-.ui-panel-body > .ui-data-table tbody,
-.ui-panel-body > .ui-data-table tr {
-  display: table;
-  width: 100%;
-  table-layout: fixed;
 }
 
 @media (max-width: 1120px) {
