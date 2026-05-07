@@ -100,6 +100,7 @@ export function App() {
   const [notice, setNotice] = useState('');
   const [busyAction, setBusyAction] = useState<AppBusyAction>('');
   const busyRef = useRef(false);
+  const sessionVersionRef = useRef(0);
 
   const selectedGame = useMemo(
     () => games.find((game) => game.gameAppId === gameAppId),
@@ -116,7 +117,21 @@ export function App() {
     void initializeApp();
   }, []);
 
+  function bumpSessionVersion() {
+    sessionVersionRef.current += 1;
+  }
+
+  function isCurrentSessionVersion(version: number) {
+    return sessionVersionRef.current === version;
+  }
+
+  function clearBusyState() {
+    busyRef.current = false;
+    setBusyAction('');
+  }
+
   async function initializeApp() {
+    const restoreVersion = sessionVersionRef.current;
     setError('');
 
     try {
@@ -137,6 +152,10 @@ export function App() {
       if (accessToken) {
         try {
           const currentAccount = await aiKsApi.getCurrentAccount(accessToken);
+          if (!isCurrentSessionVersion(restoreVersion)) {
+            return;
+          }
+
           setAccount(currentAccount);
           setAppSession({
             accessToken,
@@ -145,6 +164,10 @@ export function App() {
           });
           setActiveView('account');
         } catch (nextError) {
+          if (!isCurrentSessionVersion(restoreVersion)) {
+            return;
+          }
+
           if (nextError instanceof ApiError && nextError.status === 401) {
             clearAccountAuth();
           } else {
@@ -158,8 +181,14 @@ export function App() {
         }
 
         try {
-          await loadAlipayProfile(accessToken);
+          await loadAlipayProfile(accessToken, () =>
+            isCurrentSessionVersion(restoreVersion),
+          );
         } catch (nextError) {
+          if (!isCurrentSessionVersion(restoreVersion)) {
+            return;
+          }
+
           if (nextError instanceof ApiError && nextError.status === 401) {
             clearAccountAuth();
           } else {
@@ -182,21 +211,26 @@ export function App() {
 
   async function runAction(
     name: AppBusyAction,
-    action: () => Promise<void>,
+    action: (isCurrent: () => boolean) => Promise<void>,
     authScope: AuthScope = 'none',
   ) {
     if (busyRef.current) {
       return;
     }
 
+    const actionVersion = sessionVersionRef.current;
     busyRef.current = true;
     setBusyAction(name);
     setError('');
     setNotice('');
 
     try {
-      await action();
+      await action(() => isCurrentSessionVersion(actionVersion));
     } catch (nextError) {
+      if (!isCurrentSessionVersion(actionVersion)) {
+        return;
+      }
+
       if (nextError instanceof ApiError && nextError.status === 401) {
         handleUnauthorized(authScope);
         setError(nextError.message);
@@ -206,8 +240,9 @@ export function App() {
         setError('请求失败，请检查 API');
       }
     } finally {
-      busyRef.current = false;
-      setBusyAction('');
+      if (isCurrentSessionVersion(actionVersion)) {
+        clearBusyState();
+      }
     }
   }
 
@@ -252,35 +287,58 @@ export function App() {
       return;
     }
 
-    await runAction('query', async () => {
+    await runAction('query', async (isCurrent) => {
       const result = await aiKsApi.queryGuestEarnings(targetIdentity);
+      if (!isCurrent()) {
+        return;
+      }
+
       setEarnings(result);
       setNotice('收益查询成功');
     });
   }
 
   async function registerAccount() {
-    await runAction('register', async () => {
+    await runAction('register', async (isCurrent) => {
       const result = await aiKsApi.registerAccount({ password, username });
-      await persistAccountAuth(result.accessToken, result.account);
-      setNotice('账号注册成功');
+      if (!isCurrent()) {
+        return;
+      }
+
+      await persistAccountAuth(
+        result.accessToken,
+        result.account,
+        '账号注册成功',
+      );
     }, 'account');
   }
 
   async function loginAccount() {
-    await runAction('login', async () => {
+    await runAction('login', async (isCurrent) => {
       const result = await aiKsApi.loginAccount({ password, username });
-      await persistAccountAuth(result.accessToken, result.account);
-      setNotice('账号登录成功');
+      if (!isCurrent()) {
+        return;
+      }
+
+      await persistAccountAuth(
+        result.accessToken,
+        result.account,
+        '账号登录成功',
+      );
     }, 'account');
   }
 
   async function loginAdmin() {
-    await runAction('admin-login', async () => {
+    await runAction('admin-login', async (isCurrent) => {
       const result = await aiKsApi.loginAdmin({
         password: adminPassword,
         username: adminUsername,
       });
+      if (!isCurrent()) {
+        return;
+      }
+
+      bumpSessionVersion();
       writeStoredToken(ADMIN_AUTH_STORAGE_KEY, result.accessToken);
       setAdminAccessToken(result.accessToken);
       setAdminName(result.admin.username);
@@ -291,19 +349,47 @@ export function App() {
       });
       setActiveView('operations');
       setNotice('管理员登录成功');
+      clearBusyState();
     }, 'admin');
   }
 
-  async function persistAccountAuth(token: string, nextAccount: AccountResult) {
+  async function persistAccountAuth(
+    token: string,
+    nextAccount: AccountResult,
+    successNotice: string,
+  ) {
+    bumpSessionVersion();
+    const accountVersion = sessionVersionRef.current;
+    const isCurrent = () => isCurrentSessionVersion(accountVersion);
+
     writeStoredToken(ACCOUNT_AUTH_STORAGE_KEY, token);
     setAccessToken(token);
     setAccount(nextAccount);
     setAppSession({ accessToken: token, account: nextAccount, mode: 'account' });
     setActiveView('account');
-    await loadAlipayProfile(token);
+    setNotice(successNotice);
+    clearBusyState();
+
+    try {
+      await loadAlipayProfile(token, isCurrent);
+    } catch (nextError) {
+      if (!isCurrent()) {
+        return;
+      }
+
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        clearAccountAuth();
+      }
+
+      setError(
+        nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+      );
+    }
   }
 
   function enterGuestMode() {
+    bumpSessionVersion();
+    clearBusyState();
     setAppSession(createGuestSession());
     setActiveView('query');
     setError('');
@@ -311,6 +397,8 @@ export function App() {
   }
 
   function signOut() {
+    bumpSessionVersion();
+    clearBusyState();
     clearStoredToken(ACCOUNT_AUTH_STORAGE_KEY);
     clearStoredToken(ADMIN_AUTH_STORAGE_KEY);
     setAccessToken('');
@@ -341,8 +429,12 @@ export function App() {
   }
 
   async function createGameSession() {
-    await runAction('session', async () => {
+    await runAction('session', async (isCurrent) => {
       const result = await aiKsApi.createGameSession({ gameAppId, jsCode });
+      if (!isCurrent()) {
+        return;
+      }
+
       setGameSession(result);
       setIdentity(result.openId);
       setBindIdentity(result.openId);
@@ -356,8 +448,12 @@ export function App() {
       return;
     }
 
-    await runAction('refresh', async () => {
+    await runAction('refresh', async (isCurrent) => {
       const result = await aiKsApi.refreshEcpm(adminAccessToken, gameAppId);
+      if (!isCurrent()) {
+        return;
+      }
+
       setRefreshResult(result);
       setNotice(`ECPM 刷新成功，写入 ${result.savedCount} 条明细`);
     }, 'admin');
@@ -375,9 +471,17 @@ export function App() {
       return;
     }
 
-    await runAction('bind', async () => {
+    await runAction('bind', async (isCurrent) => {
       await aiKsApi.bindAccountOpenId(accessToken, targetIdentity);
+      if (!isCurrent()) {
+        return;
+      }
+
       const result = await aiKsApi.getAccountEarnings(accessToken);
+      if (!isCurrent()) {
+        return;
+      }
+
       setAccountEarnings(result);
       setNotice('open_id 绑定成功');
     }, 'account');
@@ -389,15 +493,23 @@ export function App() {
       return;
     }
 
-    await runAction('account-query', async () => {
+    await runAction('account-query', async (isCurrent) => {
       const result = await aiKsApi.getAccountEarnings(accessToken);
+      if (!isCurrent()) {
+        return;
+      }
+
       setAccountEarnings(result);
       setNotice('账号收益查询成功');
     }, 'account');
   }
 
-  async function loadAlipayProfile(token: string) {
+  async function loadAlipayProfile(token: string, isCurrent = () => true) {
     const profile = await aiKsApi.getAlipayProfile(token);
+    if (!isCurrent()) {
+      return;
+    }
+
     setAlipayAccount(profile.alipayAccount ?? '');
     setAlipayRealName(profile.alipayRealName ?? '');
   }
@@ -408,11 +520,15 @@ export function App() {
       return;
     }
 
-    await runAction('alipay', async () => {
+    await runAction('alipay', async (isCurrent) => {
       const profile = await aiKsApi.updateAlipayProfile(accessToken, {
         alipayAccount,
         alipayRealName,
       });
+      if (!isCurrent()) {
+        return;
+      }
+
       setAlipayAccount(profile.alipayAccount ?? '');
       setAlipayRealName(profile.alipayRealName ?? '');
       setNotice('支付宝资料已保存');
@@ -425,11 +541,15 @@ export function App() {
       return;
     }
 
-    await runAction('withdrawal', async () => {
+    await runAction('withdrawal', async (isCurrent) => {
       const result = await aiKsApi.requestWithdrawal(
         accessToken,
         withdrawalAmountYuan,
       );
+      if (!isCurrent()) {
+        return;
+      }
+
       setWithdrawal(result);
       setNotice('提现申请已提交，等待审核');
     }, 'account');
@@ -441,13 +561,21 @@ export function App() {
       return;
     }
 
-    await runAction('settlement', async () => {
+    await runAction('settlement', async (isCurrent) => {
       const result = await aiKsApi.confirmSettlement(accessToken);
+      if (!isCurrent()) {
+        return;
+      }
+
       setSettlement(result);
       setNotice(
         `确认结算 ${result.settledCount} 条，入账 ¥ ${result.settledAmount.yuan}`,
       );
       const earningsResult = await aiKsApi.getAccountEarnings(accessToken);
+      if (!isCurrent()) {
+        return;
+      }
+
       setAccountEarnings(earningsResult);
     }, 'account');
   }
@@ -458,11 +586,15 @@ export function App() {
       return;
     }
 
-    await runAction('admin-withdrawals', async () => {
+    await runAction('admin-withdrawals', async (isCurrent) => {
       const result = await aiKsApi.getAdminWithdrawals(
         adminAccessToken,
         statusFilter,
       );
+      if (!isCurrent()) {
+        return;
+      }
+
       setAdminWithdrawals(result.batches);
       setAdminWithdrawalStatus(statusFilter);
       setNotice(`提现批次 ${result.batches.length} 笔`);
@@ -475,11 +607,15 @@ export function App() {
       return;
     }
 
-    await runAction(`approve-${batchId}`, async () => {
+    await runAction(`approve-${batchId}`, async (isCurrent) => {
       const result = await aiKsApi.approveWithdrawal(
         adminAccessToken,
         batchId,
       );
+      if (!isCurrent()) {
+        return;
+      }
+
       setAdminWithdrawals((current) =>
         current.filter((batch) => batch.id !== result.id),
       );
@@ -497,12 +633,16 @@ export function App() {
       return;
     }
 
-    await runAction(`pay-${mockResult}-${batchId}`, async () => {
+    await runAction(`pay-${mockResult}-${batchId}`, async (isCurrent) => {
       const result = await aiKsApi.payWithdrawal(
         adminAccessToken,
         batchId,
         mockResult,
       );
+      if (!isCurrent()) {
+        return;
+      }
+
       setAdminWithdrawals((current) =>
         current.filter((batch) => batch.id !== result.id),
       );
@@ -521,8 +661,12 @@ export function App() {
       return;
     }
 
-    await runAction(`close-${batchId}`, async () => {
+    await runAction(`close-${batchId}`, async (isCurrent) => {
       const result = await aiKsApi.closeWithdrawal(adminAccessToken, batchId);
+      if (!isCurrent()) {
+        return;
+      }
+
       setAdminWithdrawals((current) =>
         current.filter((batch) => batch.id !== result.id),
       );
@@ -537,11 +681,15 @@ export function App() {
       return;
     }
 
-    await runAction(`detail-${batchId}`, async () => {
+    await runAction(`detail-${batchId}`, async (isCurrent) => {
       const result = await aiKsApi.getWithdrawalDetail(
         adminAccessToken,
         batchId,
       );
+      if (!isCurrent()) {
+        return;
+      }
+
       setSelectedWithdrawalDetail(result);
       setNotice(`已加载提现批次 ${batchId}`);
     }, 'admin');
@@ -553,8 +701,12 @@ export function App() {
       return;
     }
 
-    await runAction('audit-logs', async () => {
+    await runAction('audit-logs', async (isCurrent) => {
       const result = await aiKsApi.getAuditLogs(adminAccessToken);
+      if (!isCurrent()) {
+        return;
+      }
+
       setAuditLogs(result.logs);
       setNotice(`审计日志 ${result.logs.length} 条`);
     }, 'admin');
