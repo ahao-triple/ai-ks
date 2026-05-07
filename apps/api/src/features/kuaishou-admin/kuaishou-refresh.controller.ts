@@ -20,16 +20,16 @@ export class KuaishouRefreshController {
   @Post('ecpm/refresh')
   async refresh(@Body() body: unknown) {
     const input = refreshEcpmSchema.parse(body);
-    const knownOpenIds = this.demoStore
-      .listOpenIds(input.gameAppId)
-      .map((record) => record.openId);
+    const knownOpenIds = (await this.demoStore.listOpenIds(input.gameAppId)).map(
+      (record) => record.openId,
+    );
     const openIds = input.openIds?.length ? input.openIds : knownOpenIds;
     const refreshResult = await this.ecpmClient.refresh({
       gameAppId: input.gameAppId,
       dataHour: input.dataHour ?? currentChinaDate(),
       openIds,
     });
-    const savedRows = this.demoStore.addEcpmRows({
+    const savedRows = await this.demoStore.addEcpmRows({
       gameAppId: input.gameAppId,
       rows: refreshResult.rows,
     });

@@ -15,7 +15,7 @@ export class GameSessionService {
   ) {}
 
   async createSession(input: CreateGameSessionInput) {
-    const game = this.demoStore.findGameByAppId(input.gameAppId);
+    const game = await this.demoStore.findGameByAppId(input.gameAppId);
     if (!game) {
       throw new NotFoundException(`Game ${input.gameAppId} is not configured`);
     }
@@ -25,7 +25,7 @@ export class GameSessionService {
       gameSecret: game.gameSecret,
       jsCode: input.jsCode,
     });
-    const openIdRecord = this.demoStore.upsertOpenId({
+    const openIdRecord = await this.demoStore.upsertOpenId({
       gameAppId: game.gameAppId,
       openId: session.openId,
       sessionKey: session.sessionKey,

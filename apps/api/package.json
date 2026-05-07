@@ -9,6 +9,7 @@
     "test": "node ../../scripts/with-root-env.mjs jest --runInBand",
     "lint": "eslint \"src/**/*.ts\"",
     "prisma:generate": "node ../../scripts/with-root-env.mjs prisma generate",
+    "prisma:push": "node ../../scripts/with-root-env.mjs prisma db push",
     "prisma:validate": "node ../../scripts/with-root-env.mjs prisma validate"
   },
   "dependencies": {

@@ -8,13 +8,16 @@ export class UserEarningsController {
   constructor(private readonly demoStore: DemoStore) {}
 
   @Get('earnings')
-  getEarnings(@Query('identity') identity?: string, @Query('date') date?: string) {
+  async getEarnings(
+    @Query('identity') identity?: string,
+    @Query('date') date?: string,
+  ) {
     if (!identity) {
       throw new Error('identity is required');
     }
 
     const range = resolveChinaDayRange(date);
-    const result = this.demoStore.queryEarnings({
+    const result = await this.demoStore.queryEarnings({
       identity,
       startAt: range.startAt,
       endAt: range.endAt,

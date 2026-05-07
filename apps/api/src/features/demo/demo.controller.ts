@@ -10,9 +10,10 @@ export class DemoController {
   ) {}
 
   @Get('demo/test-context')
-  getTestContext() {
+  async getTestContext() {
+    const games = await this.demoStore.listGames();
     return {
-      games: this.demoStore.listGames().map((game) => ({
+      games: games.map((game) => ({
         id: game.id,
         companyName: game.companyName,
         gameAppId: game.gameAppId,
