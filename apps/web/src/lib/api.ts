@@ -32,10 +32,13 @@ export async function requestJson<T>(
     method?: RequestMethod;
   } = {},
 ): Promise<T> {
+  const method = options.method ?? 'GET';
+  const body =
+    options.body === undefined || method === 'GET' ? undefined : JSON.stringify(options.body);
   const response = await fetch(`${API_BASE_URL}${path}`, {
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    body,
     headers: createHeaders(options.accessToken),
-    method: options.method ?? 'GET',
+    method,
   });
 
   return readResponse<T>(response);

@@ -1,5 +1,24 @@
-import { describe, expect, it } from 'vitest';
-import { ApiError, createHeaders, readApiErrorMessage, readResponse } from './api';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  API_BASE_URL,
+  ApiError,
+  createHeaders,
+  readApiErrorMessage,
+  readResponse,
+  requestJson,
+} from './api';
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
+});
+
+function jsonResponse(payload: unknown, status = 200): Response {
+  return new Response(JSON.stringify(payload), {
+    headers: { 'content-type': 'application/json' },
+    status,
+  });
+}
 
 describe('readApiErrorMessage', () => {
   it('joins array messages from validation errors', () => {
@@ -42,6 +61,61 @@ describe('readResponse', () => {
     await expect(readResponse(response)).rejects.toMatchObject({
       message: '登录失效',
       status: 401,
+    });
+  });
+});
+
+describe('requestJson', () => {
+  it('sends default GET requests with guest headers', async () => {
+    vi.stubEnv('VITE_API_BASE_URL', '');
+    vi.resetModules();
+    const { requestJson } = await import('./api');
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal('fetch', fetch);
+
+    await expect(requestJson('/health')).resolves.toEqual({ ok: true });
+
+    expect(fetch).toHaveBeenCalledWith('/api/health', {
+      body: undefined,
+      headers: { 'Content-Type': 'application/json' },
+      method: 'GET',
+    });
+  });
+
+  it('serializes POST bodies with bearer authorization', async () => {
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({ id: 1 }));
+    vi.stubGlobal('fetch', fetch);
+
+    await expect(
+      requestJson('/accounts', {
+        accessToken: 'token-1',
+        body: { account: 'alice' },
+        method: 'POST',
+      }),
+    ).resolves.toEqual({ id: 1 });
+
+    expect(fetch).toHaveBeenCalledWith(`${API_BASE_URL}/accounts`, {
+      body: JSON.stringify({ account: 'alice' }),
+      headers: {
+        Authorization: 'Bearer token-1',
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    });
+  });
+
+  it('omits GET bodies even when body is provided', async () => {
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal('fetch', fetch);
+
+    await expect(requestJson('/search', { body: { query: 'alice' } })).resolves.toEqual({
+      ok: true,
+    });
+
+    expect(fetch).toHaveBeenCalledWith(`${API_BASE_URL}/search`, {
+      body: undefined,
+      headers: { 'Content-Type': 'application/json' },
+      method: 'GET',
     });
   });
 });
