@@ -7,9 +7,13 @@
     "build": "pnpm --recursive build",
     "test": "pnpm --recursive test",
     "lint": "pnpm --recursive lint",
+    "dev": "pnpm --recursive --parallel --stream --filter api --filter web dev",
     "dev:api": "pnpm --filter api dev",
     "dev:web": "pnpm --filter web dev",
     "prisma:generate": "pnpm --filter api prisma:generate",
     "prisma:validate": "pnpm --filter api prisma:validate"
+  },
+  "devDependencies": {
+    "dotenv": "^16.6.1"
   }
 }

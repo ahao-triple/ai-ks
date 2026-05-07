@@ -4,12 +4,12 @@
   "version": "0.1.0",
   "scripts": {
     "build": "nest build",
-    "dev": "nest start --watch",
-    "start": "nest start",
-    "test": "jest --runInBand",
+    "dev": "node ../../scripts/with-root-env.mjs nest start --watch",
+    "start": "node ../../scripts/with-root-env.mjs nest start",
+    "test": "node ../../scripts/with-root-env.mjs jest --runInBand",
     "lint": "eslint \"src/**/*.ts\"",
-    "prisma:generate": "prisma generate",
-    "prisma:validate": "prisma validate"
+    "prisma:generate": "node ../../scripts/with-root-env.mjs prisma generate",
+    "prisma:validate": "node ../../scripts/with-root-env.mjs prisma validate"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
