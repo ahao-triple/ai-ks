@@ -1,0 +1,15 @@
+{
+  "name": "ai-ks",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10.0.0",
+  "scripts": {
+    "build": "pnpm --recursive build",
+    "test": "pnpm --recursive test",
+    "lint": "pnpm --recursive lint",
+    "dev:api": "pnpm --filter api dev",
+    "dev:web": "pnpm --filter web dev",
+    "prisma:generate": "pnpm --filter api prisma:generate",
+    "prisma:validate": "pnpm --filter api prisma:validate"
+  }
+}

@@ -1,2 +1,12 @@
 .worktrees
 .worktrees/
+.DS_Store
+node_modules
+dist
+coverage
+.env
+.env.*
+!.env.example
+.turbo
+.vite
+*.log
