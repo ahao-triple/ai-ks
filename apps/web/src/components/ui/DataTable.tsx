@@ -2,12 +2,30 @@ import type { ReactNode } from 'react';
 
 export type DataTableAlign = 'center' | 'left' | 'right';
 
-export interface DataTableColumn<T> {
+export type DataTableRenderableKey<T> = {
+  [K in Extract<keyof T, string>]-?: T[K] extends ReactNode ? K : never;
+}[Extract<keyof T, string>];
+
+export interface DataTableFieldColumn<
+  T,
+  K extends DataTableRenderableKey<T> = DataTableRenderableKey<T>,
+> {
   align?: DataTableAlign;
-  key: string;
+  key: K;
   label: ReactNode;
   render?: (row: T) => ReactNode;
 }
+
+export interface DataTableRenderedColumn<T> {
+  align?: DataTableAlign;
+  key: string;
+  label: ReactNode;
+  render: (row: T) => ReactNode;
+}
+
+export type DataTableColumn<T> =
+  | DataTableFieldColumn<T>
+  | DataTableRenderedColumn<T>;
 
 export interface DataTableProps<T> {
   columns: Array<DataTableColumn<T>>;

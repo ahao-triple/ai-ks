@@ -4,11 +4,19 @@ import {
   Alert,
   Button,
   DataTable,
+  type DataTableColumn,
   InputField,
   MetricCard,
   Panel,
   StatusBadge,
 } from '.';
+
+interface DataTableTestRow {
+  id: string;
+  metadata: { source: string };
+  name: string;
+  score: number | null;
+}
 
 describe('UI primitives', () => {
   it('renders a primary Button with its classes and children', () => {
@@ -58,6 +66,64 @@ describe('UI primitives', () => {
     expect(markup).toContain('No records');
   });
 
+  it('renders default cells for non-empty DataTable rows', () => {
+    const markup = renderToStaticMarkup(
+      <DataTable
+        columns={[
+          { key: 'name', label: 'Name' },
+          { key: 'score', label: 'Score' },
+        ]}
+        rows={[{ id: 'row-1', metadata: { source: 'api' }, name: 'Ada', score: null }]}
+      />,
+    );
+
+    expect(markup).toContain('Ada');
+    expect(markup).toContain('<td>-</td>');
+  });
+
+  it('renders custom DataTable cells for object fields and action columns', () => {
+    const columns: Array<DataTableColumn<DataTableTestRow>> = [
+      {
+        key: 'metadata',
+        label: 'Source',
+        render: (row) => row.metadata.source,
+      },
+      {
+        key: 'actions',
+        label: 'Actions',
+        render: (row) => <button type="button">Open {row.name}</button>,
+      },
+    ];
+
+    const markup = renderToStaticMarkup(
+      <DataTable
+        columns={columns}
+        rows={[{ id: 'row-1', metadata: { source: 'api' }, name: 'Ada', score: 7 }]}
+      />,
+    );
+
+    expect(markup).toContain('api');
+    expect(markup).toContain('Open Ada');
+  });
+
+  it('uses getRowKey for DataTable row keys', () => {
+    const calls: Array<[DataTableTestRow, number]> = [];
+    const row = { id: 'row-1', metadata: { source: 'api' }, name: 'Ada', score: 7 };
+
+    renderToStaticMarkup(
+      <DataTable
+        columns={[{ key: 'name', label: 'Name' }]}
+        getRowKey={(currentRow, index) => {
+          calls.push([currentRow, index]);
+          return currentRow.id;
+        }}
+        rows={[row]}
+      />,
+    );
+
+    expect(calls).toEqual([[row, 0]]);
+  });
+
   it('renders a danger Alert with danger class', () => {
     const markup = renderToStaticMarkup(<Alert tone="danger">Failed</Alert>);
 
@@ -74,3 +140,38 @@ describe('UI primitives', () => {
     expect(markup).toContain('Today');
   });
 });
+
+const validFieldColumns: Array<DataTableColumn<DataTableTestRow>> = [
+  { key: 'name', label: 'Name' },
+  { key: 'score', label: 'Score' },
+];
+
+const validRenderedColumns: Array<DataTableColumn<DataTableTestRow>> = [
+  {
+    key: 'metadata',
+    label: 'Source',
+    render: (row) => row.metadata.source,
+  },
+  {
+    key: 'actions',
+    label: 'Actions',
+    render: (row) => row.id,
+  },
+];
+
+// @ts-expect-error missing fields must provide a render function
+const missingFieldWithoutRender: DataTableColumn<DataTableTestRow> = {
+  key: 'missing',
+  label: 'Missing',
+};
+
+// @ts-expect-error object fields must provide a render function
+const objectFieldWithoutRender: DataTableColumn<DataTableTestRow> = {
+  key: 'metadata',
+  label: 'Metadata',
+};
+
+void validFieldColumns;
+void validRenderedColumns;
+void missingFieldWithoutRender;
+void objectFieldWithoutRender;
