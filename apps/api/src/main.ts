@@ -4,6 +4,9 @@ import { resolveConfiguredPort } from './common/env/port';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.enableCors({
+    origin: true,
+  });
   app.setGlobalPrefix('api');
   const port = resolveConfiguredPort({
     defaultPort: 3000,

@@ -1,14 +1,17 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Banknote,
   Building2,
   Gamepad2,
   Gauge,
   HandCoins,
-  type LucideIcon,
+  RefreshCw,
+  Search,
+  Send,
   Settings,
   ShieldCheck,
   Users,
+  type LucideIcon,
 } from 'lucide-react';
 
 type WorkspaceRole = '用户' | '代理' | '公司管理员' | '超级管理员';
@@ -18,23 +21,63 @@ type NavItem = {
   icon: LucideIcon;
 };
 
-type Metric = {
-  label: string;
-  value: string;
-  hint: string;
+type DemoGame = {
+  id: string;
+  companyName: string;
+  gameAppId: string;
+  name: string;
 };
 
-type WorkspaceCopy = {
-  eyebrow: string;
-  title: string;
-  action: string;
-  metrics: Metric[];
-  queue: Array<{
-    type: string;
-    scope: string;
-    status: '正常' | '预警' | '待审' | '失败';
-  }>;
+type IntegrationStatus = {
+  kuaishouApiMode: 'mock' | 'real';
+  requiredForRealMode: {
+    kuaishouAccessToken: boolean;
+    kuaishouAdvertiserId: boolean;
+  };
 };
+
+type GameSessionResult = {
+  game: {
+    gameAppId: string;
+    name: string;
+  };
+  openId: string;
+  readableId: string;
+};
+
+type EcpmRefreshResult = {
+  source: 'mock' | 'kuaishou';
+  requestedOpenIds: string[];
+  savedCount: number;
+  rows: EcpmRow[];
+};
+
+type EarningsResult = {
+  identity: string;
+  openId: string;
+  readableId?: string;
+  date: string;
+  totalRawCost: MoneyValue;
+  totalDisplayAmount: MoneyValue;
+  rows: EcpmRow[];
+};
+
+type EcpmRow = {
+  platformEventId: string;
+  gameAppId: string;
+  openId: string;
+  rawCost: MoneyValue;
+  displayAmount: MoneyValue;
+  eventTime: string;
+};
+
+type MoneyValue = {
+  li: string;
+  yuan: string;
+};
+
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api';
 
 const navByRole: Record<WorkspaceRole, NavItem[]> = {
   用户: [
@@ -53,78 +96,100 @@ const navByRole: Record<WorkspaceRole, NavItem[]> = {
     { label: '提现审核', icon: Banknote },
   ],
   超级管理员: [
-    { label: '全局概览', icon: Gauge },
+    { label: '联调工作台', icon: Gauge },
     { label: '公司与游戏', icon: Building2 },
     { label: '代理配置', icon: Users },
     { label: '系统配置', icon: Settings },
   ],
 };
 
-const workspaceByRole: Record<WorkspaceRole, WorkspaceCopy> = {
-  用户: {
-    eyebrow: '用户工作台',
-    title: '游戏收益查询',
-    action: '绑定 ID',
-    metrics: [
-      { label: '今日展示金额', value: '¥ 186.42', hint: '默认当天 00:00-24:00' },
-      { label: '可提现金额', value: '¥ 820.10', hint: '按游戏汇总展示' },
-      { label: '已绑定游戏', value: '3', hint: '一个账号管理多个 ID' },
-    ],
-    queue: [
-      { type: '开心消消', scope: 'open_id 已绑定', status: '正常' },
-      { type: '提现申请', scope: '支付宝收款', status: '待审' },
-    ],
-  },
-  代理: {
-    eyebrow: '代理工作台',
-    title: '代理收益概览',
-    action: '收款信息',
-    metrics: [
-      { label: '今日代理收益', value: '¥ 1,240.36', hint: '按下级用户结算' },
-      { label: '名下用户', value: '428', hint: '仅展示用户维度' },
-      { label: '待打款金额', value: '¥ 3,518.20', hint: '随用户申请一起审核' },
-    ],
-    queue: [
-      { type: '推广链接', scope: '全游戏可用', status: '正常' },
-      { type: '打款明细', scope: '支付宝账户', status: '待审' },
-    ],
-  },
-  公司管理员: {
-    eyebrow: '公司管理员工作台',
-    title: '游戏运营视图',
-    action: '查看权限',
-    metrics: [
-      { label: '今日游戏消耗', value: '¥ 8,620.00', hint: '仅限授权游戏' },
-      { label: '待审核结算', value: '42', hint: '由超级管理员分配' },
-      { label: '预算预警', value: '2', hint: '余额不足暂停结算' },
-    ],
-    queue: [
-      { type: '游戏预算', scope: '开心消消', status: '预警' },
-      { type: '提现审核', scope: '授权范围', status: '待审' },
-    ],
-  },
-  超级管理员: {
-    eyebrow: '超级管理员工作台',
-    title: '全局运营概览',
-    action: '配置中心',
-    metrics: [
-      { label: '今日展示金额', value: '¥ 12,480.36', hint: '配置策略后统计' },
-      { label: '待结算收益', value: '¥ 8,230.10', hint: '等待授权人员确认' },
-      { label: '打款异常', value: '6', hint: '失败金额保持冻结' },
-    ],
-    queue: [
-      { type: '游戏预算', scope: '开心消消', status: '预警' },
-      { type: '平台 token', scope: '全局 MAPI', status: '正常' },
-    ],
-  },
-};
-
 const roles = Object.keys(navByRole) as WorkspaceRole[];
 
 export function App() {
   const [activeRole, setActiveRole] = useState<WorkspaceRole>('超级管理员');
+  const [games, setGames] = useState<DemoGame[]>([]);
+  const [sampleJsCodes, setSampleJsCodes] = useState<string[]>([]);
+  const [status, setStatus] = useState<IntegrationStatus>();
+  const [gameAppId, setGameAppId] = useState('');
+  const [jsCode, setJsCode] = useState('mock-js-code-001');
+  const [session, setSession] = useState<GameSessionResult>();
+  const [refreshResult, setRefreshResult] = useState<EcpmRefreshResult>();
+  const [identity, setIdentity] = useState('');
+  const [earnings, setEarnings] = useState<EarningsResult>();
+  const [error, setError] = useState('');
+  const [busyAction, setBusyAction] = useState('');
+
   const navItems = navByRole[activeRole];
-  const workspace = workspaceByRole[activeRole];
+  const selectedGame = useMemo(
+    () => games.find((game) => game.gameAppId === gameAppId),
+    [gameAppId, games],
+  );
+
+  useEffect(() => {
+    void loadContext();
+  }, []);
+
+  async function loadContext() {
+    setError('');
+    const [context, integrationStatus] = await Promise.all([
+      apiGet<{ games: DemoGame[]; sampleJsCodes: string[] }>(
+        '/demo/test-context',
+      ),
+      apiGet<IntegrationStatus>('/integrations/status'),
+    ]);
+    setGames(context.games);
+    setSampleJsCodes(context.sampleJsCodes);
+    setStatus(integrationStatus);
+    setGameAppId(context.games[0]?.gameAppId ?? '');
+    setJsCode(context.sampleJsCodes[0] ?? 'mock-js-code-001');
+  }
+
+  async function createGameSession() {
+    await runAction('session', async () => {
+      const result = await apiPost<GameSessionResult>('/game/sessions', {
+        gameAppId,
+        jsCode,
+      });
+      setSession(result);
+      setIdentity(result.openId);
+    });
+  }
+
+  async function refreshEcpm() {
+    await runAction('refresh', async () => {
+      const result = await apiPost<EcpmRefreshResult>(
+        '/admin/kuaishou/ecpm/refresh',
+        {
+          gameAppId,
+          openIds: session?.openId ? [session.openId] : undefined,
+        },
+      );
+      setRefreshResult(result);
+    });
+  }
+
+  async function queryEarnings() {
+    await runAction('query', async () => {
+      const result = await apiGet<EarningsResult>(
+        `/user/earnings?identity=${encodeURIComponent(identity)}`,
+      );
+      setEarnings(result);
+    });
+  }
+
+  async function runAction(name: string, action: () => Promise<void>) {
+    setBusyAction(name);
+    setError('');
+    try {
+      await action();
+    } catch (nextError) {
+      setError(
+        nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+      );
+    } finally {
+      setBusyAction('');
+    }
+  }
 
   return (
     <main className="app-shell">
@@ -170,47 +235,161 @@ export function App() {
       <section className="content">
         <header className="topbar">
           <div>
-            <p>{workspace.eyebrow}</p>
-            <h1>{workspace.title}</h1>
+            <p>游戏端 / 快手端 / 用户端</p>
+            <h1>open_id 收益联调</h1>
           </div>
-          <button className="primary-action" type="button">
-            <Settings size={16} />
-            {workspace.action}
-          </button>
+          <span className={`status ${status?.kuaishouApiMode ?? 'warning'}`}>
+            {status?.kuaishouApiMode === 'real' ? '快手真实接口' : '快手 Mock'}
+          </span>
         </header>
 
+        {error ? <div className="alert danger">{error}</div> : null}
+
         <section className="metric-grid" aria-label="关键指标">
-          {workspace.metrics.map((metric) => (
-            <article className="metric-card" key={metric.label}>
-              <span>{metric.label}</span>
-              <strong>{metric.value}</strong>
-              <p>{metric.hint}</p>
-            </article>
-          ))}
+          <article className="metric-card">
+            <span>当前游戏</span>
+            <strong>{selectedGame?.name ?? '-'}</strong>
+            <p>{gameAppId || '-'}</p>
+          </article>
+          <article className="metric-card">
+            <span>open_id</span>
+            <strong className="compact-value">{session?.readableId ?? '-'}</strong>
+            <p>{session?.openId ?? '等待游戏端登录'}</p>
+          </article>
+          <article className="metric-card">
+            <span>今日展示金额</span>
+            <strong>¥ {earnings?.totalDisplayAmount.yuan ?? '0.00'}</strong>
+            <p>{earnings ? `${earnings.rows.length} 条 ECPM 明细` : '等待查询'}</p>
+          </article>
+        </section>
+
+        <section className="workbench-grid">
+          <article className="panel">
+            <div className="panel-heading">
+              <div>
+                <h2>游戏端登录</h2>
+                <p>code2Session</p>
+              </div>
+            </div>
+            <div className="panel-body">
+              <label className="field">
+                <span>游戏</span>
+                <select
+                  onChange={(event) => setGameAppId(event.target.value)}
+                  value={gameAppId}
+                >
+                  {games.map((game) => (
+                    <option key={game.gameAppId} value={game.gameAppId}>
+                      {game.name} / {game.gameAppId}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>js_code</span>
+                <input
+                  list="sample-js-codes"
+                  onChange={(event) => setJsCode(event.target.value)}
+                  value={jsCode}
+                />
+                <datalist id="sample-js-codes">
+                  {sampleJsCodes.map((code) => (
+                    <option key={code} value={code} />
+                  ))}
+                </datalist>
+              </label>
+              <button
+                className="primary-action full"
+                disabled={!gameAppId || !jsCode || busyAction === 'session'}
+                onClick={createGameSession}
+                type="button"
+              >
+                <Send size={16} />
+                换取 open_id
+              </button>
+            </div>
+          </article>
+
+          <article className="panel">
+            <div className="panel-heading">
+              <div>
+                <h2>快手 ECPM</h2>
+                <p>ecpm_report</p>
+              </div>
+            </div>
+            <div className="panel-body">
+              <div className="readonly-box">
+                <span>请求 open_id</span>
+                <strong>{session?.openId ?? '-'}</strong>
+              </div>
+              <button
+                className="primary-action full"
+                disabled={!session || busyAction === 'refresh'}
+                onClick={refreshEcpm}
+                type="button"
+              >
+                <RefreshCw size={16} />
+                刷新 ECPM
+              </button>
+              <div className="mini-result">
+                {refreshResult
+                  ? `${refreshResult.source} / ${refreshResult.savedCount} 条`
+                  : '-'}
+              </div>
+            </div>
+          </article>
+
+          <article className="panel">
+            <div className="panel-heading">
+              <div>
+                <h2>用户查询</h2>
+                <p>默认当天</p>
+              </div>
+            </div>
+            <div className="panel-body">
+              <label className="field">
+                <span>open_id / 可读 ID</span>
+                <input
+                  onChange={(event) => setIdentity(event.target.value)}
+                  value={identity}
+                />
+              </label>
+              <button
+                className="primary-action full"
+                disabled={!identity || busyAction === 'query'}
+                onClick={queryEarnings}
+                type="button"
+              >
+                <Search size={16} />
+                查询收益
+              </button>
+            </div>
+          </article>
         </section>
 
         <section className="panel">
           <div className="panel-heading">
             <div>
-              <h2>待处理事项</h2>
-              <p>{activeRole}当前重点事项</p>
+              <h2>收益明细</h2>
+              <p>{earnings?.date ?? '今日'}</p>
             </div>
           </div>
           <div className="table">
             <div className="table-row table-head">
-              <span>类型</span>
-              <span>范围</span>
-              <span>状态</span>
+              <span>事件</span>
+              <span>原始金额</span>
+              <span>展示金额</span>
             </div>
-            {workspace.queue.map((item) => (
-              <div className="table-row" key={`${item.type}-${item.scope}`}>
-                <span>{item.type}</span>
-                <span>{item.scope}</span>
-                <span className={`status ${statusClassName(item.status)}`}>
-                  {item.status}
-                </span>
+            {(earnings?.rows ?? []).map((row) => (
+              <div className="table-row" key={row.platformEventId}>
+                <span>{row.platformEventId}</span>
+                <span>¥ {row.rawCost.yuan}</span>
+                <span>¥ {row.displayAmount.yuan}</span>
               </div>
             ))}
+            {!earnings?.rows.length ? (
+              <div className="empty-state">暂无明细</div>
+            ) : null}
           </div>
         </section>
       </section>
@@ -218,14 +397,27 @@ export function App() {
   );
 }
 
-function statusClassName(status: WorkspaceCopy['queue'][number]['status']) {
-  if (status === '正常') {
-    return 'success';
+async function apiGet<T>(path: string): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`);
+  return readResponse<T>(response);
+}
+
+async function apiPost<T>(path: string, body: unknown): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    body: JSON.stringify(body),
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    method: 'POST',
+  });
+  return readResponse<T>(response);
+}
+
+async function readResponse<T>(response: Response): Promise<T> {
+  const payload = await response.json();
+  if (!response.ok) {
+    throw new Error(JSON.stringify(payload));
   }
 
-  if (status === '失败') {
-    return 'danger';
-  }
-
-  return 'warning';
+  return payload as T;
 }

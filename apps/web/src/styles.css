@@ -31,8 +31,15 @@ body {
 }
 
 button,
-a {
+a,
+input,
+select {
   font: inherit;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
 }
 
 .app-shell {
@@ -204,6 +211,17 @@ a {
   font-size: 24px;
 }
 
+.compact-value {
+  overflow-wrap: anywhere;
+}
+
+.workbench-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
 .panel {
   overflow: hidden;
 }
@@ -226,6 +244,68 @@ a {
   margin-top: 4px;
   color: var(--muted);
   font-size: 13px;
+}
+
+.panel-body {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+}
+
+.field span,
+.readonly-box span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.field input,
+.field select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--foreground);
+  padding: 8px 10px;
+}
+
+.readonly-box {
+  display: grid;
+  gap: 6px;
+  min-height: 74px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 10px;
+}
+
+.readonly-box strong {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mini-result {
+  min-height: 22px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.alert {
+  border-radius: 8px;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+
+.alert.danger {
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 .table {
@@ -271,9 +351,30 @@ a {
   color: var(--success);
 }
 
+.status.mock {
+  background: var(--warning-soft);
+  color: var(--warning);
+}
+
+.status.real {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
 .status.danger {
   background: var(--danger-soft);
   color: var(--danger);
+}
+
+.primary-action.full {
+  justify-content: center;
+  width: 100%;
+}
+
+.empty-state {
+  padding: 18px 16px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 @media (max-width: 860px) {
@@ -287,6 +388,10 @@ a {
   }
 
   .metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workbench-grid {
     grid-template-columns: 1fr;
   }
 
