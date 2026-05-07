@@ -77,7 +77,7 @@ type MoneyValue = {
 };
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:3000/api';
+  import.meta.env.VITE_API_BASE_URL?.trim() || '/api';
 
 const navByRole: Record<WorkspaceRole, NavItem[]> = {
   用户: [
@@ -126,7 +126,13 @@ export function App() {
   );
 
   useEffect(() => {
-    void loadContext();
+    void loadContext().catch((nextError: unknown) => {
+      setError(
+        nextError instanceof Error
+          ? nextError.message
+          : '无法连接 API，请确认 pnpm dev 已启动',
+      );
+    });
   }, []);
 
   async function loadContext() {
