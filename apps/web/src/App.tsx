@@ -180,6 +180,9 @@ export function App() {
   const [kuaishouEcpmJobs, setKuaishouEcpmJobs] = useState<
     KuaishouEcpmSyncJob[]
   >([]);
+  const [configKuaishouEcpmJobs, setConfigKuaishouEcpmJobs] = useState<
+    KuaishouEcpmSyncJob[]
+  >([]);
   const [kuaishouAppId, setKuaishouAppId] = useState('');
   const [kuaishouSecret, setKuaishouSecret] = useState('');
   const [kuaishouAuthCode, setKuaishouAuthCode] = useState('');
@@ -255,6 +258,8 @@ export function App() {
   const busyRef = useRef(false);
   const sessionVersionRef = useRef(0);
   const settlementBatchRequestVersionRef = useRef(0);
+  const configEcpmJobsRequestVersionRef = useRef(0);
+  const selectedConfigGameIdRef = useRef('');
 
   const selectedGame = useMemo(
     () => games.find((game) => game.gameAppId === gameAppId),
@@ -731,12 +736,15 @@ export function App() {
   }
 
   function clearGameConfigState() {
+    selectedConfigGameIdRef.current = '';
+    configEcpmJobsRequestVersionRef.current += 1;
     setSelectedConfigGameId('');
     setConfigSection('basic');
     setConfigGameDraft(undefined);
     setConfigBudgetAmountYuan('');
     setConfigBudgetReason('');
     setConfigEcpmLookbackHours(3);
+    setConfigKuaishouEcpmJobs([]);
   }
 
   function clearKuaishouTokenState() {
@@ -752,6 +760,12 @@ export function App() {
   ) {
     setAdminCompanies(companies);
     setAdminGames(nextAdminGames);
+    const configGame = nextAdminGames.find(
+      (game) => game.id === selectedConfigGameIdRef.current,
+    );
+    if (configGame) {
+      setConfigGameDraft(buildGameConfigDraft(configGame));
+    }
     setBalanceCompanyId((current) =>
       getDefaultAdminCompanyId(companies, current),
     );
@@ -869,14 +883,10 @@ export function App() {
   async function loadKuaishouEcpmJobsForToken(
     token: string,
     isCurrent = () => true,
-    options: { gameAppId?: string; reportError?: boolean } = {},
+    options: { reportError?: boolean } = {},
   ) {
     try {
-      const result = await aiKsApi.getKuaishouEcpmJobs(
-        token,
-        20,
-        options.gameAppId,
-      );
+      const result = await aiKsApi.getKuaishouEcpmJobs(token, 20);
       if (!isCurrent()) {
         return false;
       }
@@ -885,6 +895,52 @@ export function App() {
       return true;
     } catch (nextError) {
       if (!isCurrent()) {
+        return false;
+      }
+
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        handleUnauthorized('admin');
+        setError(nextError.message);
+        return false;
+      }
+
+      if (options.reportError ?? true) {
+        setError(
+          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+        );
+      }
+      return false;
+    }
+  }
+
+  async function loadConfigKuaishouEcpmJobsForGame(
+    token: string,
+    game: AdminGame,
+    isCurrent = () => true,
+    options: { reportError?: boolean } = {},
+  ) {
+    const requestVersion = configEcpmJobsRequestVersionRef.current + 1;
+    configEcpmJobsRequestVersionRef.current = requestVersion;
+
+    const isCurrentConfigGame = () =>
+      isCurrent() &&
+      requestVersion === configEcpmJobsRequestVersionRef.current &&
+      selectedConfigGameIdRef.current === game.id;
+
+    try {
+      const result = await aiKsApi.getKuaishouEcpmJobs(
+        token,
+        20,
+        game.gameAppId,
+      );
+      if (!isCurrentConfigGame()) {
+        return false;
+      }
+
+      setConfigKuaishouEcpmJobs(result.jobs);
+      return true;
+    } catch (nextError) {
+      if (!isCurrentConfigGame()) {
         return false;
       }
 
@@ -1129,20 +1185,22 @@ export function App() {
       return;
     }
 
+    selectedConfigGameIdRef.current = game.id;
     setSelectedConfigGameId(game.id);
     setConfigSection('basic');
     setConfigGameDraft(buildGameConfigDraft(game));
     setConfigBudgetAmountYuan('');
     setConfigBudgetReason('');
     setConfigEcpmLookbackHours(3);
+    setConfigKuaishouEcpmJobs([]);
 
     if (adminAccessToken) {
       const configSessionVersion = sessionVersionRef.current;
-      void loadKuaishouEcpmJobsForToken(
+      void loadConfigKuaishouEcpmJobsForGame(
         adminAccessToken,
+        game,
         () => isCurrentSessionVersion(configSessionVersion),
         {
-          gameAppId: game.gameAppId,
           reportError: false,
         },
       );
@@ -1258,10 +1316,14 @@ export function App() {
       }
 
       setRefreshResult(result);
-      await loadKuaishouEcpmJobsForToken(adminAccessToken, isCurrent, {
-        gameAppId: game.gameAppId,
-        reportError: false,
-      });
+      await loadConfigKuaishouEcpmJobsForGame(
+        adminAccessToken,
+        game,
+        isCurrent,
+        {
+          reportError: false,
+        },
+      );
       if (!isCurrent()) {
         return;
       }
@@ -1791,6 +1853,7 @@ export function App() {
           configBudgetReason={configBudgetReason}
           configEcpmLookbackHours={configEcpmLookbackHours}
           configGameDraft={configGameDraft}
+          configKuaishouEcpmJobs={configKuaishouEcpmJobs}
           configSection={configSection}
           gameAppId={gameAppId}
           games={games}

@@ -77,6 +77,7 @@ export interface OperationsWorkspaceProps {
   configBudgetReason: string;
   configEcpmLookbackHours: EcpmLookbackHours;
   configGameDraft?: GameConfigDraft;
+  configKuaishouEcpmJobs: KuaishouEcpmSyncJob[];
   configSection: GameConfigSection;
   gameAppId: string;
   games: DemoGame[];
@@ -244,6 +245,7 @@ export function OperationsWorkspace({
   configBudgetReason,
   configEcpmLookbackHours,
   configGameDraft,
+  configKuaishouEcpmJobs,
   configSection,
   gameAppId,
   games,
@@ -604,7 +606,7 @@ export function OperationsWorkspace({
           draft={configGameDraft}
           ecpmLookbackHours={configEcpmLookbackHours}
           game={selectedConfigGame}
-          jobs={kuaishouEcpmJobs}
+          jobs={configKuaishouEcpmJobs}
           onBudgetAmountChange={onConfigBudgetAmountChange}
           onBudgetReasonChange={onConfigBudgetReasonChange}
           onClose={onCloseGameConfig}
@@ -1055,9 +1057,7 @@ function GameConfigView({
   section: GameConfigSection;
   workspaceBusy: boolean;
 }) {
-  const gameJobs = jobs.filter(
-    (job) => job.gameAppId === game.gameAppId || job.gameAppId === game.id,
-  );
+  const gameJobs = jobs.filter((job) => job.gameAppId === game.gameAppId);
   const sections: Array<{ key: GameConfigSection; label: string }> = [
     { key: 'basic', label: '基础信息' },
     { key: 'budget', label: '预算与结算' },

@@ -102,7 +102,7 @@ const kuaishouEcpmJob: KuaishouEcpmSyncJob = {
   endedDataHour: '2026-05-08T00:00:00.000Z',
   errorMessage: null,
   finishedAt: '2026-05-08T00:01:00.000Z',
-  gameAppId: 'game-1',
+  gameAppId: 'ks_game_001',
   id: 'job-1',
   lookbackHours: 1,
   requestedOpenIdCount: 2,
@@ -135,6 +135,7 @@ function operationsWorkspaceProps(
     configBudgetReason: '',
     configEcpmLookbackHours: 3,
     configGameDraft: undefined,
+    configKuaishouEcpmJobs: [],
     configSection: 'basic',
     gameAppId: 'game-1',
     games: [],
@@ -473,7 +474,6 @@ describe('OperationsWorkspace', () => {
             settlementPaused: true,
           },
           configSection: 'ecpm',
-          kuaishouEcpmJobs: [kuaishouEcpmJob],
           selectedConfigGame: adminGame,
           selectedConfigGameId: 'game-1',
         })}
@@ -487,6 +487,37 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('审计/任务历史');
     expect(html).toContain('默认关闭');
     expect(html).toContain('失败不会自动重试');
+  });
+
+  it('filters selected game config history by game_app_id only', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          adminGames: [adminGame],
+          configGameDraft: {
+            ecpmAutoSyncEnabled: false,
+            ecpmAutoSyncIntervalHours: 3,
+            gameSecret: 'secret-1',
+            name: 'Runner',
+            settlementPaused: true,
+          },
+          configKuaishouEcpmJobs: [
+            kuaishouEcpmJob,
+            {
+              ...kuaishouEcpmJob,
+              gameAppId: 'game-1',
+              id: 'job-row-id',
+            },
+          ],
+          configSection: 'audit',
+          selectedConfigGame: adminGame,
+          selectedConfigGameId: 'game-1',
+        })}
+      />,
+    );
+
+    expect(html).toContain('job-1');
+    expect(html).not.toContain('job-row-id');
   });
 
   it('renders kuaishou platform authorization status and controls', () => {
