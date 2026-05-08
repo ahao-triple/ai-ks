@@ -12,7 +12,24 @@ describe('KuaishouRefreshController', () => {
     });
 
     expect(result).toMatchObject({
+      job: expect.objectContaining({
+        id: 'job-1',
+        savedCount: 1,
+        status: 'SUCCEEDED',
+      }),
       requestedOpenIds: ['open-1'],
+      savedCount: 1,
+      source: 'kuaishou',
+    });
+    expect(dependencies.syncJobService.startJob).toHaveBeenCalledWith({
+      actorId: 'admin',
+      actorType: 'SUPER_ADMIN',
+      dataHour: '2026-05-08',
+      gameAppId: 'game-1',
+      requestedOpenIdCount: 1,
+    });
+    expect(dependencies.syncJobService.completeJob).toHaveBeenCalledWith({
+      jobId: 'job-1',
       savedCount: 1,
       source: 'kuaishou',
     });
@@ -22,6 +39,7 @@ describe('KuaishouRefreshController', () => {
       actorType: 'SUPER_ADMIN',
       metadata: {
         dataHour: '2026-05-08',
+        jobId: 'job-1',
         requestedOpenIds: ['open-1'],
         savedCount: 1,
         source: 'kuaishou',
@@ -49,6 +67,10 @@ describe('KuaishouRefreshController', () => {
     expect(dependencies.tokenService.markTokenError).toHaveBeenCalledWith(
       'token expired',
     );
+    expect(dependencies.syncJobService.failJob).toHaveBeenCalledWith({
+      errorMessage: 'token expired',
+      jobId: 'job-1',
+    });
     expect(dependencies.auditLogService.record).toHaveBeenCalledWith({
       action: 'kuaishou.ecpm_refresh_failed',
       actorId: 'admin',
@@ -56,10 +78,30 @@ describe('KuaishouRefreshController', () => {
       metadata: {
         dataHour: '2026-05-08',
         error: 'token expired',
+        jobId: 'job-1',
         requestedOpenIds: ['open-1'],
       },
       targetId: 'game-1',
       targetType: 'kuaishou_ecpm_refresh',
+    });
+  });
+
+  it('lists recent ECPM sync jobs with a clamped limit', async () => {
+    const dependencies = createDependencies();
+    const controller = createController(dependencies);
+
+    const result = await controller.jobs('200');
+
+    expect(dependencies.syncJobService.listJobs).toHaveBeenCalledWith({
+      limit: 100,
+    });
+    expect(result).toEqual({
+      jobs: [
+        expect.objectContaining({
+          id: 'job-1',
+          status: 'SUCCEEDED',
+        }),
+      ],
     });
   });
 });
@@ -72,6 +114,7 @@ function createController(dependencies: ReturnType<typeof createDependencies>) {
     dependencies.ecpmClient,
     dependencies.auditLogService,
     dependencies.tokenService,
+    dependencies.syncJobService,
   ) as KuaishouRefreshController;
 }
 
@@ -86,6 +129,22 @@ function createDependencies() {
     openId: 'open-1',
     platformEventId: 'event-1',
     rawCostLi: 2300n,
+  };
+  const syncJob = {
+    actorId: 'admin',
+    actorType: 'SUPER_ADMIN',
+    createdAt: new Date('2026-05-08T00:00:00.000Z'),
+    dataHour: '2026-05-08',
+    errorMessage: null,
+    finishedAt: new Date('2026-05-08T00:01:00.000Z'),
+    gameAppId: 'game-1',
+    id: 'job-1',
+    requestedOpenIdCount: 1,
+    savedCount: 1,
+    source: 'kuaishou',
+    startedAt: new Date('2026-05-08T00:00:00.000Z'),
+    status: 'SUCCEEDED',
+    updatedAt: new Date('2026-05-08T00:01:00.000Z'),
   };
 
   return {
@@ -111,6 +170,20 @@ function createDependencies() {
     },
     tokenService: {
       markTokenError: jest.fn(async () => undefined),
+    },
+    syncJobService: {
+      completeJob: jest.fn(async () => syncJob),
+      failJob: jest.fn(async () => ({
+        ...syncJob,
+        errorMessage: 'token expired',
+        status: 'FAILED',
+      })),
+      listJobs: jest.fn(async () => [syncJob]),
+      startJob: jest.fn(async () => ({
+        ...syncJob,
+        savedCount: 0,
+        status: 'RUNNING',
+      })),
     },
   };
 }
