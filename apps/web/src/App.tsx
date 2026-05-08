@@ -377,6 +377,7 @@ export function App() {
   }
 
   function clearAdminAuth() {
+    nextSettlementBatchRequestVersion();
     clearStoredToken(ADMIN_AUTH_STORAGE_KEY);
     setAdminAccessToken('');
     setAdminName('');
@@ -688,6 +689,7 @@ export function App() {
   }
 
   function changeGameAppId(value: string) {
+    nextSettlementBatchRequestVersion();
     applySettlementRangeChange({ gameAppId: value });
     setSettlementBatches([]);
   }
