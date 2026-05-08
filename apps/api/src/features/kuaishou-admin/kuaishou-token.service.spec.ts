@@ -171,6 +171,67 @@ describe('KuaishouTokenService', () => {
     });
   });
 
+  it('auto-refreshes expired database access tokens when refresh token is usable', async () => {
+    const { oauth, prisma, service } = createService({
+      env: {
+        KUAISHOU_ACCESS_TOKEN: 'env-access',
+        KUAISHOU_ADVERTISER_ID: 'env-advertiser',
+      },
+      token: activeToken({
+        accessToken: 'expired-access',
+        accessTokenExpiresAt: new Date('2026-05-07T00:00:00.000Z'),
+        refreshToken: 'refresh-1',
+        refreshTokenExpiresAt: new Date('2026-05-09T00:00:00.000Z'),
+      }),
+    });
+    oauth.refreshResult = {
+      accessToken: 'access-2',
+      accessTokenExpiresIn: 60,
+      advertiserId: 'advertiser-2',
+      raw: {},
+      refreshToken: 'refresh-2',
+      refreshTokenExpiresIn: 120,
+    };
+
+    await expect(service.resolveReportCredentials()).resolves.toEqual({
+      accessToken: 'access-2',
+      advertiserId: 'advertiser-2',
+      source: 'database',
+    });
+    expect(oauth.lastRefreshInput).toEqual({
+      appId: 'app-1',
+      refreshToken: 'refresh-1',
+      secret: 'secret-1',
+    });
+    expect(prisma.getToken()).toMatchObject({
+      accessToken: 'access-2',
+      advertiserId: 'advertiser-2',
+      refreshToken: 'refresh-2',
+      refreshedAt: now,
+      status: KuaishouTokenStatus.ACTIVE,
+    });
+  });
+
+  it('does not auto-refresh when the stored refresh token is expired', async () => {
+    const { oauth, service } = createService({
+      env: {
+        KUAISHOU_ACCESS_TOKEN: 'env-access',
+        KUAISHOU_ADVERTISER_ID: 'env-advertiser',
+      },
+      token: activeToken({
+        accessTokenExpiresAt: new Date('2026-05-07T00:00:00.000Z'),
+        refreshTokenExpiresAt: new Date('2026-05-07T00:00:00.000Z'),
+      }),
+    });
+
+    await expect(service.resolveReportCredentials()).resolves.toEqual({
+      accessToken: 'env-access',
+      advertiserId: 'env-advertiser',
+      source: 'env',
+    });
+    expect(oauth.lastRefreshInput).toBeUndefined();
+  });
+
   it('marks existing database tokens as error', async () => {
     const { prisma, service } = createService({
       token: activeToken(),

@@ -157,6 +157,27 @@ export class KuaishouTokenService {
       };
     }
 
+    if (token && isRefreshableDatabaseToken(token, this.now())) {
+      try {
+        await this.refreshStoredToken({
+          actor: {
+            role: 'SUPER_ADMIN',
+            username: 'system',
+          },
+        });
+        const refreshedToken = await this.findToken();
+        if (refreshedToken && isUsableDatabaseToken(refreshedToken, this.now())) {
+          return {
+            accessToken: refreshedToken.accessToken!,
+            advertiserId: refreshedToken.advertiserId!,
+            source: 'database',
+          };
+        }
+      } catch (error) {
+        await this.markTokenError(readErrorMessage(error));
+      }
+    }
+
     const envCredentials = this.readEnvCredentials();
     if (envCredentials) {
       return {
@@ -327,6 +348,14 @@ function isUsableDatabaseToken(token: KuaishouPlatformToken, now: Date) {
     Boolean(token.advertiserId) &&
     Boolean(token.accessTokenExpiresAt) &&
     token.accessTokenExpiresAt!.getTime() > now.getTime()
+  );
+}
+
+function isRefreshableDatabaseToken(token: KuaishouPlatformToken, now: Date) {
+  return (
+    Boolean(token.refreshToken) &&
+    Boolean(token.refreshTokenExpiresAt) &&
+    token.refreshTokenExpiresAt!.getTime() > now.getTime()
   );
 }
 
