@@ -72,6 +72,40 @@ export type AdminAuthResult = {
   };
 };
 
+export type AdminCompany = {
+  balance: MoneyValue;
+  createdAt: string;
+  id: string;
+  name: string;
+  updatedAt: string;
+};
+
+export type AdminCompanyListResult = {
+  companies: AdminCompany[];
+};
+
+export type AdminGame = {
+  budget: MoneyValue;
+  companyId: string;
+  companyName: string;
+  createdAt: string;
+  gameAppId: string;
+  gameSecret: string;
+  id: string;
+  name: string;
+  settlementPaused: boolean;
+  updatedAt: string;
+};
+
+export type AdminGameListResult = {
+  games: AdminGame[];
+};
+
+export type AdminGameBudgetAllocationResult = {
+  company: AdminCompany;
+  game: AdminGame;
+};
+
 export type AccountEarningsResult = {
   date: string;
   openIds: string[];

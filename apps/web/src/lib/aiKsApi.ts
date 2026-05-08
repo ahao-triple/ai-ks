@@ -3,6 +3,11 @@ import type {
   AccountEarningsResult,
   AccountResult,
   AdminAuthResult,
+  AdminCompany,
+  AdminCompanyListResult,
+  AdminGame,
+  AdminGameBudgetAllocationResult,
+  AdminGameListResult,
   AdminSettlementConfirmResult,
   AdminSettlementDetailResult,
   AdminSettlementListResult,
@@ -24,6 +29,14 @@ import type {
 
 function withdrawalPath(batchId: string, suffix = '') {
   return `/admin/withdrawals/${encodeURIComponent(batchId)}${suffix}`;
+}
+
+function companyPath(companyId: string, suffix = '') {
+  return `/admin/companies/${encodeURIComponent(companyId)}${suffix}`;
+}
+
+function gamePath(gameId: string, suffix = '') {
+  return `/admin/games/${encodeURIComponent(gameId)}${suffix}`;
 }
 
 function settlementQuery(range: AdminSettlementRange) {
@@ -125,6 +138,89 @@ export const aiKsApi = {
       body: payload,
       method: 'POST',
     });
+  },
+
+  getAdminCompanies(adminAccessToken: string) {
+    return requestJson<AdminCompanyListResult>('/admin/companies', {
+      accessToken: adminAccessToken,
+    });
+  },
+
+  createAdminCompany(adminAccessToken: string, payload: { name: string }) {
+    return requestJson<{ company: AdminCompany }>('/admin/companies', {
+      accessToken: adminAccessToken,
+      body: payload,
+      method: 'POST',
+    });
+  },
+
+  adjustCompanyBalance(
+    adminAccessToken: string,
+    companyId: string,
+    payload: { amountYuan: string; reason?: string },
+  ) {
+    return requestJson<{ company: AdminCompany }>(
+      companyPath(companyId, '/balance-adjustments'),
+      {
+        accessToken: adminAccessToken,
+        body: payload,
+        method: 'POST',
+      },
+    );
+  },
+
+  getAdminGames(adminAccessToken: string, companyId?: string) {
+    const query = companyId ? `?companyId=${encodeURIComponent(companyId)}` : '';
+    return requestJson<AdminGameListResult>(`/admin/games${query}`, {
+      accessToken: adminAccessToken,
+    });
+  },
+
+  createAdminGame(
+    adminAccessToken: string,
+    payload: {
+      companyId: string;
+      gameAppId: string;
+      gameSecret: string;
+      name: string;
+    },
+  ) {
+    return requestJson<{ game: AdminGame }>('/admin/games', {
+      accessToken: adminAccessToken,
+      body: payload,
+      method: 'POST',
+    });
+  },
+
+  updateAdminGame(
+    adminAccessToken: string,
+    gameId: string,
+    payload: {
+      gameSecret?: string;
+      name?: string;
+      settlementPaused?: boolean;
+    },
+  ) {
+    return requestJson<{ game: AdminGame }>(gamePath(gameId), {
+      accessToken: adminAccessToken,
+      body: payload,
+      method: 'PATCH',
+    });
+  },
+
+  allocateGameBudget(
+    adminAccessToken: string,
+    gameId: string,
+    payload: { amountYuan: string; reason?: string },
+  ) {
+    return requestJson<AdminGameBudgetAllocationResult>(
+      gamePath(gameId, '/budget-allocations'),
+      {
+        accessToken: adminAccessToken,
+        body: payload,
+        method: 'POST',
+      },
+    );
   },
 
   createGameSession(payload: { gameAppId: string; jsCode: string }) {

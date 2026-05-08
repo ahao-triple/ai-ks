@@ -2,6 +2,11 @@ import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { aiKsApi } from './aiKsApi';
 import { API_BASE_URL } from './api';
 import type {
+  AdminCompany,
+  AdminCompanyListResult,
+  AdminGame,
+  AdminGameListResult,
+  AdminGameBudgetAllocationResult,
   AdminSettlementBatch,
   AdminSettlementConfirmResult,
   AdminSettlementDetailResult,
@@ -118,6 +123,158 @@ describe('aiKsApi', () => {
     expectTypeOf(aiKsApi.getSettlementDetail)
       .returns.resolves.toEqualTypeOf<AdminSettlementDetailResult>();
     expectTypeOf<AdminSettlementBatch['configSnapshot']>().toEqualTypeOf<unknown>();
+  });
+
+  it('types admin resource methods as company and game responses', () => {
+    expectTypeOf(aiKsApi.getAdminCompanies)
+      .returns.resolves.toEqualTypeOf<AdminCompanyListResult>();
+    expectTypeOf(aiKsApi.createAdminCompany)
+      .returns.resolves.toEqualTypeOf<{ company: AdminCompany }>();
+    expectTypeOf(aiKsApi.getAdminGames)
+      .returns.resolves.toEqualTypeOf<AdminGameListResult>();
+    expectTypeOf(aiKsApi.createAdminGame)
+      .returns.resolves.toEqualTypeOf<{ game: AdminGame }>();
+    expectTypeOf(aiKsApi.updateAdminGame)
+      .returns.resolves.toEqualTypeOf<{ game: AdminGame }>();
+    expectTypeOf(aiKsApi.allocateGameBudget)
+      .returns.resolves.toEqualTypeOf<AdminGameBudgetAllocationResult>();
+  });
+
+  it('loads admin companies with the admin token', async () => {
+    mockJsonResponse({ companies: [] });
+
+    await aiKsApi.getAdminCompanies('admin-token');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/companies`,
+      {
+        body: undefined,
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'GET',
+      },
+    );
+  });
+
+  it('adjusts company balance with an encoded company id and request body', async () => {
+    mockJsonResponse({ company: { id: 'company 1/2' } });
+
+    await aiKsApi.adjustCompanyBalance('admin-token', 'company 1/2', {
+      amountYuan: '100.00',
+      reason: 'seed',
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/companies/company%201%2F2/balance-adjustments`,
+      {
+        body: JSON.stringify({
+          amountYuan: '100.00',
+          reason: 'seed',
+        }),
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      },
+    );
+  });
+
+  it('lists admin games with an optional encoded company id', async () => {
+    mockJsonResponse({ games: [] });
+
+    await aiKsApi.getAdminGames('admin-token', 'company 1');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/games?companyId=company%201`,
+      {
+        body: undefined,
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'GET',
+      },
+    );
+  });
+
+  it('creates admin games with company and credential fields', async () => {
+    mockJsonResponse({ game: { id: 'game-1' } });
+
+    await aiKsApi.createAdminGame('admin-token', {
+      companyId: 'company-1',
+      gameAppId: 'ks_game_001',
+      gameSecret: 'secret-1',
+      name: 'Runner',
+    });
+
+    const requestInit = vi.mocked(globalThis.fetch).mock.calls[0]?.[1];
+    expect(globalThis.fetch).toHaveBeenCalledWith(`${API_BASE_URL}/admin/games`, {
+      body: expect.any(String),
+      headers: {
+        Authorization: 'Bearer admin-token',
+        'Content-Type': 'application/json',
+      },
+      method: 'POST',
+    });
+    expect(JSON.parse(requestInit?.body as string)).toEqual({
+      companyId: 'company-1',
+      gameAppId: 'ks_game_001',
+      gameSecret: 'secret-1',
+      name: 'Runner',
+    });
+  });
+
+  it('updates admin games with encoded ids and allowed fields', async () => {
+    mockJsonResponse({ game: { id: 'game 1/2' } });
+
+    await aiKsApi.updateAdminGame('admin-token', 'game 1/2', {
+      gameSecret: 'secret-2',
+      name: 'Runner Pro',
+      settlementPaused: false,
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/games/game%201%2F2`,
+      {
+        body: JSON.stringify({
+          gameSecret: 'secret-2',
+          name: 'Runner Pro',
+          settlementPaused: false,
+        }),
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'PATCH',
+      },
+    );
+  });
+
+  it('allocates game budget with an encoded game id and request body', async () => {
+    mockJsonResponse({ company: { id: 'company-1' }, game: { id: 'game 1/2' } });
+
+    await aiKsApi.allocateGameBudget('admin-token', 'game 1/2', {
+      amountYuan: '30.00',
+      reason: 'launch',
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/games/game%201%2F2/budget-allocations`,
+      {
+        body: JSON.stringify({
+          amountYuan: '30.00',
+          reason: 'launch',
+        }),
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      },
+    );
   });
 
   it('previews admin settlement with encoded query parameters', async () => {
