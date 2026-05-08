@@ -18,10 +18,6 @@ import {
   type AccountPrincipal,
 } from './account-auth.service';
 import { AccountJwtGuard } from './account-jwt.guard';
-import {
-  AccountSettlementService,
-  type ConfirmPendingEarningsResult,
-} from './account-settlement.service';
 import { AccountService } from './account.service';
 import {
   AccountWalletService,
@@ -53,7 +49,6 @@ const requestWithdrawalSchema = z.object({
 export class AccountController {
   constructor(
     private readonly accountAuthService: AccountAuthService,
-    private readonly accountSettlementService: AccountSettlementService,
     private readonly accountService: AccountService,
     private readonly accountWalletService: AccountWalletService,
     private readonly auditLogService: AuditLogService,
@@ -99,27 +94,6 @@ export class AccountController {
     @Query('date') date?: string,
   ) {
     return this.presentAccountEarnings(account.id, date);
-  }
-
-  @Post('me/settlements/confirm')
-  @UseGuards(AccountJwtGuard)
-  async confirmOwnPendingEarnings(@CurrentAccount() account: AccountPrincipal) {
-    const result = await this.accountSettlementService.confirmPendingEarnings({
-      userId: account.id,
-    });
-    await this.auditLogService.record({
-      action: 'account.settlement.confirmed',
-      actorId: account.id,
-      actorType: 'USER',
-      metadata: {
-        settledAmountLi: result.settledAmountLi.toString(),
-        settledCount: result.settledCount,
-      },
-      targetId: account.id,
-      targetType: 'user_account',
-    });
-
-    return presentSettlement(result);
   }
 
   @Get('me/alipay')
@@ -236,13 +210,5 @@ function presentWithdrawal(withdrawal: AccountWithdrawal) {
       status: detail.status,
       type: detail.type,
     })),
-  };
-}
-
-function presentSettlement(result: ConfirmPendingEarningsResult) {
-  return {
-    settledAmount: presentMoneyLi(result.settledAmountLi),
-    settledCount: result.settledCount,
-    userId: result.userId,
   };
 }

@@ -4,7 +4,6 @@ import { AuditLogModule } from '../audit/audit-log.module';
 import { AccountAuthService } from './account-auth.service';
 import { AccountController } from './account.controller';
 import { AccountJwtGuard } from './account-jwt.guard';
-import { AccountSettlementService } from './account-settlement.service';
 import { AccountService } from './account.service';
 import { AccountWalletService } from './account-wallet.service';
 
@@ -14,13 +13,11 @@ import { AccountWalletService } from './account-wallet.service';
   exports: [
     AccountAuthService,
     AccountService,
-    AccountSettlementService,
     AccountWalletService,
   ],
   providers: [
     AccountAuthService,
     AccountJwtGuard,
-    AccountSettlementService,
     AccountService,
     AccountWalletService,
   ],
