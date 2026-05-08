@@ -3,6 +3,7 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -17,6 +18,7 @@ import {
 import { type AdminPrincipal } from '../admin-auth/admin-auth.service';
 
 const DEFAULT_TOKEN_KEY = 'default';
+export const KUAISHOU_TOKEN_NOW = Symbol('KUAISHOU_TOKEN_NOW');
 
 type TokenPrisma = Pick<PrismaService, 'kuaishouPlatformToken'>;
 type TokenConfig = Pick<ConfigService, 'get'>;
@@ -58,8 +60,10 @@ export class KuaishouTokenService {
   constructor(
     @Inject(PrismaService) private readonly prisma: TokenPrisma,
     private readonly oauthClient: KuaishouOAuthClient,
-    private readonly configService: TokenConfig,
-    private readonly now: () => Date = () => new Date(),
+    @Inject(ConfigService) private readonly configService: TokenConfig,
+    @Optional()
+    @Inject(KUAISHOU_TOKEN_NOW)
+    private readonly nowProvider?: () => Date,
   ) {}
 
   async getStatus(): Promise<KuaishouTokenStatusResult> {
@@ -187,6 +191,10 @@ export class KuaishouTokenService {
         key: DEFAULT_TOKEN_KEY,
       },
     });
+  }
+
+  private now() {
+    return this.nowProvider?.() ?? new Date();
   }
 
   private readEnvCredentials() {
