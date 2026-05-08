@@ -63,7 +63,7 @@ describe('KuaishouEcpmSyncJobService', () => {
   });
 
   it('lists recent sync jobs newest first with clamped limits', async () => {
-    const { service } = createService();
+    const { prisma, service } = createService();
     await service.startJob({ ...baseStartInput(), gameAppId: 'game-1' });
     await service.startJob({ ...baseStartInput(), gameAppId: 'game-2' });
 
@@ -71,6 +71,7 @@ describe('KuaishouEcpmSyncJobService', () => {
 
     expect(result).toHaveLength(2);
     expect(result[0].gameAppId).toBe('game-2');
+    expect(prisma.lastFindManyArgs).toMatchObject({ take: 100 });
   });
 
   it('presents job dates as ISO strings', async () => {
@@ -116,8 +117,12 @@ function createService() {
 
 function createFakePrisma() {
   const rows: any[] = [];
+  let lastFindManyArgs: any;
 
   return {
+    get lastFindManyArgs() {
+      return lastFindManyArgs;
+    },
     rows,
     kuaishouEcpmSyncJob: {
       create: async ({ data }: any) => {
@@ -142,15 +147,17 @@ function createFakePrisma() {
         };
         return rows[index];
       },
-      findMany: async ({ orderBy, take }: any) =>
-        rows
+      findMany: async (args: any) => {
+        lastFindManyArgs = args;
+        return rows
           .slice()
           .sort((a, b) =>
-            orderBy?.createdAt === 'desc'
+            args.orderBy?.createdAt === 'desc'
               ? b.createdAt.getTime() - a.createdAt.getTime()
               : a.createdAt.getTime() - b.createdAt.getTime(),
           )
-          .slice(0, take),
+          .slice(0, args.take);
+      },
     },
   } as any;
 }
