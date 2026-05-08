@@ -4,6 +4,7 @@ import { AdminAuthModule } from '../admin-auth/admin-auth.module';
 import { AuditLogModule } from '../audit/audit-log.module';
 import { DemoModule } from '../demo/demo.module';
 import { KuaishouEcpmRangeSyncService } from './kuaishou-ecpm-range-sync.service';
+import { KuaishouEcpmSchedulerService } from './kuaishou-ecpm-scheduler.service';
 import { KuaishouEcpmSyncJobService } from './kuaishou-ecpm-sync-job.service';
 import { KuaishouRefreshController } from './kuaishou-refresh.controller';
 import { KuaishouTokenController } from './kuaishou-token.controller';
@@ -11,6 +12,10 @@ import { KuaishouTokenController } from './kuaishou-token.controller';
 @Module({
   controllers: [KuaishouRefreshController, KuaishouTokenController],
   imports: [AdminAuthModule, AuditLogModule, DemoModule, KuaishouModule],
-  providers: [KuaishouEcpmRangeSyncService, KuaishouEcpmSyncJobService],
+  providers: [
+    KuaishouEcpmRangeSyncService,
+    KuaishouEcpmSchedulerService,
+    KuaishouEcpmSyncJobService,
+  ],
 })
 export class KuaishouRefreshModule {}
