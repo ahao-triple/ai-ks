@@ -1150,10 +1150,7 @@ export function App() {
   }
 
   function closeGameConfig() {
-    setSelectedConfigGameId('');
-    setConfigGameDraft(undefined);
-    setConfigBudgetAmountYuan('');
-    setConfigBudgetReason('');
+    clearGameConfigState();
   }
 
   function changeConfigGameDraft(patch: Partial<GameConfigDraft>) {

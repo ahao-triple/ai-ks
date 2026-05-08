@@ -70,7 +70,7 @@ const adminGame: AdminGame = {
   companyName: 'Acme Studio',
   createdAt: '2026-05-08T02:00:00.000Z',
   ecpmAutoSyncEnabled: false,
-  ecpmAutoSyncIntervalHours: 1,
+  ecpmAutoSyncIntervalHours: 3,
   ecpmAutoSyncLastRunAt: null,
   ecpmAutoSyncNextRunAt: null,
   gameAppId: 'ks_game_001',
