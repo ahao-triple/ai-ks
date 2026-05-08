@@ -108,6 +108,14 @@ export function getAdminEntrySettlementGameRowId(
   return getSettlementGameRowId(games, gameAppId || games[0]?.gameAppId || '');
 }
 
+export function shouldApplySettlementBatchResponse(
+  requestVersion: number,
+  currentVersion: number,
+  isCurrentSession: boolean,
+) {
+  return isCurrentSession && requestVersion === currentVersion;
+}
+
 export function App() {
   const [activeView, setActiveView] = useState<ViewKey>('query');
   const [loginMode, setLoginMode] = useState<LoginMode>('account');
@@ -167,6 +175,7 @@ export function App() {
   const [busyAction, setBusyAction] = useState<AppBusyAction>('');
   const busyRef = useRef(false);
   const sessionVersionRef = useRef(0);
+  const settlementBatchRequestVersionRef = useRef(0);
 
   const selectedGame = useMemo(
     () => games.find((game) => game.gameAppId === gameAppId),
@@ -182,6 +191,23 @@ export function App() {
   useEffect(() => {
     void initializeApp();
   }, []);
+
+  useEffect(() => {
+    if (appSession.mode !== 'admin' || !adminAccessToken) {
+      return;
+    }
+
+    const settlementGameId = getAdminEntrySettlementGameRowId(games, gameAppId);
+    if (!settlementGameId) {
+      setSettlementBatches([]);
+      return;
+    }
+
+    const batchSessionVersion = sessionVersionRef.current;
+    void loadSettlementBatchesForGame(adminAccessToken, settlementGameId, () =>
+      isCurrentSessionVersion(batchSessionVersion),
+    );
+  }, [adminAccessToken, appSession.mode, gameAppId, games]);
 
   function bumpSessionVersion() {
     sessionVersionRef.current += 1;
@@ -209,7 +235,8 @@ export function App() {
       setGames(context.games);
       setSampleJsCodes(context.sampleJsCodes);
       setStatus(integrationStatus);
-      setGameAppId((current) => current || context.games[0]?.gameAppId || '');
+      const restoredGameAppId = gameAppId || context.games[0]?.gameAppId || '';
+      setGameAppId((current) => current || restoredGameAppId);
       setJsCode(
         (current) =>
           current || context.sampleJsCodes[0] || 'mock-js-code-001',
@@ -265,6 +292,21 @@ export function App() {
             );
           }
         }
+      }
+
+      if (!accessToken && adminAccessToken) {
+        if (!isCurrentSessionVersion(restoreVersion)) {
+          return;
+        }
+
+        const restoredAdminName = adminUsername || 'admin';
+        setAdminName(restoredAdminName);
+        setAppSession({
+          accessToken: adminAccessToken,
+          adminName: restoredAdminName,
+          mode: 'admin',
+        });
+        setActiveView('operations');
       }
     } catch (nextError) {
       setError(
@@ -417,32 +459,6 @@ export function App() {
       setActiveView('operations');
       setNotice('管理员登录成功');
       clearBusyState();
-
-      const adminVersion = sessionVersionRef.current;
-      const settlementGameId = getAdminEntrySettlementGameRowId(
-        games,
-        gameAppId,
-      );
-      if (!settlementGameId) {
-        setSettlementBatches([]);
-        return;
-      }
-
-      try {
-        await loadSettlementBatches(
-          result.accessToken,
-          settlementGameId,
-          () => isCurrentSessionVersion(adminVersion),
-        );
-      } catch (nextError) {
-        if (!isCurrentSessionVersion(adminVersion)) {
-          return;
-        }
-
-        setError(
-          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
-        );
-      }
     }, 'admin');
   }
 
@@ -673,24 +689,7 @@ export function App() {
 
   function changeGameAppId(value: string) {
     applySettlementRangeChange({ gameAppId: value });
-    if (!adminAccessToken) {
-      return;
-    }
-
-    const settlementGameId = getSettlementGameId(value);
     setSettlementBatches([]);
-    if (!settlementGameId) {
-      setError('请选择要结算的游戏');
-      return;
-    }
-
-    void loadSettlementBatches(adminAccessToken, settlementGameId).catch(
-      (nextError) => {
-        setError(
-          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
-        );
-      },
-    );
   }
 
   function changeSettlementStartDate(value: string) {
@@ -742,6 +741,45 @@ export function App() {
     setSettlementBatches(result.batches);
   }
 
+  function nextSettlementBatchRequestVersion() {
+    settlementBatchRequestVersionRef.current += 1;
+    return settlementBatchRequestVersionRef.current;
+  }
+
+  async function loadSettlementBatchesForGame(
+    token: string,
+    targetGameId: string,
+    isCurrentSession = () => true,
+  ) {
+    const requestVersion = nextSettlementBatchRequestVersion();
+    const canApply = () =>
+      shouldApplySettlementBatchResponse(
+        requestVersion,
+        settlementBatchRequestVersionRef.current,
+        isCurrentSession(),
+      );
+
+    try {
+      await loadSettlementBatches(token, targetGameId, canApply);
+      return canApply();
+    } catch (nextError) {
+      if (!canApply()) {
+        return false;
+      }
+
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        handleUnauthorized('admin');
+        setError(nextError.message);
+        return false;
+      }
+
+      setError(
+        nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+      );
+      return false;
+    }
+  }
+
   async function previewSettlement() {
     if (!adminAccessToken) {
       setError('请先登录管理员账号');
@@ -755,6 +793,7 @@ export function App() {
 
     await runAction('settlement-preview', async (isCurrent) => {
       const range = getSettlementRange();
+      const batchRequestVersion = nextSettlementBatchRequestVersion();
       const [result, batchResult] = await Promise.all([
         aiKsApi.previewSettlement(adminAccessToken, range),
         aiKsApi.getSettlementBatches(adminAccessToken, range.gameId),
@@ -764,7 +803,15 @@ export function App() {
       }
 
       setSettlementPreview(result);
-      setSettlementBatches(batchResult.batches);
+      if (
+        shouldApplySettlementBatchResponse(
+          batchRequestVersion,
+          settlementBatchRequestVersionRef.current,
+          isCurrent(),
+        )
+      ) {
+        setSettlementBatches(batchResult.batches);
+      }
       setNotice(`待结算 ${result.settlementCount} 条`);
     }, 'admin');
   }
@@ -797,8 +844,12 @@ export function App() {
 
       setSettlementPreview(undefined);
       setSettlementBatches((current) => [result.batch, ...current].slice(0, 20));
-      await loadSettlementBatches(adminAccessToken, range.gameId, isCurrent);
-      if (!isCurrent()) {
+      const batchesLoaded = await loadSettlementBatchesForGame(
+        adminAccessToken,
+        range.gameId,
+        isCurrent,
+      );
+      if (!isCurrent() || !batchesLoaded) {
         return;
       }
 

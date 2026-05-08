@@ -12,6 +12,7 @@ import {
   changeSettlementRange,
   getAdminEntrySettlementGameRowId,
   getSettlementGameRowId,
+  shouldApplySettlementBatchResponse,
 } from '../App';
 import type {
   AdminSettlementBatch,
@@ -334,6 +335,12 @@ describe('settlement range helpers', () => {
     );
 
     expect(gameId).toBe('demo-game-001');
+  });
+
+  it('rejects stale settlement batch responses', () => {
+    expect(shouldApplySettlementBatchResponse(1, 2, true)).toBe(false);
+    expect(shouldApplySettlementBatchResponse(2, 2, true)).toBe(true);
+    expect(shouldApplySettlementBatchResponse(2, 2, false)).toBe(false);
   });
 
   it('builds settlement API ranges with the backend game row id', () => {
