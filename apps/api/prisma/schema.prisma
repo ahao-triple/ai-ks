@@ -46,6 +46,13 @@ enum SettlementBatchStatus {
   CONFLICTED
 }
 
+enum KuaishouTokenStatus {
+  UNCONFIGURED
+  ACTIVE
+  EXPIRED
+  ERROR
+}
+
 model Company {
   id        String    @id @default(uuid())
   name      String
@@ -299,4 +306,24 @@ model AuditLog {
   @@index([targetType, targetId])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+model KuaishouPlatformToken {
+  id                    String              @id @default(uuid())
+  key                   String              @unique @default("default")
+  appId                 String              @map("app_id")
+  secret                String
+  advertiserId          String?             @map("advertiser_id")
+  accessToken           String?             @map("access_token")
+  refreshToken          String?             @map("refresh_token")
+  accessTokenExpiresAt  DateTime?           @map("access_token_expires_at")
+  refreshTokenExpiresAt DateTime?           @map("refresh_token_expires_at")
+  status                KuaishouTokenStatus @default(UNCONFIGURED)
+  lastError             String?             @map("last_error")
+  authorizedAt          DateTime?           @map("authorized_at")
+  refreshedAt           DateTime?           @map("refreshed_at")
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+
+  @@map("kuaishou_platform_tokens")
 }
