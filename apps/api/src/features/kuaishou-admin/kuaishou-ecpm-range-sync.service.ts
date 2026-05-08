@@ -86,6 +86,7 @@ export class KuaishouEcpmRangeSyncService {
         error,
         input,
         jobId: job.id,
+        markTokenError: input.markTokenError,
         requestedOpenIds,
         startedDataHour,
         endedDataHour,
@@ -105,6 +106,7 @@ export class KuaishouEcpmRangeSyncService {
         error,
         input,
         jobId: job.id,
+        markTokenError: false,
         requestedOpenIds,
         startedDataHour,
         endedDataHour,
@@ -155,6 +157,7 @@ export class KuaishouEcpmRangeSyncService {
     error: unknown;
     input: KuaishouEcpmRangeSyncInput;
     jobId: string;
+    markTokenError: boolean;
     requestedOpenIds: string[];
     startedDataHour: string;
   }) {
@@ -164,7 +167,7 @@ export class KuaishouEcpmRangeSyncService {
         errorMessage: message,
         jobId: input.jobId,
       });
-      if (input.input.markTokenError) {
+      if (input.markTokenError) {
         await this.tokenService.markTokenError(message);
       }
       await this.auditLogService.record({

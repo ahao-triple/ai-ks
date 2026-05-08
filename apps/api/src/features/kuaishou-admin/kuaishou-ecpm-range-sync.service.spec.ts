@@ -234,6 +234,43 @@ describe('KuaishouEcpmRangeSyncService', () => {
       targetType: 'kuaishou_ecpm_refresh',
     });
   });
+
+  it('does not mark token errors when save fails even if markTokenError is true', async () => {
+    const dependencies = createDependencies();
+    dependencies.demoStore.addEcpmRows.mockRejectedValueOnce(
+      new Error('database unavailable'),
+    );
+    const service = createService(dependencies);
+
+    await expect(
+      service.refreshRange({
+        actorId: 'admin',
+        actorType: 'SUPER_ADMIN',
+        gameAppId: 'game-1',
+        lookbackHours: 1,
+        markTokenError: true,
+      }),
+    ).rejects.toThrow('database unavailable');
+
+    expect(dependencies.syncJobService.failJob).toHaveBeenCalledWith({
+      errorMessage: 'database unavailable',
+      jobId: 'job-1',
+    });
+    expect(dependencies.tokenService.markTokenError).not.toHaveBeenCalled();
+    expect(dependencies.auditLogService.record).toHaveBeenCalledWith({
+      action: 'kuaishou.ecpm_refresh_failed',
+      actorId: 'admin',
+      actorType: 'SUPER_ADMIN',
+      metadata: expect.objectContaining({
+        dataHours: ['2026-05-08T14:00:00+08:00'],
+        error: 'database unavailable',
+        jobId: 'job-1',
+        requestedOpenIds: ['open-1'],
+      }),
+      targetId: 'game-1',
+      targetType: 'kuaishou_ecpm_refresh',
+    });
+  });
 });
 
 const now = new Date('2026-05-08T06:20:00.000Z');
