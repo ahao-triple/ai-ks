@@ -78,6 +78,29 @@ export function changeSettlementRange(
   };
 }
 
+export function buildSettlementRange({
+  endDate,
+  gameId,
+  startDate,
+  userId,
+}: {
+  endDate: string;
+  gameId: string;
+  startDate: string;
+  userId?: string;
+}): AdminSettlementRange {
+  return {
+    endDate,
+    gameId,
+    startDate,
+    ...(userId?.trim() ? { userId: userId.trim() } : {}),
+  };
+}
+
+export function getSettlementGameRowId(games: DemoGame[], gameAppId: string) {
+  return games.find((game) => game.gameAppId === gameAppId)?.id ?? '';
+}
+
 export function App() {
   const [activeView, setActiveView] = useState<ViewKey>('query');
   const [loginMode, setLoginMode] = useState<LoginMode>('account');
@@ -621,12 +644,20 @@ export function App() {
       return;
     }
 
+    const settlementGameId = getSettlementGameId(value);
     setSettlementBatches([]);
-    void loadSettlementBatches(adminAccessToken, value).catch((nextError) => {
-      setError(
-        nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
-      );
-    });
+    if (!settlementGameId) {
+      setError('请选择要结算的游戏');
+      return;
+    }
+
+    void loadSettlementBatches(adminAccessToken, settlementGameId).catch(
+      (nextError) => {
+        setError(
+          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+        );
+      },
+    );
   }
 
   function changeSettlementStartDate(value: string) {
@@ -642,12 +673,16 @@ export function App() {
   }
 
   function getSettlementRange(): AdminSettlementRange {
-    return {
+    return buildSettlementRange({
       endDate: settlementEndDate,
-      gameId: gameAppId,
+      gameId: selectedGame?.id ?? '',
       startDate: settlementStartDate,
-      ...(settlementUserId.trim() ? { userId: settlementUserId.trim() } : {}),
-    };
+      userId: settlementUserId,
+    });
+  }
+
+  function getSettlementGameId(targetGameAppId = gameAppId) {
+    return getSettlementGameRowId(games, targetGameAppId);
   }
 
   function canConfirmSettlement() {
@@ -658,15 +693,15 @@ export function App() {
 
   async function loadSettlementBatches(
     token: string,
-    targetGameAppId: string,
+    targetGameId: string,
     isCurrent = () => true,
   ) {
-    if (!targetGameAppId) {
+    if (!targetGameId) {
       setSettlementBatches([]);
       return;
     }
 
-    const result = await aiKsApi.getSettlementBatches(token, targetGameAppId);
+    const result = await aiKsApi.getSettlementBatches(token, targetGameId);
     if (!isCurrent()) {
       return;
     }
@@ -677,6 +712,11 @@ export function App() {
   async function previewSettlement() {
     if (!adminAccessToken) {
       setError('请先登录管理员账号');
+      return;
+    }
+
+    if (!getSettlementGameId()) {
+      setError('请选择要结算的游戏');
       return;
     }
 
@@ -699,6 +739,11 @@ export function App() {
   async function confirmSettlement() {
     if (!adminAccessToken) {
       setError('请先登录管理员账号');
+      return;
+    }
+
+    if (!getSettlementGameId()) {
+      setError('请选择要结算的游戏');
       return;
     }
 

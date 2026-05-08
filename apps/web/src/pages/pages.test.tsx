@@ -7,7 +7,11 @@ import {
   OperationsWorkspace,
   type OperationsWorkspaceProps,
 } from './OperationsWorkspace';
-import { changeSettlementRange } from '../App';
+import {
+  buildSettlementRange,
+  changeSettlementRange,
+  getSettlementGameRowId,
+} from '../App';
 import type {
   AdminSettlementBatch,
   AdminSettlementPreview,
@@ -227,12 +231,12 @@ describe('OperationsWorkspace', () => {
           adminName: 'admin',
           busyAction: 'refresh',
           games: [
-          {
-            companyName: 'Demo Studio',
-            gameAppId: 'game-1',
-            id: 'game-row-1',
-            name: 'Demo Game',
-          },
+            {
+              companyName: 'Demo Studio',
+              gameAppId: 'game-1',
+              id: 'game-row-1',
+              name: 'Demo Game',
+            },
           ],
           jsCode: 'mock-js-code-001',
         })}
@@ -296,5 +300,39 @@ describe('settlement range helpers', () => {
 
     expect(result.settlementUserId).toBe('user-1');
     expect(result.settlementPreview).toBeUndefined();
+  });
+
+  it('maps the selected game app id to the backend game row id', () => {
+    const gameId = getSettlementGameRowId(
+      [
+        {
+          companyName: 'Demo Studio',
+          gameAppId: 'demo_ks_game',
+          id: 'demo-game-001',
+          name: 'Demo Game',
+        },
+      ],
+      'demo_ks_game',
+    );
+
+    expect(gameId).toBe('demo-game-001');
+    expect(gameId).not.toBe('demo_ks_game');
+  });
+
+  it('builds settlement API ranges with the backend game row id', () => {
+    const range = buildSettlementRange({
+      endDate: '2026-05-08',
+      gameId: 'demo-game-001',
+      startDate: '2026-05-08',
+      userId: ' user-1 ',
+    });
+
+    expect(range).toEqual({
+      endDate: '2026-05-08',
+      gameId: 'demo-game-001',
+      startDate: '2026-05-08',
+      userId: 'user-1',
+    });
+    expect(range.gameId).not.toBe('demo_ks_game');
   });
 });
