@@ -15,8 +15,11 @@ export type StartKuaishouEcpmSyncJobInput = {
   actorId: string;
   actorType: string;
   dataHour: string;
+  endedDataHour?: string;
   gameAppId: string;
+  lookbackHours?: number;
   requestedOpenIdCount: number;
+  startedDataHour?: string;
 };
 
 export type CompleteKuaishouEcpmSyncJobInput = {
@@ -31,6 +34,7 @@ export type FailKuaishouEcpmSyncJobInput = {
 };
 
 export type ListKuaishouEcpmSyncJobsInput = {
+  gameAppId?: string;
   limit?: number;
 };
 
@@ -49,10 +53,13 @@ export class KuaishouEcpmSyncJobService {
         actorId: input.actorId,
         actorType: input.actorType,
         dataHour: input.dataHour,
+        endedDataHour: input.endedDataHour,
         gameAppId: input.gameAppId,
+        lookbackHours: input.lookbackHours,
         requestedOpenIdCount: input.requestedOpenIdCount,
         savedCount: 0,
         startedAt: this.now(),
+        startedDataHour: input.startedDataHour,
         status: KuaishouEcpmSyncJobStatus.RUNNING,
       },
     });
@@ -92,7 +99,19 @@ export class KuaishouEcpmSyncJobService {
         createdAt: 'desc',
       },
       take: clampLimit(input.limit),
+      ...(input.gameAppId ? { where: { gameAppId: input.gameAppId } } : {}),
     });
+  }
+
+  async hasRunningJob(gameAppId: string): Promise<boolean> {
+    const job = await this.prisma.kuaishouEcpmSyncJob.findFirst({
+      where: {
+        gameAppId,
+        status: KuaishouEcpmSyncJobStatus.RUNNING,
+      },
+    });
+
+    return job !== null;
   }
 
   private now() {
@@ -106,14 +125,17 @@ export function presentKuaishouEcpmSyncJob(job: KuaishouEcpmSyncJob) {
     actorType: job.actorType,
     createdAt: job.createdAt.toISOString(),
     dataHour: job.dataHour,
+    endedDataHour: job.endedDataHour ?? null,
     errorMessage: job.errorMessage ?? null,
     finishedAt: job.finishedAt?.toISOString() ?? null,
     gameAppId: job.gameAppId,
     id: job.id,
+    lookbackHours: job.lookbackHours ?? null,
     requestedOpenIdCount: job.requestedOpenIdCount,
     savedCount: job.savedCount,
     source: (job.source ?? null) as 'mock' | 'kuaishou' | null,
     startedAt: job.startedAt.toISOString(),
+    startedDataHour: job.startedDataHour ?? null,
     status: job.status,
     updatedAt: job.updatedAt.toISOString(),
   };

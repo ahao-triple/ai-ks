@@ -12,17 +12,23 @@ describe('KuaishouEcpmSyncJobService', () => {
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
       dataHour: '2026-05-08',
+      endedDataHour: '2026-05-08T02',
       gameAppId: 'game-1',
+      lookbackHours: 24,
       requestedOpenIdCount: 2,
+      startedDataHour: '2026-05-07T03',
     });
 
     expect(job).toMatchObject({
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
       dataHour: '2026-05-08',
+      endedDataHour: '2026-05-08T02',
       gameAppId: 'game-1',
+      lookbackHours: 24,
       requestedOpenIdCount: 2,
       savedCount: 0,
+      startedDataHour: '2026-05-07T03',
       status: KuaishouEcpmSyncJobStatus.RUNNING,
     });
     expect(prisma.rows).toHaveLength(1);
@@ -74,6 +80,28 @@ describe('KuaishouEcpmSyncJobService', () => {
     expect(prisma.lastFindManyArgs).toMatchObject({ take: 100 });
   });
 
+  it('filters jobs by game app id when listing recent sync jobs', async () => {
+    const { prisma, service } = createService();
+    await service.startJob({ ...baseStartInput(), gameAppId: 'game-1' });
+    await service.startJob({ ...baseStartInput(), gameAppId: 'game-2' });
+
+    const result = await service.listJobs({ gameAppId: 'game-1', limit: 20 });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].gameAppId).toBe('game-1');
+    expect(prisma.lastFindManyArgs).toMatchObject({
+      where: { gameAppId: 'game-1' },
+    });
+  });
+
+  it('detects running sync jobs for one game', async () => {
+    const { service } = createService();
+    await service.startJob({ ...baseStartInput(), gameAppId: 'game-1' });
+
+    await expect(service.hasRunningJob('game-1')).resolves.toBe(true);
+    await expect(service.hasRunningJob('game-2')).resolves.toBe(false);
+  });
+
   it('presents job dates as ISO strings', async () => {
     const { service } = createService();
     const job = await service.startJob(baseStartInput());
@@ -83,14 +111,17 @@ describe('KuaishouEcpmSyncJobService', () => {
       actorType: 'SUPER_ADMIN',
       createdAt: '2026-05-08T00:00:00.000Z',
       dataHour: '2026-05-08',
+      endedDataHour: null,
       errorMessage: null,
       finishedAt: null,
       gameAppId: 'game-1',
       id: 'job-1',
+      lookbackHours: null,
       requestedOpenIdCount: 1,
       savedCount: 0,
       source: null,
       startedAt: '2026-05-08T00:00:00.000Z',
+      startedDataHour: null,
       status: KuaishouEcpmSyncJobStatus.RUNNING,
       updatedAt: '2026-05-08T00:00:00.000Z',
     });
@@ -151,6 +182,11 @@ function createFakePrisma() {
         lastFindManyArgs = args;
         return rows
           .slice()
+          .filter((row) =>
+            args.where?.gameAppId
+              ? row.gameAppId === args.where.gameAppId
+              : true,
+          )
           .sort((a, b) =>
             args.orderBy?.createdAt === 'desc'
               ? b.createdAt.getTime() - a.createdAt.getTime()
@@ -158,6 +194,10 @@ function createFakePrisma() {
           )
           .slice(0, args.take);
       },
+      findFirst: async ({ where }: any) =>
+        rows.find((row) =>
+          Object.entries(where).every(([key, value]) => row[key] === value),
+        ) ?? null,
     },
   } as any;
 }
