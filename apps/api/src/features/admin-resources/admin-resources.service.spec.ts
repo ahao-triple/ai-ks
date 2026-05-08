@@ -100,6 +100,10 @@ describe('AdminResourcesService', () => {
     expect(game).toMatchObject({
       budgetLi: 0n,
       companyId: 'company-1',
+      ecpmAutoSyncEnabled: false,
+      ecpmAutoSyncIntervalHours: 3,
+      ecpmAutoSyncLastRunAt: null,
+      ecpmAutoSyncNextRunAt: null,
       gameAppId: 'ks_game_001',
       gameSecret: 'secret-1',
       id: 'game-1',
@@ -196,6 +200,125 @@ describe('AdminResourcesService', () => {
         },
       }),
     ]);
+  });
+
+  it('enables game ECPM auto sync immediately with default next run time', async () => {
+    const now = new Date('2026-05-08T05:00:00.000Z');
+    const prisma = createFakePrisma({
+      companies: [
+        {
+          id: 'company-1',
+          balanceLi: 0n,
+          name: 'Acme Studio',
+        },
+      ],
+      games: [
+        {
+          id: 'game-1',
+          budgetLi: 1000n,
+          companyId: 'company-1',
+          gameAppId: 'ks_game_001',
+          gameSecret: 'secret-1',
+          name: 'Runner',
+          settlementPaused: false,
+        },
+      ],
+    });
+    const service = new AdminResourcesService(prisma, () => now);
+
+    const game = await service.updateGame({
+      actor: adminActor,
+      ecpmAutoSyncEnabled: true,
+      ecpmAutoSyncIntervalHours: 3,
+      gameId: 'game-1',
+    });
+
+    expect(game).toMatchObject({
+      ecpmAutoSyncEnabled: true,
+      ecpmAutoSyncIntervalHours: 3,
+      ecpmAutoSyncNextRunAt: now,
+    });
+    expect(prisma.getGame('game-1')).toMatchObject({
+      ecpmAutoSyncEnabled: true,
+      ecpmAutoSyncIntervalHours: 3,
+      ecpmAutoSyncNextRunAt: now,
+    });
+    expect(prisma.auditLogs).toEqual([
+      expect.objectContaining({
+        action: 'game.updated',
+        metadata: {
+          changedFields: ['ecpmAutoSyncEnabled', 'ecpmAutoSyncIntervalHours'],
+        },
+      }),
+    ]);
+  });
+
+  it('rejects unsupported ECPM auto sync frequencies', async () => {
+    const prisma = createFakePrisma({
+      companies: [
+        {
+          id: 'company-1',
+          balanceLi: 0n,
+          name: 'Acme Studio',
+        },
+      ],
+      games: [
+        {
+          id: 'game-1',
+          companyId: 'company-1',
+          gameAppId: 'ks_game_001',
+          gameSecret: 'secret-1',
+          name: 'Runner',
+        },
+      ],
+    });
+    const service = new AdminResourcesService(prisma);
+
+    await expect(
+      service.updateGame({
+        actor: adminActor,
+        ecpmAutoSyncIntervalHours: 2,
+        gameId: 'game-1',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('clears next run when disabling game ECPM auto sync', async () => {
+    const nextRunAt = new Date('2026-05-08T06:00:00.000Z');
+    const prisma = createFakePrisma({
+      companies: [
+        {
+          id: 'company-1',
+          balanceLi: 0n,
+          name: 'Acme Studio',
+        },
+      ],
+      games: [
+        {
+          id: 'game-1',
+          companyId: 'company-1',
+          ecpmAutoSyncEnabled: true,
+          ecpmAutoSyncIntervalHours: 6,
+          ecpmAutoSyncNextRunAt: nextRunAt,
+          gameAppId: 'ks_game_001',
+          gameSecret: 'secret-1',
+          name: 'Runner',
+        },
+      ],
+    });
+    const service = new AdminResourcesService(prisma);
+
+    const game = await service.updateGame({
+      actor: adminActor,
+      ecpmAutoSyncEnabled: false,
+      gameId: 'game-1',
+    });
+
+    expect(game).toMatchObject({
+      ecpmAutoSyncEnabled: false,
+      ecpmAutoSyncNextRunAt: null,
+    });
+    expect(prisma.getGame('game-1')?.ecpmAutoSyncNextRunAt).toBeNull();
   });
 
   it('allocates company balance into game budget transactionally', async () => {
@@ -325,6 +448,10 @@ type FakeGame = {
   id: string;
   budgetLi: bigint;
   companyId: string;
+  ecpmAutoSyncEnabled: boolean;
+  ecpmAutoSyncIntervalHours: number;
+  ecpmAutoSyncLastRunAt: Date | null;
+  ecpmAutoSyncNextRunAt: Date | null;
   gameAppId: string;
   gameSecret: string;
   name: string;
@@ -367,6 +494,10 @@ function createFakePrisma(seed: FakePrismaSeed = {}) {
       companyId: game.companyId,
       createdAt: game.createdAt ?? new Date('2026-05-08T02:00:00.000Z'),
       deletedAt: game.deletedAt ?? null,
+      ecpmAutoSyncEnabled: game.ecpmAutoSyncEnabled ?? false,
+      ecpmAutoSyncIntervalHours: game.ecpmAutoSyncIntervalHours ?? 3,
+      ecpmAutoSyncLastRunAt: game.ecpmAutoSyncLastRunAt ?? null,
+      ecpmAutoSyncNextRunAt: game.ecpmAutoSyncNextRunAt ?? null,
       gameAppId: game.gameAppId,
       gameSecret: game.gameSecret,
       id: game.id,
@@ -475,6 +606,10 @@ function createFakePrisma(seed: FakePrismaSeed = {}) {
           companyId: data.companyId,
           createdAt: new Date('2026-05-08T02:00:00.000Z'),
           deletedAt: null,
+          ecpmAutoSyncEnabled: data.ecpmAutoSyncEnabled ?? false,
+          ecpmAutoSyncIntervalHours: data.ecpmAutoSyncIntervalHours ?? 3,
+          ecpmAutoSyncLastRunAt: data.ecpmAutoSyncLastRunAt ?? null,
+          ecpmAutoSyncNextRunAt: data.ecpmAutoSyncNextRunAt ?? null,
           gameAppId: data.gameAppId,
           gameSecret: data.gameSecret,
           name: data.name,

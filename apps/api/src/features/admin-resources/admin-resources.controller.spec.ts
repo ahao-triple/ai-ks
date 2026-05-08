@@ -72,6 +72,10 @@ describe('AdminResourcesController', () => {
           companyId: 'company-1',
           companyName: 'Acme Studio',
           createdAt: '2026-05-08T02:00:00.000Z',
+          ecpmAutoSyncEnabled: false,
+          ecpmAutoSyncIntervalHours: 3,
+          ecpmAutoSyncLastRunAt: null,
+          ecpmAutoSyncNextRunAt: null,
           gameAppId: 'ks_game_001',
           gameSecret: 'secret-1',
           id: 'game-1',
@@ -131,11 +135,43 @@ describe('AdminResourcesController', () => {
 
     expect(service.lastUpdateGameInput).toEqual({
       actor: admin,
+      ecpmAutoSyncEnabled: undefined,
+      ecpmAutoSyncIntervalHours: undefined,
       gameId: 'game-1',
       gameSecret: 'secret-2',
       name: 'Runner Pro',
       settlementPaused: false,
     });
+  });
+
+  it('updates game ECPM auto sync config with allowed frequency presets', async () => {
+    const service = createService();
+    const controller = new AdminResourcesController(service);
+
+    await controller.updateGame(admin, ' game-1 ', {
+      ecpmAutoSyncEnabled: true,
+      ecpmAutoSyncIntervalHours: 6,
+    });
+
+    expect(service.lastUpdateGameInput).toEqual({
+      actor: admin,
+      ecpmAutoSyncEnabled: true,
+      ecpmAutoSyncIntervalHours: 6,
+      gameId: 'game-1',
+      gameSecret: undefined,
+      name: undefined,
+      settlementPaused: undefined,
+    });
+  });
+
+  it('rejects invalid game ECPM auto sync frequency input', async () => {
+    const controller = new AdminResourcesController(createService());
+
+    await expect(
+      controller.updateGame(admin, 'game-1', {
+        ecpmAutoSyncIntervalHours: 2,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('allocates game budget with yuan conversion and default reason', async () => {
@@ -194,6 +230,10 @@ function createService() {
     company,
     createdAt: new Date('2026-05-08T02:00:00.000Z'),
     deletedAt: null,
+    ecpmAutoSyncEnabled: false,
+    ecpmAutoSyncIntervalHours: 3,
+    ecpmAutoSyncLastRunAt: null,
+    ecpmAutoSyncNextRunAt: null,
     gameAppId: 'ks_game_001',
     gameSecret: 'secret-1',
     name: 'Runner',

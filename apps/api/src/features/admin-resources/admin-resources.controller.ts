@@ -44,7 +44,17 @@ const createGameSchema = z.object({
   name: idSchema,
 });
 
+const ecpmAutoSyncIntervalSchema = z.union([
+  z.literal(1),
+  z.literal(3),
+  z.literal(6),
+  z.literal(12),
+  z.literal(24),
+]);
+
 const updateGameSchema = z.object({
+  ecpmAutoSyncEnabled: z.boolean().optional(),
+  ecpmAutoSyncIntervalHours: ecpmAutoSyncIntervalSchema.optional(),
   gameSecret: idSchema.optional(),
   name: idSchema.optional(),
   settlementPaused: z.boolean().optional(),
@@ -153,13 +163,17 @@ export class AdminResourcesController {
     if (
       input.name === undefined &&
       input.gameSecret === undefined &&
-      input.settlementPaused === undefined
+      input.settlementPaused === undefined &&
+      input.ecpmAutoSyncEnabled === undefined &&
+      input.ecpmAutoSyncIntervalHours === undefined
     ) {
       throw new BadRequestException('Game update is invalid');
     }
 
     const game = await this.adminResourcesService.updateGame({
       actor: admin,
+      ecpmAutoSyncEnabled: input.ecpmAutoSyncEnabled,
+      ecpmAutoSyncIntervalHours: input.ecpmAutoSyncIntervalHours,
       gameId: parseId(gameId, 'Game id is invalid'),
       gameSecret: input.gameSecret,
       name: input.name,
@@ -261,6 +275,10 @@ function presentGame(
     budgetLi: bigint;
     companyId: string;
     createdAt: Date;
+    ecpmAutoSyncEnabled: boolean;
+    ecpmAutoSyncIntervalHours: number;
+    ecpmAutoSyncLastRunAt: Date | null;
+    ecpmAutoSyncNextRunAt: Date | null;
     gameAppId: string;
     gameSecret: string;
     id: string;
@@ -274,6 +292,10 @@ function presentGame(
     companyId: game.companyId,
     companyName: game.company?.name ?? '',
     createdAt: game.createdAt.toISOString(),
+    ecpmAutoSyncEnabled: game.ecpmAutoSyncEnabled,
+    ecpmAutoSyncIntervalHours: game.ecpmAutoSyncIntervalHours,
+    ecpmAutoSyncLastRunAt: game.ecpmAutoSyncLastRunAt?.toISOString() ?? null,
+    ecpmAutoSyncNextRunAt: game.ecpmAutoSyncNextRunAt?.toISOString() ?? null,
     gameAppId: game.gameAppId,
     gameSecret: game.gameSecret,
     id: game.id,

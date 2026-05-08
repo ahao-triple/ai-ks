@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { type Company, type Game, Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
@@ -44,6 +45,8 @@ export type CreateGameInput = {
 
 export type UpdateGameInput = {
   actor: AdminActor;
+  ecpmAutoSyncEnabled?: boolean;
+  ecpmAutoSyncIntervalHours?: number;
   gameId: string;
   gameSecret?: string;
   name?: string;
@@ -66,10 +69,17 @@ export type AllocateGameBudgetResult = {
   game: GameWithCompany;
 };
 
+export const ADMIN_RESOURCES_NOW = Symbol('ADMIN_RESOURCES_NOW');
+
+const ALLOWED_ECPM_SYNC_INTERVAL_HOURS = new Set([1, 3, 6, 12, 24]);
+
 @Injectable()
 export class AdminResourcesService {
   constructor(
     @Inject(PrismaService) private readonly prisma: AdminResourcesPrisma,
+    @Optional()
+    @Inject(ADMIN_RESOURCES_NOW)
+    private readonly nowProvider: () => Date = () => new Date(),
   ) {}
 
   listCompanies() {
@@ -193,8 +203,14 @@ export class AdminResourcesService {
     if (changedFields.length === 0) {
       throw new BadRequestException('至少提供一个可更新字段');
     }
+    if (
+      input.ecpmAutoSyncIntervalHours !== undefined &&
+      !ALLOWED_ECPM_SYNC_INTERVAL_HOURS.has(input.ecpmAutoSyncIntervalHours)
+    ) {
+      throw new BadRequestException('不支持的 ECPM 自动同步频率');
+    }
 
-    await findActiveGame(this.prisma, input.gameId);
+    const currentGame = await findActiveGame(this.prisma, input.gameId);
     const data: Prisma.GameUpdateInput = {};
     if (input.name !== undefined) {
       data.name = input.name;
@@ -204,6 +220,17 @@ export class AdminResourcesService {
     }
     if (input.settlementPaused !== undefined) {
       data.settlementPaused = input.settlementPaused;
+    }
+    if (input.ecpmAutoSyncIntervalHours !== undefined) {
+      data.ecpmAutoSyncIntervalHours = input.ecpmAutoSyncIntervalHours;
+    }
+    if (input.ecpmAutoSyncEnabled !== undefined) {
+      data.ecpmAutoSyncEnabled = input.ecpmAutoSyncEnabled;
+      data.ecpmAutoSyncNextRunAt = input.ecpmAutoSyncEnabled
+        ? currentGame.ecpmAutoSyncEnabled
+          ? currentGame.ecpmAutoSyncNextRunAt
+          : this.nowProvider()
+        : null;
     }
 
     const game = await this.prisma.game.update({
@@ -366,6 +393,12 @@ function collectChangedFields(input: UpdateGameInput) {
     input.name !== undefined ? 'name' : undefined,
     input.gameSecret !== undefined ? 'gameSecret' : undefined,
     input.settlementPaused !== undefined ? 'settlementPaused' : undefined,
+    input.ecpmAutoSyncEnabled !== undefined
+      ? 'ecpmAutoSyncEnabled'
+      : undefined,
+    input.ecpmAutoSyncIntervalHours !== undefined
+      ? 'ecpmAutoSyncIntervalHours'
+      : undefined,
   ].filter((field): field is string => Boolean(field));
 }
 
