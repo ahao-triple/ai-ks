@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { resolveWorkspaceEnvPath } from './common/env/workspace-env';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { AdminAuthModule } from './features/admin-auth/admin-auth.module';
+import { AdminResourcesModule } from './features/admin-resources/admin-resources.module';
 import { AccountModule } from './features/account/account.module';
 import { AuditLogModule } from './features/audit/audit-log.module';
 import { DemoModule } from './features/demo/demo.module';
@@ -22,6 +23,7 @@ import { HealthModule } from './health/health.module';
     PrismaModule,
     HealthModule,
     AdminAuthModule,
+    AdminResourcesModule,
     AuditLogModule,
     AccountModule,
     DemoModule,
