@@ -113,6 +113,38 @@ describe('KuaishouEcpmRangeSyncService', () => {
     });
   });
 
+  it('uses explicit empty openIds and does not list known openIds', async () => {
+    const dependencies = createDependencies();
+    const service = createService(dependencies);
+
+    const result = await service.refreshRange({
+      actorId: 'admin',
+      actorType: 'SUPER_ADMIN',
+      gameAppId: 'game-1',
+      lookbackHours: 1,
+      markTokenError: true,
+      openIds: [],
+    });
+
+    expect(dependencies.demoStore.listOpenIds).not.toHaveBeenCalled();
+    expect(dependencies.syncJobService.startJob).toHaveBeenCalledWith({
+      actorId: 'admin',
+      actorType: 'SUPER_ADMIN',
+      dataHour: '2026-05-08T14:00:00+08:00',
+      endedDataHour: '2026-05-08T14:00:00+08:00',
+      gameAppId: 'game-1',
+      lookbackHours: 1,
+      requestedOpenIdCount: 0,
+      startedDataHour: '2026-05-08T14:00:00+08:00',
+    });
+    expect(dependencies.ecpmClient.refresh).toHaveBeenCalledWith({
+      dataHour: '2026-05-08T14:00:00+08:00',
+      gameAppId: 'game-1',
+      openIds: [],
+    });
+    expect(result.requestedOpenIds).toEqual([]);
+  });
+
   it('rejects unsupported lookback hours', async () => {
     const service = createService(createDependencies());
 

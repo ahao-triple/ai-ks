@@ -52,7 +52,7 @@ export class KuaishouEcpmRangeSyncService {
     const dataHours = buildRecentDataHours(input.lookbackHours, this.now());
     const startedDataHour = dataHours[0];
     const endedDataHour = dataHours[dataHours.length - 1];
-    const requestedOpenIds = input.openIds?.length
+    const requestedOpenIds = input.openIds !== undefined
       ? input.openIds
       : (await this.demoStore.listOpenIds(input.gameAppId)).map(
           (record) => record.openId,
