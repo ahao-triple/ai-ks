@@ -40,6 +40,12 @@ enum SettlementStatus {
   CLOSED
 }
 
+enum SettlementBatchStatus {
+  CONFIRMED
+  BUDGET_INSUFFICIENT
+  CONFLICTED
+}
+
 model Company {
   id        String    @id @default(uuid())
   name      String
@@ -48,8 +54,9 @@ model Company {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  games  Game[]
-  admins CompanyAdminScope[]
+  games             Game[]
+  admins            CompanyAdminScope[]
+  settlementBatches SettlementBatch[]
 
   @@map("companies")
 }
@@ -66,9 +73,10 @@ model Game {
   updatedAt        DateTime  @updatedAt @map("updated_at")
   deletedAt        DateTime? @map("deleted_at")
 
-  company  Company      @relation(fields: [companyId], references: [id])
-  openIds  GameOpenId[]
-  rawEcpms RawEcpm[]
+  company           Company           @relation(fields: [companyId], references: [id])
+  openIds           GameOpenId[]
+  rawEcpms          RawEcpm[]
+  settlementBatches SettlementBatch[]
 
   @@index([companyId])
   @@map("games")
@@ -88,9 +96,10 @@ model UserAccount {
   updatedAt          DateTime  @updatedAt @map("updated_at")
   deletedAt          DateTime? @map("deleted_at")
 
-  currentAgent  Agent?                    @relation(fields: [currentAgentId], references: [id])
-  openIds       GameOpenId[]
-  agentBindings UserAgentBindingHistory[]
+  currentAgent    Agent?                    @relation(fields: [currentAgentId], references: [id])
+  openIds         GameOpenId[]
+  agentBindings   UserAgentBindingHistory[]
+  settlementItems SettlementBatchItem[]
 
   @@index([currentAgentId])
   @@map("user_accounts")
@@ -126,9 +135,10 @@ model GameOpenId {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  game     Game         @relation(fields: [gameId], references: [id])
-  user     UserAccount? @relation(fields: [userId], references: [id])
-  rawEcpms RawEcpm[]
+  game            Game                  @relation(fields: [gameId], references: [id])
+  user            UserAccount?          @relation(fields: [userId], references: [id])
+  rawEcpms        RawEcpm[]
+  settlementItems SettlementBatchItem[]
 
   @@index([gameId])
   @@index([userId])
@@ -148,13 +158,63 @@ model RawEcpm {
   configSnapshot  Json             @map("config_snapshot")
   createdAt       DateTime         @default(now()) @map("created_at")
 
-  game         Game        @relation(fields: [gameId], references: [id])
-  openIdRecord GameOpenId? @relation(fields: [openIdRecordId], references: [id])
+  game           Game                 @relation(fields: [gameId], references: [id])
+  openIdRecord   GameOpenId?          @relation(fields: [openIdRecordId], references: [id])
+  settlementItem SettlementBatchItem?
 
   @@unique([gameId, platformEventId])
   @@index([openId])
   @@index([eventTime])
   @@map("raw_ecpms")
+}
+
+model SettlementBatch {
+  id              String                @id @default(uuid())
+  gameId          String                @map("game_id")
+  companyId       String                @map("company_id")
+  operatorType    PrincipalType         @map("operator_type")
+  operatorId      String                @map("operator_id")
+  status          SettlementBatchStatus @default(CONFIRMED)
+  startedAt       DateTime              @map("started_at")
+  endedAt         DateTime              @map("ended_at")
+  settledAmountLi BigInt                @map("settled_amount_li")
+  settledCount    Int                   @map("settled_count")
+  userCount       Int                   @map("user_count")
+  budgetBeforeLi  BigInt                @map("budget_before_li")
+  budgetAfterLi   BigInt                @map("budget_after_li")
+  configSnapshot  Json                  @map("config_snapshot")
+  createdAt       DateTime              @default(now()) @map("created_at")
+
+  game    Game                  @relation(fields: [gameId], references: [id])
+  company Company               @relation(fields: [companyId], references: [id])
+  items   SettlementBatchItem[]
+
+  @@index([gameId, createdAt])
+  @@index([companyId, createdAt])
+  @@index([status])
+  @@map("settlement_batches")
+}
+
+model SettlementBatchItem {
+  id                 String   @id @default(uuid())
+  batchId            String   @map("batch_id")
+  rawEcpmId          String   @unique @map("raw_ecpm_id")
+  userId             String   @map("user_id")
+  gameOpenIdId       String   @map("game_open_id_id")
+  openId             String   @map("open_id")
+  displayAmountLi    BigInt   @map("display_amount_li")
+  settlementAmountLi BigInt   @map("settlement_amount_li")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  batch      SettlementBatch @relation(fields: [batchId], references: [id])
+  rawEcpm    RawEcpm         @relation(fields: [rawEcpmId], references: [id])
+  user       UserAccount     @relation(fields: [userId], references: [id])
+  gameOpenId GameOpenId      @relation(fields: [gameOpenIdId], references: [id])
+
+  @@index([batchId])
+  @@index([userId])
+  @@index([gameOpenIdId])
+  @@map("settlement_batch_items")
 }
 
 model UserAgentBindingHistory {
