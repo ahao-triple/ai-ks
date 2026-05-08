@@ -41,7 +41,6 @@ import type {
   EcpmRefreshResult,
   GameSessionResult,
   IntegrationStatus,
-  SettlementResult,
   WithdrawalResult,
 } from './types/api';
 
@@ -87,7 +86,6 @@ export function App() {
   const [alipayRealName, setAlipayRealName] = useState('');
   const [withdrawalAmountYuan, setWithdrawalAmountYuan] = useState('10.00');
   const [withdrawal, setWithdrawal] = useState<WithdrawalResult>();
-  const [settlement, setSettlement] = useState<SettlementResult>();
   const [adminWithdrawals, setAdminWithdrawals] = useState<
     AdminWithdrawalBatch[]
   >([]);
@@ -264,7 +262,6 @@ export function App() {
     setAlipayAccount('');
     setAlipayRealName('');
     setWithdrawal(undefined);
-    setSettlement(undefined);
     setAppSession(createSignedOutSession());
     setActiveView('query');
   }
@@ -420,7 +417,6 @@ export function App() {
     setAlipayAccount('');
     setAlipayRealName('');
     setWithdrawal(undefined);
-    setSettlement(undefined);
     setAdminWithdrawals([]);
     setAuditLogs([]);
     setSelectedWithdrawalDetail(undefined);
@@ -552,31 +548,6 @@ export function App() {
 
       setWithdrawal(result);
       setNotice('提现申请已提交，等待审核');
-    }, 'account');
-  }
-
-  async function confirmSettlement() {
-    if (!accessToken) {
-      setError('请先登录或注册账号');
-      return;
-    }
-
-    await runAction('settlement', async (isCurrent) => {
-      const result = await aiKsApi.confirmSettlement(accessToken);
-      if (!isCurrent()) {
-        return;
-      }
-
-      setSettlement(result);
-      setNotice(
-        `确认结算 ${result.settledCount} 条，入账 ¥ ${result.settledAmount.yuan}`,
-      );
-      const earningsResult = await aiKsApi.getAccountEarnings(accessToken);
-      if (!isCurrent()) {
-        return;
-      }
-
-      setAccountEarnings(earningsResult);
     }, 'account');
   }
 
@@ -785,12 +756,10 @@ export function App() {
           onAlipayRealNameChange={setAlipayRealName}
           onBindIdentityChange={setBindIdentity}
           onBindOpenId={bindAccountOpenId}
-          onConfirmSettlement={confirmSettlement}
           onQueryAccountEarnings={queryAccountEarnings}
           onRequestWithdrawal={requestWithdrawal}
           onUpdateAlipayProfile={updateAlipayProfile}
           onWithdrawalAmountChange={setWithdrawalAmountYuan}
-          settlement={settlement}
           withdrawal={withdrawal}
           withdrawalAmountYuan={withdrawalAmountYuan}
         />
@@ -842,7 +811,6 @@ function accountBusyAction(action: AppBusyAction): AccountWorkspaceBusyAction {
     case 'account-query':
     case 'alipay':
     case 'bind':
-    case 'settlement':
     case 'withdrawal':
       return action;
     default:

@@ -5,7 +5,6 @@ import { formatMoney } from '../lib/format';
 import type {
   AccountEarningsResult,
   AccountResult,
-  SettlementResult,
   WithdrawalResult,
 } from '../types/api';
 
@@ -14,7 +13,6 @@ export type AccountWorkspaceBusyAction =
   | 'account-query'
   | 'alipay'
   | 'bind'
-  | 'settlement'
   | 'withdrawal';
 
 export interface AccountWorkspaceProps {
@@ -28,12 +26,10 @@ export interface AccountWorkspaceProps {
   onAlipayRealNameChange(value: string): void;
   onBindIdentityChange(value: string): void;
   onBindOpenId(): void;
-  onConfirmSettlement(): void;
   onQueryAccountEarnings(): void;
   onRequestWithdrawal(): void;
   onUpdateAlipayProfile(): void;
   onWithdrawalAmountChange(value: string): void;
-  settlement?: SettlementResult;
   withdrawal?: WithdrawalResult;
   withdrawalAmountYuan: string;
 }
@@ -49,12 +45,10 @@ export function AccountWorkspace({
   onAlipayRealNameChange,
   onBindIdentityChange,
   onBindOpenId,
-  onConfirmSettlement,
   onQueryAccountEarnings,
   onRequestWithdrawal,
   onUpdateAlipayProfile,
   onWithdrawalAmountChange,
-  settlement,
   withdrawal,
   withdrawalAmountYuan,
 }: AccountWorkspaceProps) {
@@ -79,9 +73,9 @@ export function AccountWorkspace({
           value={formatMoney(accountEarnings?.totalDisplayAmount)}
         />
         <MetricCard
-          detail={`${settlement?.settledCount ?? 0} 条 ECPM 入账`}
+          detail="等待管理员确认结算"
           label="最近结算"
-          value={formatMoney(settlement?.settledAmount)}
+          value="-"
         />
       </section>
 
@@ -172,20 +166,12 @@ export function AccountWorkspace({
               >
                 {busyAction === 'withdrawal' ? '提交中' : '提交提现'}
               </Button>
-              <Button
-                disabled={!account || workspaceBusy}
-                icon={<WalletCards size={16} />}
-                onClick={onConfirmSettlement}
-                variant="secondary"
-              >
-                {busyAction === 'settlement' ? '结算中' : '确认结算'}
-              </Button>
             </div>
             <ReadoutGrid
               items={[
                 {
                   label: '最近入账',
-                  value: formatMoney(settlement?.settledAmount),
+                  value: '-',
                 },
                 { label: '最近批次', value: withdrawal?.id ?? '-' },
                 {

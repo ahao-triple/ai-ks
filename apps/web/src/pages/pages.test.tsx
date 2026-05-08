@@ -87,7 +87,6 @@ describe('AccountWorkspace', () => {
         onAlipayRealNameChange={() => undefined}
         onBindIdentityChange={() => undefined}
         onBindOpenId={() => undefined}
-        onConfirmSettlement={() => undefined}
         onQueryAccountEarnings={() => undefined}
         onRequestWithdrawal={() => undefined}
         onUpdateAlipayProfile={() => undefined}
@@ -118,7 +117,6 @@ describe('AccountWorkspace', () => {
         onAlipayRealNameChange={() => undefined}
         onBindIdentityChange={() => undefined}
         onBindOpenId={() => undefined}
-        onConfirmSettlement={() => undefined}
         onQueryAccountEarnings={() => undefined}
         onRequestWithdrawal={() => undefined}
         onUpdateAlipayProfile={() => undefined}
@@ -127,9 +125,10 @@ describe('AccountWorkspace', () => {
       />,
     );
 
-    expect(html.match(/<button\b[^>]*disabled=""/g)).toHaveLength(5);
+    expect(html.match(/<button\b[^>]*disabled=""/g)).toHaveLength(4);
     expect(html).toContain('提交中');
-    expect(html).toContain('确认结算');
+    expect(html).toContain('等待管理员确认结算');
+    expect(html).not.toMatch(/<button\b[^>]*>.*确认结算.*<\/button>/);
   });
 });
 
