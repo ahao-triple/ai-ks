@@ -143,13 +143,6 @@ export class SettlementAdminService {
         const service = new SettlementAdminService(
           tx as unknown as SettlementAdminPrisma,
         );
-        const boundRows = await service.findPendingRows(input, true);
-        const unboundRows = await service.findPendingRows(input, false);
-
-        if (boundRows.length === 0) {
-          throw new BadRequestException('No bound pending ECPM rows to settle');
-        }
-
         const lockedGame = await tx.$queryRaw<LockedSettlementGame[]>(
           Prisma.sql`
             SELECT id, company_id AS "companyId", budget_li AS "budgetLi"
@@ -161,6 +154,13 @@ export class SettlementAdminService {
         const game = lockedGame[0];
         if (!game) {
           throw new NotFoundException(`Game ${input.gameId} is not found`);
+        }
+
+        const boundRows = await service.findPendingRows(input, true);
+        const unboundRows = await service.findPendingRows(input, false);
+
+        if (boundRows.length === 0) {
+          throw new BadRequestException('No bound pending ECPM rows to settle');
         }
 
         const settlementAmountLi = sumDisplayAmount(boundRows);

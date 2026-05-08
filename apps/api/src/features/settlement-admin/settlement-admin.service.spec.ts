@@ -112,6 +112,31 @@ describe('SettlementAdminService', () => {
     );
   });
 
+  it('re-reads pending rows after game lock to avoid false budget failures for consumed rows', async () => {
+    const prisma = createFakePrisma({
+      initialSettlementPaused: false,
+      settleBoundRowsBeforeGameLock: true,
+    });
+    const service = new SettlementAdminService(prisma);
+
+    await expect(
+      service.confirmSettlement({
+        gameId: 'game-1',
+        operatorId: 'admin',
+        operatorType: 'SUPER_ADMIN',
+        ...range,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(prisma.getGame('game-1')?.settlementPaused).toBe(false);
+    expect(prisma.getUser('user-1')?.availableBalanceLi).toBe(0n);
+    expect(prisma.getUser('user-2')?.availableBalanceLi).toBe(0n);
+    expect(prisma.getBatchCount()).toBe(0);
+    expect(prisma.getAuditActions()).not.toContain(
+      'settlement.budget_insufficient',
+    );
+  });
+
   it('rolls back settlement and persists pause when protected budget update fails', async () => {
     const prisma = createFakePrisma({
       initialSettlementPaused: false,
@@ -366,6 +391,7 @@ function createFakePrisma(
     initialSettlementPaused?: boolean;
     transactionGameBudgetLi?: bigint;
     protectedBudgetUpdateFails?: boolean;
+    settleBoundRowsBeforeGameLock?: boolean;
     gameBudgetBeforeLockLi?: bigint;
     changeBindingBeforeRawUpdate?: {
       rawEcpmId: string;
@@ -526,8 +552,21 @@ function createFakePrisma(
   } = {
     $queryRaw: (async (query: any) => {
       const queryText = String(query?.strings?.join('') ?? query);
-      if (queryText.includes('FROM games')) {
+      if (
+        queryText.includes('FROM games') &&
+        queryText.includes('FOR UPDATE')
+      ) {
         events.push('lock:game');
+        if (!gameLockApplied && options.settleBoundRowsBeforeGameLock) {
+          for (const rawEcpm of rawEcpms.values()) {
+            if (
+              rawEcpm.id !== 'ecpm-unbound' &&
+              rawEcpm.id !== 'ecpm-no-open-id-record'
+            ) {
+              rawEcpm.status = 'SETTLED';
+            }
+          }
+        }
         if (
           !gameLockApplied &&
           options.gameBudgetBeforeLockLi !== undefined
@@ -552,7 +591,10 @@ function createFakePrisma(
             ]
           : [];
       }
-      if (queryText.includes('FROM game_open_ids')) {
+      if (
+        queryText.includes('FROM game_open_ids') &&
+        queryText.includes('FOR UPDATE')
+      ) {
         events.push('lock:openIds');
         if (
           !openIdLockApplied &&
