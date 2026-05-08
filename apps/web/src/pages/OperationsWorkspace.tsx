@@ -8,6 +8,8 @@ import {
 import { Button, InputField, MetricCard, Panel, StatusBadge } from '../components/ui';
 import { formatAuditMetadata, formatMoney } from '../lib/format';
 import type {
+  AdminCompany,
+  AdminGame,
   AdminWithdrawalBatch,
   AdminWithdrawalDetailResult,
   AuditLogRow,
@@ -20,8 +22,13 @@ import type {
 
 export type OperationsWorkspaceBusyAction =
   | ''
+  | 'admin-resources'
   | 'admin-withdrawals'
   | 'audit-logs'
+  | 'company-balance'
+  | 'company-create'
+  | 'game-budget'
+  | 'game-create'
   | 'refresh'
   | 'settlement-confirm'
   | 'settlement-preview'
@@ -33,23 +40,52 @@ export type OperationsWorkspaceBusyAction =
   | `pay-success-${string}`;
 
 export interface OperationsWorkspaceProps {
+  adminCompanies: AdminCompany[];
+  adminGames: AdminGame[];
   adminName: string;
   adminWithdrawalStatus: string;
   adminWithdrawals: AdminWithdrawalBatch[];
   auditLogs: AuditLogRow[];
+  balanceAmountYuan: string;
+  balanceCompanyId: string;
+  balanceReason: string;
+  budgetAmountYuan: string;
+  budgetGameId: string;
+  budgetReason: string;
   busyAction: OperationsWorkspaceBusyAction;
   gameAppId: string;
   games: DemoGame[];
   jsCode: string;
+  newCompanyName: string;
+  newGameAppId: string;
+  newGameCompanyId: string;
+  newGameName: string;
+  newGameSecret: string;
+  onAdjustCompanyBalance(): void;
+  onAllocateGameBudget(): void;
   onApproveWithdrawal(batchId: string): void;
+  onBalanceAmountChange(value: string): void;
+  onBalanceCompanyIdChange(value: string): void;
+  onBalanceReasonChange(value: string): void;
+  onBudgetAmountChange(value: string): void;
+  onBudgetGameIdChange(value: string): void;
+  onBudgetReasonChange(value: string): void;
   onCloseWithdrawal(batchId: string): void;
   onConfirmSettlement(): void;
+  onCreateCompany(): void;
+  onCreateGame(): void;
   onCreateSession(): void;
   onGameChange(value: string): void;
   onJsCodeChange(value: string): void;
+  onLoadAdminResources(): void;
   onLoadAuditLogs(): void;
   onLoadWithdrawalDetail(batchId: string): void;
   onLoadWithdrawals(status?: string): void;
+  onNewCompanyNameChange(value: string): void;
+  onNewGameAppIdChange(value: string): void;
+  onNewGameCompanyIdChange(value: string): void;
+  onNewGameNameChange(value: string): void;
+  onNewGameSecretChange(value: string): void;
   onPayWithdrawal(batchId: string, result: 'failed' | 'success'): void;
   onPreviewSettlement(): void;
   onRefreshEcpm(): void;
@@ -81,23 +117,52 @@ function statusTone(status: string) {
 }
 
 export function OperationsWorkspace({
+  adminCompanies,
+  adminGames,
   adminName,
   adminWithdrawalStatus,
   adminWithdrawals,
   auditLogs,
+  balanceAmountYuan,
+  balanceCompanyId,
+  balanceReason,
+  budgetAmountYuan,
+  budgetGameId,
+  budgetReason,
   busyAction,
   gameAppId,
   games,
   jsCode,
+  newCompanyName,
+  newGameAppId,
+  newGameCompanyId,
+  newGameName,
+  newGameSecret,
+  onAdjustCompanyBalance,
+  onAllocateGameBudget,
   onApproveWithdrawal,
+  onBalanceAmountChange,
+  onBalanceCompanyIdChange,
+  onBalanceReasonChange,
+  onBudgetAmountChange,
+  onBudgetGameIdChange,
+  onBudgetReasonChange,
   onCloseWithdrawal,
   onConfirmSettlement,
+  onCreateCompany,
+  onCreateGame,
   onCreateSession,
   onGameChange,
   onJsCodeChange,
+  onLoadAdminResources,
   onLoadAuditLogs,
   onLoadWithdrawalDetail,
   onLoadWithdrawals,
+  onNewCompanyNameChange,
+  onNewGameAppIdChange,
+  onNewGameCompanyIdChange,
+  onNewGameNameChange,
+  onNewGameSecretChange,
   onPayWithdrawal,
   onPreviewSettlement,
   onRefreshEcpm,
@@ -116,6 +181,16 @@ export function OperationsWorkspace({
   session,
 }: OperationsWorkspaceProps) {
   const workspaceBusy = busyAction !== '';
+  const canCreateCompany = newCompanyName.trim().length > 0;
+  const canAdjustCompanyBalance =
+    balanceCompanyId.trim().length > 0 && balanceAmountYuan.trim().length > 0;
+  const canCreateGame =
+    newGameCompanyId.trim().length > 0 &&
+    newGameName.trim().length > 0 &&
+    newGameAppId.trim().length > 0 &&
+    newGameSecret.trim().length > 0;
+  const canAllocateBudget =
+    budgetGameId.trim().length > 0 && budgetAmountYuan.trim().length > 0;
 
   return (
     <div className="view-stack">
@@ -136,6 +211,229 @@ export function OperationsWorkspace({
           value={`${refreshResult?.savedCount ?? 0} 条`}
         />
       </section>
+
+      <Panel
+        actions={
+          <Button
+            disabled={workspaceBusy}
+            icon={<RefreshCw size={16} />}
+            onClick={onLoadAdminResources}
+            variant="secondary"
+          >
+            {busyAction === 'admin-resources' ? '加载中' : '刷新预算'}
+          </Button>
+        }
+        description="公司余额与游戏预算"
+        title="预算管理"
+      >
+        <ReadoutGrid
+          items={[
+            { label: '公司数量', value: `${adminCompanies.length} 个` },
+            { label: '游戏数量', value: `${adminGames.length} 个` },
+          ]}
+        />
+        <div className="data-table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>公司</th>
+                <th>余额</th>
+              </tr>
+            </thead>
+            <tbody>
+              {adminCompanies.map((company) => (
+                <tr key={company.id}>
+                  <td>{company.name}</td>
+                  <td>{formatMoney(company.balance)}</td>
+                </tr>
+              ))}
+              {adminCompanies.length === 0 ? (
+                <tr>
+                  <td colSpan={2}>暂无公司</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+        <div className="data-table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>游戏</th>
+                <th>公司</th>
+                <th>AppID</th>
+                <th>预算</th>
+                <th>状态</th>
+              </tr>
+            </thead>
+            <tbody>
+              {adminGames.map((game) => (
+                <tr key={game.id}>
+                  <td>{game.name}</td>
+                  <td>{game.companyName}</td>
+                  <td>{game.gameAppId}</td>
+                  <td>{formatMoney(game.budget)}</td>
+                  <td>
+                    <StatusBadge tone={game.settlementPaused ? 'warning' : 'success'}>
+                      {game.settlementPaused ? '已暂停' : '可结算'}
+                    </StatusBadge>
+                  </td>
+                </tr>
+              ))}
+              {adminGames.length === 0 ? (
+                <tr>
+                  <td colSpan={5}>暂无游戏</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+        <div className="query-form">
+          <InputField
+            disabled={workspaceBusy}
+            label="公司名称"
+            onChange={onNewCompanyNameChange}
+            value={newCompanyName}
+          />
+          <Button
+            disabled={workspaceBusy || !canCreateCompany}
+            onClick={onCreateCompany}
+            variant="secondary"
+          >
+            {busyAction === 'company-create' ? '创建中' : '创建公司'}
+          </Button>
+        </div>
+        <div className="query-form">
+          <label className="ui-input-field">
+            <span className="ui-input-label">充值公司</span>
+            <span className="ui-input-control">
+              <select
+                disabled={workspaceBusy}
+                onChange={(event) =>
+                  onBalanceCompanyIdChange(event.currentTarget.value)
+                }
+                value={balanceCompanyId}
+              >
+                <option value="">选择公司</option>
+                {adminCompanies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+            </span>
+          </label>
+          <InputField
+            disabled={workspaceBusy}
+            label="充值金额"
+            onChange={onBalanceAmountChange}
+            placeholder="例如 100.00"
+            value={balanceAmountYuan}
+          />
+          <InputField
+            disabled={workspaceBusy}
+            label="充值原因"
+            onChange={onBalanceReasonChange}
+            placeholder="可选"
+            value={balanceReason}
+          />
+          <Button
+            disabled={workspaceBusy || !canAdjustCompanyBalance}
+            onClick={onAdjustCompanyBalance}
+            variant="secondary"
+          >
+            {busyAction === 'company-balance' ? '提交中' : '充值公司余额'}
+          </Button>
+        </div>
+        <div className="query-form">
+          <label className="ui-input-field">
+            <span className="ui-input-label">所属公司</span>
+            <span className="ui-input-control">
+              <select
+                disabled={workspaceBusy}
+                onChange={(event) =>
+                  onNewGameCompanyIdChange(event.currentTarget.value)
+                }
+                value={newGameCompanyId}
+              >
+                <option value="">选择公司</option>
+                {adminCompanies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+            </span>
+          </label>
+          <InputField
+            disabled={workspaceBusy}
+            label="游戏名称"
+            onChange={onNewGameNameChange}
+            value={newGameName}
+          />
+          <InputField
+            disabled={workspaceBusy}
+            label="game_app_id"
+            onChange={onNewGameAppIdChange}
+            value={newGameAppId}
+          />
+          <InputField
+            disabled={workspaceBusy}
+            label="game_secret"
+            onChange={onNewGameSecretChange}
+            value={newGameSecret}
+          />
+          <Button
+            disabled={workspaceBusy || !canCreateGame}
+            onClick={onCreateGame}
+            variant="secondary"
+          >
+            {busyAction === 'game-create' ? '创建中' : '创建游戏'}
+          </Button>
+        </div>
+        <div className="query-form">
+          <label className="ui-input-field">
+            <span className="ui-input-label">预算游戏</span>
+            <span className="ui-input-control">
+              <select
+                disabled={workspaceBusy}
+                onChange={(event) =>
+                  onBudgetGameIdChange(event.currentTarget.value)
+                }
+                value={budgetGameId}
+              >
+                <option value="">选择游戏</option>
+                {adminGames.map((game) => (
+                  <option key={game.id} value={game.id}>
+                    {game.name}
+                  </option>
+                ))}
+              </select>
+            </span>
+          </label>
+          <InputField
+            disabled={workspaceBusy}
+            label="分配金额"
+            onChange={onBudgetAmountChange}
+            placeholder="例如 50.00"
+            value={budgetAmountYuan}
+          />
+          <InputField
+            disabled={workspaceBusy}
+            label="分配原因"
+            onChange={onBudgetReasonChange}
+            placeholder="可选"
+            value={budgetReason}
+          />
+          <Button
+            disabled={workspaceBusy || !canAllocateBudget}
+            onClick={onAllocateGameBudget}
+            variant="secondary"
+          >
+            {busyAction === 'game-budget' ? '提交中' : '分配游戏预算'}
+          </Button>
+        </div>
+      </Panel>
 
       <section className="tool-grid">
         <Panel description="code2Session" title="游戏端登录">

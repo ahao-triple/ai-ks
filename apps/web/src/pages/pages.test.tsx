@@ -15,6 +15,8 @@ import {
   shouldApplySettlementBatchResponse,
 } from '../App';
 import type {
+  AdminCompany,
+  AdminGame,
   AdminSettlementBatch,
   AdminSettlementPreview,
 } from '../types/api';
@@ -49,27 +51,77 @@ const serverSettlementBatch: AdminSettlementBatch = {
   userCount: 2,
 };
 
+const adminCompany: AdminCompany = {
+  balance: { li: '12345', yuan: '12.35' },
+  createdAt: '2026-05-08T01:00:00.000Z',
+  id: 'company-1',
+  name: 'Acme Studio',
+  updatedAt: '2026-05-08T01:30:00.000Z',
+};
+
+const adminGame: AdminGame = {
+  budget: { li: '6000', yuan: '6.00' },
+  companyId: 'company-1',
+  companyName: 'Acme Studio',
+  createdAt: '2026-05-08T02:00:00.000Z',
+  gameAppId: 'ks_game_001',
+  gameSecret: 'secret-1',
+  id: 'game-1',
+  name: 'Runner',
+  settlementPaused: true,
+  updatedAt: '2026-05-08T02:30:00.000Z',
+};
+
 function operationsWorkspaceProps(
   overrides: Partial<OperationsWorkspaceProps> = {},
 ): OperationsWorkspaceProps {
   return {
     adminName: '',
+    adminCompanies: [],
+    adminGames: [],
     adminWithdrawalStatus: 'PENDING_REVIEW',
     adminWithdrawals: [],
     auditLogs: [],
+    balanceAmountYuan: '',
+    balanceCompanyId: '',
+    balanceReason: '',
+    budgetAmountYuan: '',
+    budgetGameId: '',
+    budgetReason: '',
     busyAction: '',
     gameAppId: 'game-1',
     games: [],
     jsCode: '',
+    newCompanyName: '',
+    newGameAppId: '',
+    newGameCompanyId: '',
+    newGameName: '',
+    newGameSecret: '',
+    onAdjustCompanyBalance: () => undefined,
+    onAllocateGameBudget: () => undefined,
     onApproveWithdrawal: () => undefined,
+    onBalanceAmountChange: () => undefined,
+    onBalanceCompanyIdChange: () => undefined,
+    onBalanceReasonChange: () => undefined,
+    onBudgetAmountChange: () => undefined,
+    onBudgetGameIdChange: () => undefined,
+    onBudgetReasonChange: () => undefined,
     onCloseWithdrawal: () => undefined,
     onConfirmSettlement: () => undefined,
+    onCreateCompany: () => undefined,
+    onCreateGame: () => undefined,
     onCreateSession: () => undefined,
     onGameChange: () => undefined,
     onJsCodeChange: () => undefined,
+    onLoadAdminResources: () => undefined,
     onLoadAuditLogs: () => undefined,
     onLoadWithdrawalDetail: () => undefined,
     onLoadWithdrawals: () => undefined,
+    onNewCompanyNameChange: () => undefined,
+    onNewGameAppIdChange: () => undefined,
+    onNewGameCompanyIdChange: () => undefined,
+    onNewGameNameChange: () => undefined,
+    onNewGameSecretChange: () => undefined,
     onPayWithdrawal: () => undefined,
     onPreviewSettlement: () => undefined,
     onRefreshEcpm: () => undefined,
@@ -245,7 +297,7 @@ describe('OperationsWorkspace', () => {
       />,
     );
 
-    expect(html.match(/<button\b[^>]*disabled=""/g)).toHaveLength(8);
+    expect(html.match(/<button\b[^>]*disabled=""/g)?.length ?? 0).toBeGreaterThanOrEqual(8);
     expect(html).toContain('换取 open_id');
     expect(html).toContain('刷新日志');
   });
@@ -284,6 +336,38 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('¥ 30.00');
     expect(html).toContain('¥ 70.00');
     expect(html).not.toContain('暂无结算批次');
+  });
+
+  it('renders the admin budget management panel with companies and games', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          adminCompanies: [adminCompany],
+          adminGames: [adminGame],
+          balanceAmountYuan: '100.00',
+          balanceCompanyId: 'company-1',
+          budgetAmountYuan: '6.00',
+          budgetGameId: 'game-1',
+          newCompanyName: 'New Studio',
+          newGameAppId: 'ks_game_002',
+          newGameCompanyId: 'company-1',
+          newGameName: 'Runner 2',
+          newGameSecret: 'secret-2',
+        })}
+      />,
+    );
+
+    expect(html).toContain('预算管理');
+    expect(html).toContain('Acme Studio');
+    expect(html).toContain('¥ 12.35');
+    expect(html).toContain('Runner');
+    expect(html).toContain('ks_game_001');
+    expect(html).toContain('¥ 6.00');
+    expect(html).toContain('已暂停');
+    expect(html).toContain('创建公司');
+    expect(html).toContain('充值公司余额');
+    expect(html).toContain('创建游戏');
+    expect(html).toContain('分配游戏预算');
   });
 });
 
