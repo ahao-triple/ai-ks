@@ -658,11 +658,10 @@ export function App() {
 
       setRefreshResult(result);
       setKuaishouEcpmJobs((current) => [result.job, ...current].slice(0, 20));
-      const loaded = await loadKuaishouEcpmJobsForToken(
-        adminAccessToken,
-        isCurrent,
-      );
-      if (!isCurrent() || !loaded) {
+      await loadKuaishouEcpmJobsForToken(adminAccessToken, isCurrent, {
+        reportError: false,
+      });
+      if (!isCurrent()) {
         return;
       }
 
@@ -816,6 +815,7 @@ export function App() {
   async function loadKuaishouEcpmJobsForToken(
     token: string,
     isCurrent = () => true,
+    options: { reportError?: boolean } = {},
   ) {
     try {
       const result = await aiKsApi.getKuaishouEcpmJobs(token, 20);
@@ -836,9 +836,11 @@ export function App() {
         return false;
       }
 
-      setError(
-        nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
-      );
+      if (options.reportError ?? true) {
+        setError(
+          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+        );
+      }
       return false;
     }
   }
