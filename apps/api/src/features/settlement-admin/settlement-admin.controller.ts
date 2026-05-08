@@ -29,6 +29,10 @@ const settlementRangeSchema = z.object({
   userId: idSchema.optional(),
 });
 
+const settlementListQuerySchema = z.object({
+  gameId: idSchema.optional(),
+});
+
 @Controller('admin/settlements')
 @UseGuards(AdminJwtGuard)
 export class SettlementAdminController {
@@ -68,9 +72,10 @@ export class SettlementAdminController {
   }
 
   @Get()
-  async list(@Query('gameId') gameId?: string) {
+  async list(@Query() query: unknown) {
+    const input = parseSettlementListQuery(query);
     const batches = await this.settlementAdminService.listBatches({
-      gameId: gameId?.trim() || undefined,
+      gameId: input.gameId,
     });
 
     return {
@@ -107,6 +112,15 @@ export function parseSettlementRange(input: unknown): SettlementRangeInput {
     startedAt,
     userId: parsed.data.userId,
   };
+}
+
+function parseSettlementListQuery(input: unknown) {
+  const parsed = settlementListQuerySchema.safeParse(input ?? {});
+  if (!parsed.success) {
+    throw new BadRequestException('Settlement list query is invalid');
+  }
+
+  return parsed.data;
 }
 
 function parseDateBound(value: string, endOfDay: boolean) {

@@ -153,7 +153,9 @@ describe('SettlementAdminController', () => {
   it('presents batch lists with money and ISO dates', async () => {
     const service = createService();
     const controller = new SettlementAdminController(service);
-    const result = await controller.list(' game-1 ');
+    const result = await controller.list({
+      gameId: ' game-1 ',
+    });
 
     expect(result).toEqual({
       batches: [
@@ -175,6 +177,21 @@ describe('SettlementAdminController', () => {
     expect(service.lastListInput).toEqual({
       gameId: 'game-1',
     });
+  });
+
+  it('rejects invalid batch list query shapes', async () => {
+    const controller = new SettlementAdminController(createService());
+
+    await expect(
+      controller.list({
+        gameId: ['game-1', 'game-2'],
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      controller.list({
+        gameId: '   ',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('presents batch details with item money and ISO dates', async () => {
