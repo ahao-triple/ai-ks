@@ -8,7 +8,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
-import { type AdminPrincipal } from '../admin-auth/admin-auth.service';
+import {
+  type AdminPrincipal,
+  type SuperAdminPrincipal,
+  requireSuperAdminPrincipal,
+} from '../admin-auth/admin-auth.service';
 import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 import { CurrentAdmin } from '../admin-auth/current-admin.decorator';
 import { AuditLogService } from '../audit/audit-log.service';
@@ -62,10 +66,11 @@ export class WithdrawalReviewController {
     @CurrentAdmin() admin: AdminPrincipal,
     @Param('batchId') batchId: string,
   ) {
+    const actor = requireSuperAdminPrincipal(admin);
     const batch = await this.withdrawalReviewService.approveBatch({
       batchId,
     });
-    await this.recordAdminWithdrawalAudit(admin, {
+    await this.recordAdminWithdrawalAudit(actor, {
       action: 'withdrawal.approved',
       batch,
     });
@@ -80,11 +85,12 @@ export class WithdrawalReviewController {
     @Body() body: unknown,
   ) {
     const input = payWithdrawalSchema.parse(body ?? {});
+    const actor = requireSuperAdminPrincipal(admin);
     const batch = await this.withdrawalPaymentService.payBatch({
       batchId,
       mockResult: input.mockResult,
     });
-    await this.recordAdminWithdrawalAudit(admin, {
+    await this.recordAdminWithdrawalAudit(actor, {
       action:
         input.mockResult === 'failed'
           ? 'withdrawal.payment_failed'
@@ -100,10 +106,11 @@ export class WithdrawalReviewController {
     @CurrentAdmin() admin: AdminPrincipal,
     @Param('batchId') batchId: string,
   ) {
+    const actor = requireSuperAdminPrincipal(admin);
     const batch = await this.withdrawalPaymentService.closeFailedBatch({
       batchId,
     });
-    await this.recordAdminWithdrawalAudit(admin, {
+    await this.recordAdminWithdrawalAudit(actor, {
       action: 'withdrawal.closed_refunded',
       batch,
     });
@@ -112,7 +119,7 @@ export class WithdrawalReviewController {
   }
 
   private recordAdminWithdrawalAudit(
-    admin: AdminPrincipal,
+    admin: SuperAdminPrincipal,
     input: {
       action: string;
       batch: WithdrawalBatchWithDetails;

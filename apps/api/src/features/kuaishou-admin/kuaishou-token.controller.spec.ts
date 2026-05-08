@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { KuaishouTokenStatus } from '@prisma/client';
 import { KuaishouTokenController } from './kuaishou-token.controller';
 
@@ -8,7 +8,7 @@ describe('KuaishouTokenController', () => {
     const auditLogService = createAuditLogService();
     const controller = new KuaishouTokenController(service, auditLogService);
 
-    const result = await controller.status();
+    const result = await controller.status(admin);
 
     expect(result).toEqual({
       accessTokenExpiresAt: '2026-05-09T00:00:00.000Z',
@@ -25,6 +25,18 @@ describe('KuaishouTokenController', () => {
     expect(result).not.toHaveProperty('secret');
     expect(result).not.toHaveProperty('accessToken');
     expect(result).not.toHaveProperty('refreshToken');
+  });
+
+  it('rejects company admins before reading token status', async () => {
+    const service = createService();
+    const auditLogService = createAuditLogService();
+    const controller = new KuaishouTokenController(service, auditLogService);
+
+    await expect(controller.status(companyAdmin)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+
+    expect(service.getStatus).not.toHaveBeenCalled();
   });
 
   it('authorizes with trimmed fields and current admin', async () => {
@@ -60,6 +72,23 @@ describe('KuaishouTokenController', () => {
     });
   });
 
+  it('rejects company admins before authorizing tokens', async () => {
+    const service = createService();
+    const auditLogService = createAuditLogService();
+    const controller = new KuaishouTokenController(service, auditLogService);
+
+    await expect(
+      controller.authorize(companyAdmin, {
+        appId: 'app-1',
+        authCode: 'auth-code-1',
+        secret: 'secret-1',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(service.authorizeWithAuthCode).not.toHaveBeenCalled();
+    expect(auditLogService.record).not.toHaveBeenCalled();
+  });
+
   it('refreshes with current admin', async () => {
     const service = createService();
     const auditLogService = createAuditLogService();
@@ -84,6 +113,19 @@ describe('KuaishouTokenController', () => {
       targetId: 'default',
       targetType: 'kuaishou_platform_token',
     });
+  });
+
+  it('rejects company admins before refreshing tokens', async () => {
+    const service = createService();
+    const auditLogService = createAuditLogService();
+    const controller = new KuaishouTokenController(service, auditLogService);
+
+    await expect(controller.refresh(companyAdmin)).rejects.toBeInstanceOf(
+      ForbiddenException,
+    );
+
+    expect(service.refreshStoredToken).not.toHaveBeenCalled();
+    expect(auditLogService.record).not.toHaveBeenCalled();
   });
 
   it('rejects invalid authorize bodies', async () => {
@@ -162,6 +204,13 @@ const admin = {
   username: 'admin',
 };
 
+const companyAdmin = {
+  adminId: 'company-admin-1',
+  displayName: 'Company Admin',
+  role: 'COMPANY_ADMIN' as const,
+  username: 'company_admin',
+};
+
 function createService() {
   const status = {
     accessTokenExpiresAt: new Date('2026-05-09T00:00:00.000Z'),
@@ -181,23 +230,23 @@ function createService() {
     lastAuthorizeInput: undefined as unknown,
     lastRefreshInput: undefined as unknown,
     refreshError: undefined as Error | undefined,
-    authorizeWithAuthCode: async function (input: unknown) {
+    authorizeWithAuthCode: jest.fn(async function (input: unknown) {
       this.lastAuthorizeInput = input;
       if (this.authorizeError) {
         throw this.authorizeError;
       }
 
       return status;
-    },
-    getStatus: async () => status,
-    refreshStoredToken: async function (input: unknown) {
+    }),
+    getStatus: jest.fn(async () => status),
+    refreshStoredToken: jest.fn(async function (input: unknown) {
       this.lastRefreshInput = input;
       if (this.refreshError) {
         throw this.refreshError;
       }
 
       return status;
-    },
+    }),
   } as any;
 }
 

@@ -9,7 +9,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
-import { type AdminPrincipal } from '../admin-auth/admin-auth.service';
+import {
+  type AdminPrincipal,
+  requireSuperAdminPrincipal,
+} from '../admin-auth/admin-auth.service';
 import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 import { CurrentAdmin } from '../admin-auth/current-admin.decorator';
 import { presentMoneyLi } from '../demo/money-presenter';
@@ -59,10 +62,11 @@ export class SettlementAdminController {
   @Post('confirm')
   async confirm(@CurrentAdmin() admin: AdminPrincipal, @Body() body: unknown) {
     const input = parseSettlementRange(body);
+    const actor = requireSuperAdminPrincipal(admin);
     const result = await this.settlementAdminService.confirmSettlement({
       ...input,
-      operatorId: admin.username,
-      operatorType: admin.role,
+      operatorId: actor.username,
+      operatorType: actor.role,
     });
 
     return {

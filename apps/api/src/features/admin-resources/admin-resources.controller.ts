@@ -11,7 +11,10 @@ import {
 } from '@nestjs/common';
 import { z } from 'zod';
 import { yuanToLi } from '../../domain/money/amount';
-import { type AdminPrincipal } from '../admin-auth/admin-auth.service';
+import {
+  type AdminPrincipal,
+  requireSuperAdminPrincipal,
+} from '../admin-auth/admin-auth.service';
 import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 import { CurrentAdmin } from '../admin-auth/current-admin.decorator';
 import { presentMoneyLi } from '../demo/money-presenter';
@@ -86,7 +89,7 @@ export class AdminResourcesController {
   ) {
     const input = parseBody(createCompanySchema, body, 'Company input is invalid');
     const company = await this.adminResourcesService.createCompany({
-      actor: admin,
+      actor: requireSuperAdminPrincipal(admin),
       name: input.name,
     });
 
@@ -107,7 +110,7 @@ export class AdminResourcesController {
       'Company balance adjustment is invalid',
     );
     const company = await this.adminResourcesService.adjustCompanyBalance({
-      actor: admin,
+      actor: requireSuperAdminPrincipal(admin),
       amountLi: parsePositiveAmountLi(input.amountYuan),
       companyId: parseId(companyId, 'Company id is invalid'),
       reason: normalizeReason(input.reason, 'manual_adjustment'),
@@ -141,7 +144,7 @@ export class AdminResourcesController {
   ) {
     const input = parseBody(createGameSchema, body, 'Game input is invalid');
     const game = await this.adminResourcesService.createGame({
-      actor: admin,
+      actor: requireSuperAdminPrincipal(admin),
       companyId: input.companyId,
       gameAppId: input.gameAppId,
       gameSecret: input.gameSecret,
@@ -171,7 +174,7 @@ export class AdminResourcesController {
     }
 
     const game = await this.adminResourcesService.updateGame({
-      actor: admin,
+      actor: requireSuperAdminPrincipal(admin),
       ecpmAutoSyncEnabled: input.ecpmAutoSyncEnabled,
       ecpmAutoSyncIntervalHours: input.ecpmAutoSyncIntervalHours,
       gameId: parseId(gameId, 'Game id is invalid'),
@@ -197,7 +200,7 @@ export class AdminResourcesController {
       'Game budget allocation is invalid',
     );
     const result = await this.adminResourcesService.allocateGameBudget({
-      actor: admin,
+      actor: requireSuperAdminPrincipal(admin),
       amountLi: parsePositiveAmountLi(input.amountYuan),
       gameId: parseId(gameId, 'Game id is invalid'),
       reason: normalizeReason(input.reason, 'manual_allocation'),

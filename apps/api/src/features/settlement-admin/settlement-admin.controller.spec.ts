@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import {
   SettlementAdminController,
   parseSettlementRange,
@@ -150,6 +150,29 @@ describe('SettlementAdminController', () => {
     });
   });
 
+  it('rejects company admins before confirming settlements', async () => {
+    const service = createService();
+    const controller = new SettlementAdminController(service);
+
+    await expect(
+      controller.confirm(
+        {
+          adminId: 'company-admin-1',
+          displayName: 'Company Admin',
+          role: 'COMPANY_ADMIN',
+          username: 'company_admin',
+        },
+        {
+          endDate: '2026-05-08',
+          gameId: 'game-1',
+          startDate: '2026-05-08',
+        },
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(service.confirmSettlement).not.toHaveBeenCalled();
+  });
+
   it('presents batch lists with money and ISO dates', async () => {
     const service = createService();
     const controller = new SettlementAdminController(service);
@@ -227,7 +250,7 @@ describe('SettlementAdminController', () => {
 
 function createService() {
   const service = {
-    confirmSettlement: async (input: any) => {
+    confirmSettlement: jest.fn(async (input: any) => {
       service.lastConfirmInput = input;
       const batch = createBatch({
         endedAt: input.endedAt,
@@ -239,7 +262,7 @@ function createService() {
         batch,
         items: batch.items,
       };
-    },
+    }),
     getBatch: async (batchId: string) => {
       service.lastGetBatchId = batchId;
       return createBatch();

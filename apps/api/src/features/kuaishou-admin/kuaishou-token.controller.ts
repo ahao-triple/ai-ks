@@ -7,7 +7,11 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
-import { type AdminPrincipal } from '../admin-auth/admin-auth.service';
+import {
+  type AdminPrincipal,
+  type SuperAdminPrincipal,
+  requireSuperAdminPrincipal,
+} from '../admin-auth/admin-auth.service';
 import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 import { CurrentAdmin } from '../admin-auth/current-admin.decorator';
 import { AuditLogService } from '../audit/audit-log.service';
@@ -31,7 +35,9 @@ export class KuaishouTokenController {
   ) {}
 
   @Get()
-  async status() {
+  async status(@CurrentAdmin() admin: AdminPrincipal) {
+    requireSuperAdminPrincipal(admin);
+
     return presentTokenStatus(await this.tokenService.getStatus());
   }
 
@@ -44,21 +50,22 @@ export class KuaishouTokenController {
     if (!parsed.success) {
       throw new BadRequestException('appId, secret and authCode are required');
     }
+    const actor = requireSuperAdminPrincipal(admin);
 
     try {
       const status = await this.tokenService.authorizeWithAuthCode({
-        actor: admin,
+        actor,
         appId: parsed.data.appId,
         authCode: parsed.data.authCode,
         secret: parsed.data.secret,
       });
-      await this.recordTokenAudit(admin, 'kuaishou.token_authorized', {
+      await this.recordTokenAudit(actor, 'kuaishou.token_authorized', {
         status,
       });
 
       return presentTokenStatus(status);
     } catch (error) {
-      await this.recordTokenAudit(admin, 'kuaishou.token_authorize_failed', {
+      await this.recordTokenAudit(actor, 'kuaishou.token_authorize_failed', {
         appId: parsed.data.appId,
         error: readErrorMessage(error),
       });
@@ -68,17 +75,18 @@ export class KuaishouTokenController {
 
   @Post('refresh')
   async refresh(@CurrentAdmin() admin: AdminPrincipal) {
+    const actor = requireSuperAdminPrincipal(admin);
     try {
       const status = await this.tokenService.refreshStoredToken({
-        actor: admin,
+        actor,
       });
-      await this.recordTokenAudit(admin, 'kuaishou.token_refreshed', {
+      await this.recordTokenAudit(actor, 'kuaishou.token_refreshed', {
         status,
       });
 
       return presentTokenStatus(status);
     } catch (error) {
-      await this.recordTokenAudit(admin, 'kuaishou.token_refresh_failed', {
+      await this.recordTokenAudit(actor, 'kuaishou.token_refresh_failed', {
         error: readErrorMessage(error),
       });
       throw error;
@@ -86,7 +94,7 @@ export class KuaishouTokenController {
   }
 
   private recordTokenAudit(
-    admin: AdminPrincipal,
+    admin: SuperAdminPrincipal,
     action: string,
     input:
       | {

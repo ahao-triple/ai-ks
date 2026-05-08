@@ -1,6 +1,8 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
 import { z } from 'zod';
-import { AdminAuthService } from './admin-auth.service';
+import { AdminAuthService, type AdminPrincipal } from './admin-auth.service';
+import { AdminJwtGuard } from './admin-jwt.guard';
+import { CurrentAdmin } from './current-admin.decorator';
 
 const adminLoginSchema = z.object({
   password: z.string().min(1),
@@ -15,5 +17,13 @@ export class AdminAuthController {
   login(@Body() body: unknown) {
     const input = adminLoginSchema.parse(body);
     return this.adminAuthService.login(input);
+  }
+
+  @Get('me')
+  @UseGuards(AdminJwtGuard)
+  me(@CurrentAdmin() admin: AdminPrincipal) {
+    return {
+      admin,
+    };
   }
 }

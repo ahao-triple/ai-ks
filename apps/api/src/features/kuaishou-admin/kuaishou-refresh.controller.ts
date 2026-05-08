@@ -8,7 +8,10 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
-import { type AdminPrincipal } from '../admin-auth/admin-auth.service';
+import {
+  type AdminPrincipal,
+  requireSuperAdminPrincipal,
+} from '../admin-auth/admin-auth.service';
 import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 import { CurrentAdmin } from '../admin-auth/current-admin.decorator';
 import {
@@ -48,10 +51,11 @@ export class KuaishouRefreshController {
       throw new BadRequestException('Invalid ECPM refresh request');
     }
     const input = parsed.data;
+    const actor = requireSuperAdminPrincipal(admin);
 
     return this.rangeSyncService.refreshRange({
-      actorId: admin.username,
-      actorType: admin.role,
+      actorId: actor.username,
+      actorType: actor.role,
       gameAppId: input.gameAppId,
       lookbackHours: input.lookbackHours ?? 1,
       markTokenError: true,

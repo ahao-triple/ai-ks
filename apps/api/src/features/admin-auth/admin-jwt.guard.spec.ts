@@ -40,6 +40,36 @@ describe('AdminJwtGuard', () => {
       guard.canActivate(createContext({ headers: {} })),
     ).rejects.toBeInstanceOf(UnauthorizedException);
   });
+
+  it('attaches company admin principals', async () => {
+    const guard = new AdminJwtGuard({
+      verifyAccessToken: async () => ({
+        adminId: 'company-admin-1',
+        displayName: '公司管理员',
+        role: 'COMPANY_ADMIN',
+        username: 'company_admin',
+      }),
+    } as unknown as AdminAuthService);
+    const request = {
+      headers: {
+        authorization: 'Bearer token-1',
+      },
+    };
+
+    await expect(guard.canActivate(createContext(request))).resolves.toBe(true);
+
+    expect(request).toEqual({
+      admin: {
+        adminId: 'company-admin-1',
+        displayName: '公司管理员',
+        role: 'COMPANY_ADMIN',
+        username: 'company_admin',
+      },
+      headers: {
+        authorization: 'Bearer token-1',
+      },
+    });
+  });
 });
 
 function createContext(request: unknown) {

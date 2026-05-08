@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { KuaishouRefreshController } from './kuaishou-refresh.controller';
 
 describe('KuaishouRefreshController', () => {
@@ -21,6 +21,19 @@ describe('KuaishouRefreshController', () => {
       openIds: ['open-1', 'open-2'],
     });
     expect(result).toEqual(refreshResult);
+  });
+
+  it('rejects company admins before refreshing ECPM', async () => {
+    const dependencies = createDependencies();
+    const controller = createController(dependencies);
+
+    await expect(
+      controller.refresh(companyAdmin, {
+        gameAppId: 'game-1',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(dependencies.rangeSyncService.refreshRange).not.toHaveBeenCalled();
   });
 
   it('defaults missing lookbackHours to 1 when delegating refresh', async () => {
@@ -97,6 +110,13 @@ describe('KuaishouRefreshController', () => {
 });
 
 const admin = { role: 'SUPER_ADMIN' as const, username: 'admin' };
+
+const companyAdmin = {
+  adminId: 'company-admin-1',
+  displayName: 'Company Admin',
+  role: 'COMPANY_ADMIN' as const,
+  username: 'company_admin',
+};
 
 const refreshResult = {
   job: {
