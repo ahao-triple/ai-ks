@@ -1,4 +1,4 @@
-import { RefreshCw, Send } from 'lucide-react';
+import { KeyRound, RefreshCw, Send } from 'lucide-react';
 import {
   AuditLogTable,
   EcpmTable,
@@ -18,6 +18,7 @@ import type {
   DemoGame,
   EcpmRefreshResult,
   GameSessionResult,
+  KuaishouTokenStatusResult,
 } from '../types/api';
 
 export type OperationsWorkspaceBusyAction =
@@ -29,6 +30,9 @@ export type OperationsWorkspaceBusyAction =
   | 'company-create'
   | 'game-budget'
   | 'game-create'
+  | 'kuaishou-authorize'
+  | 'kuaishou-refresh-token'
+  | 'kuaishou-token'
   | 'refresh'
   | 'settlement-confirm'
   | 'settlement-preview'
@@ -56,6 +60,10 @@ export interface OperationsWorkspaceProps {
   gameAppId: string;
   games: DemoGame[];
   jsCode: string;
+  kuaishouAppId: string;
+  kuaishouAuthCode: string;
+  kuaishouSecret: string;
+  kuaishouTokenStatus?: KuaishouTokenStatusResult;
   newCompanyName: string;
   newGameAppId: string;
   newGameCompanyId: string;
@@ -77,6 +85,12 @@ export interface OperationsWorkspaceProps {
   onCreateSession(): void;
   onGameChange(value: string): void;
   onJsCodeChange(value: string): void;
+  onKuaishouAppIdChange(value: string): void;
+  onKuaishouAuthCodeChange(value: string): void;
+  onKuaishouAuthorize(): void;
+  onKuaishouRefreshToken(): void;
+  onKuaishouSecretChange(value: string): void;
+  onLoadKuaishouTokenStatus(): void;
   onLoadAdminResources(): void;
   onLoadAuditLogs(): void;
   onLoadWithdrawalDetail(batchId: string): void;
@@ -116,6 +130,30 @@ function statusTone(status: string) {
   return 'warning';
 }
 
+function tokenStatusTone(status?: KuaishouTokenStatusResult['status']) {
+  if (status === 'ACTIVE') {
+    return 'success';
+  }
+
+  if (status === 'ERROR') {
+    return 'danger';
+  }
+
+  if (status === 'EXPIRED') {
+    return 'warning';
+  }
+
+  return 'muted';
+}
+
+function formatTokenDate(value?: string | null) {
+  if (!value) {
+    return '-';
+  }
+
+  return value.replace('T', ' ').slice(0, 16);
+}
+
 export function OperationsWorkspace({
   adminCompanies,
   adminGames,
@@ -133,6 +171,10 @@ export function OperationsWorkspace({
   gameAppId,
   games,
   jsCode,
+  kuaishouAppId,
+  kuaishouAuthCode,
+  kuaishouSecret,
+  kuaishouTokenStatus,
   newCompanyName,
   newGameAppId,
   newGameCompanyId,
@@ -154,6 +196,12 @@ export function OperationsWorkspace({
   onCreateSession,
   onGameChange,
   onJsCodeChange,
+  onKuaishouAppIdChange,
+  onKuaishouAuthCodeChange,
+  onKuaishouAuthorize,
+  onKuaishouRefreshToken,
+  onKuaishouSecretChange,
+  onLoadKuaishouTokenStatus,
   onLoadAdminResources,
   onLoadAuditLogs,
   onLoadWithdrawalDetail,
@@ -191,6 +239,11 @@ export function OperationsWorkspace({
     newGameSecret.trim().length > 0;
   const canAllocateBudget =
     budgetGameId.trim().length > 0 && budgetAmountYuan.trim().length > 0;
+  const canAuthorizeKuaishou =
+    kuaishouAppId.trim().length > 0 &&
+    kuaishouAuthCode.trim().length > 0 &&
+    kuaishouSecret.trim().length > 0;
+  const canRefreshKuaishouToken = Boolean(kuaishouTokenStatus?.configured);
 
   return (
     <div className="view-stack">
@@ -432,6 +485,98 @@ export function OperationsWorkspace({
           >
             {busyAction === 'game-budget' ? '提交中' : '分配游戏预算'}
           </Button>
+        </div>
+      </Panel>
+
+      <Panel
+        actions={
+          <Button
+            disabled={workspaceBusy}
+            icon={<RefreshCw size={16} />}
+            onClick={onLoadKuaishouTokenStatus}
+            variant="secondary"
+          >
+            {busyAction === 'kuaishou-token' ? '加载中' : '刷新状态'}
+          </Button>
+        }
+        description={kuaishouTokenStatus?.source ?? 'none'}
+        title="平台授权"
+      >
+        <div className="button-row">
+          <StatusBadge tone={tokenStatusTone(kuaishouTokenStatus?.status)}>
+            {kuaishouTokenStatus?.status ?? 'UNCONFIGURED'}
+          </StatusBadge>
+          {kuaishouTokenStatus?.lastError ? (
+            <StatusBadge tone="danger">{kuaishouTokenStatus.lastError}</StatusBadge>
+          ) : null}
+        </div>
+        <ReadoutGrid
+          items={[
+            {
+              label: '平台 AppID',
+              value: kuaishouTokenStatus?.appId ?? '-',
+            },
+            {
+              label: '广告主',
+              value: kuaishouTokenStatus?.advertiserId ?? '-',
+            },
+            {
+              label: '来源',
+              value: kuaishouTokenStatus?.source ?? 'none',
+            },
+            {
+              label: '授权时间',
+              value: formatTokenDate(kuaishouTokenStatus?.authorizedAt),
+            },
+            {
+              label: 'access 过期',
+              value: formatTokenDate(kuaishouTokenStatus?.accessTokenExpiresAt),
+            },
+            {
+              label: 'refresh 过期',
+              value: formatTokenDate(kuaishouTokenStatus?.refreshTokenExpiresAt),
+            },
+          ]}
+        />
+        <div className="query-form">
+          <InputField
+            disabled={workspaceBusy}
+            label="平台 app_id"
+            onChange={onKuaishouAppIdChange}
+            value={kuaishouAppId}
+          />
+          <InputField
+            disabled={workspaceBusy}
+            label="secret"
+            onChange={onKuaishouSecretChange}
+            type="password"
+            value={kuaishouSecret}
+          />
+          <InputField
+            disabled={workspaceBusy}
+            label="auth_code"
+            onChange={onKuaishouAuthCodeChange}
+            value={kuaishouAuthCode}
+          />
+          <div className="button-row">
+            <Button
+              disabled={workspaceBusy || !canAuthorizeKuaishou}
+              icon={<KeyRound size={16} />}
+              onClick={onKuaishouAuthorize}
+            >
+              {busyAction === 'kuaishou-authorize' ? '提交中' : '提交授权'}
+            </Button>
+            <Button
+              disabled={workspaceBusy || !canRefreshKuaishouToken}
+              icon={<RefreshCw size={16} />}
+              onClick={onKuaishouRefreshToken}
+              variant="secondary"
+            >
+              {busyAction === 'kuaishou-refresh-token'
+                ? '刷新中'
+                : '刷新 token'}
+            </Button>
+          </div>
         </div>
       </Panel>
 

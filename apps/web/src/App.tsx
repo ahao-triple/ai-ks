@@ -46,6 +46,7 @@ import type {
   EcpmRefreshResult,
   GameSessionResult,
   IntegrationStatus,
+  KuaishouTokenStatusResult,
   WithdrawalResult,
 } from './types/api';
 
@@ -128,6 +129,13 @@ export function getDefaultAdminGameId(
     : games[0]?.id ?? '';
 }
 
+export function getDefaultKuaishouAppId(
+  status: KuaishouTokenStatusResult | undefined,
+  currentAppId: string,
+) {
+  return currentAppId.trim() || status?.appId || '';
+}
+
 export function shouldApplySettlementBatchResponse(
   requestVersion: number,
   currentVersion: number,
@@ -145,6 +153,11 @@ export function App() {
   const [games, setGames] = useState<DemoGame[]>([]);
   const [sampleJsCodes, setSampleJsCodes] = useState<string[]>([]);
   const [status, setStatus] = useState<IntegrationStatus>();
+  const [kuaishouTokenStatus, setKuaishouTokenStatus] =
+    useState<KuaishouTokenStatusResult>();
+  const [kuaishouAppId, setKuaishouAppId] = useState('');
+  const [kuaishouSecret, setKuaishouSecret] = useState('');
+  const [kuaishouAuthCode, setKuaishouAuthCode] = useState('');
   const [gameAppId, setGameAppId] = useState('');
   const [jsCode, setJsCode] = useState('');
   const [gameSession, setGameSession] = useState<GameSessionResult>();
@@ -250,6 +263,17 @@ export function App() {
     const resourceSessionVersion = sessionVersionRef.current;
     void loadAdminResourcesForToken(adminAccessToken, () =>
       isCurrentSessionVersion(resourceSessionVersion),
+    );
+  }, [adminAccessToken, appSession.mode]);
+
+  useEffect(() => {
+    if (appSession.mode !== 'admin' || !adminAccessToken) {
+      return;
+    }
+
+    const tokenSessionVersion = sessionVersionRef.current;
+    void loadKuaishouTokenStatusForToken(adminAccessToken, () =>
+      isCurrentSessionVersion(tokenSessionVersion),
     );
   }, [adminAccessToken, appSession.mode]);
 
@@ -426,6 +450,7 @@ export function App() {
     setAdminAccessToken('');
     setAdminName('');
     clearAdminResourceState();
+    clearKuaishouTokenState();
     setAdminWithdrawals([]);
     setAuditLogs([]);
     setSelectedWithdrawalDetail(undefined);
@@ -565,6 +590,7 @@ export function App() {
     setAccount(undefined);
     setAdminName('');
     clearAdminResourceState();
+    clearKuaishouTokenState();
     setAppSession(createSignedOutSession());
     setActiveView('query');
     setGameSession(undefined);
@@ -632,6 +658,13 @@ export function App() {
     setBudgetReason('');
   }
 
+  function clearKuaishouTokenState() {
+    setKuaishouTokenStatus(undefined);
+    setKuaishouAppId('');
+    setKuaishouSecret('');
+    setKuaishouAuthCode('');
+  }
+
   function applyAdminResources(
     companies: AdminCompany[],
     nextAdminGames: AdminGame[],
@@ -693,6 +726,110 @@ export function App() {
       }
 
       setNotice('预算资源已刷新');
+    }, 'admin');
+  }
+
+  function applyKuaishouTokenStatus(nextStatus: KuaishouTokenStatusResult) {
+    setKuaishouTokenStatus(nextStatus);
+    setKuaishouAppId((current) =>
+      getDefaultKuaishouAppId(nextStatus, current),
+    );
+  }
+
+  async function loadKuaishouTokenStatusForToken(
+    token: string,
+    isCurrent = () => true,
+  ) {
+    try {
+      const result = await aiKsApi.getKuaishouTokenStatus(token);
+      if (!isCurrent()) {
+        return false;
+      }
+
+      applyKuaishouTokenStatus(result);
+      return true;
+    } catch (nextError) {
+      if (!isCurrent()) {
+        return false;
+      }
+
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        handleUnauthorized('admin');
+        setError(nextError.message);
+        return false;
+      }
+
+      setError(
+        nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+      );
+      return false;
+    }
+  }
+
+  async function loadKuaishouTokenStatus() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+
+    await runAction('kuaishou-token', async (isCurrent) => {
+      const loaded = await loadKuaishouTokenStatusForToken(
+        adminAccessToken,
+        isCurrent,
+      );
+      if (!isCurrent() || !loaded) {
+        return;
+      }
+
+      setNotice('平台授权状态已刷新');
+    }, 'admin');
+  }
+
+  async function authorizeKuaishouToken() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+
+    const appId = kuaishouAppId.trim();
+    const secret = kuaishouSecret.trim();
+    const authCode = kuaishouAuthCode.trim();
+    if (!appId || !secret || !authCode) {
+      setError('请填写平台 app_id、secret 和 auth_code');
+      return;
+    }
+
+    await runAction('kuaishou-authorize', async (isCurrent) => {
+      const result = await aiKsApi.authorizeKuaishouToken(adminAccessToken, {
+        appId,
+        authCode,
+        secret,
+      });
+      if (!isCurrent()) {
+        return;
+      }
+
+      applyKuaishouTokenStatus(result);
+      setKuaishouSecret('');
+      setKuaishouAuthCode('');
+      setNotice('平台授权已更新');
+    }, 'admin');
+  }
+
+  async function refreshKuaishouToken() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+
+    await runAction('kuaishou-refresh-token', async (isCurrent) => {
+      const result = await aiKsApi.refreshKuaishouToken(adminAccessToken);
+      if (!isCurrent()) {
+        return;
+      }
+
+      applyKuaishouTokenStatus(result);
+      setNotice('平台 token 已刷新');
     }, 'admin');
   }
 
@@ -1368,6 +1505,10 @@ export function App() {
           gameAppId={gameAppId}
           games={games}
           jsCode={jsCode}
+          kuaishouAppId={kuaishouAppId}
+          kuaishouAuthCode={kuaishouAuthCode}
+          kuaishouSecret={kuaishouSecret}
+          kuaishouTokenStatus={kuaishouTokenStatus}
           newCompanyName={newCompanyName}
           newGameAppId={newGameAppId}
           newGameCompanyId={newGameCompanyId}
@@ -1389,6 +1530,12 @@ export function App() {
           onCreateSession={createGameSession}
           onGameChange={changeGameAppId}
           onJsCodeChange={setJsCode}
+          onKuaishouAppIdChange={setKuaishouAppId}
+          onKuaishouAuthCodeChange={setKuaishouAuthCode}
+          onKuaishouAuthorize={authorizeKuaishouToken}
+          onKuaishouRefreshToken={refreshKuaishouToken}
+          onKuaishouSecretChange={setKuaishouSecret}
+          onLoadKuaishouTokenStatus={loadKuaishouTokenStatus}
           onLoadAdminResources={loadAdminResources}
           onLoadAuditLogs={loadAuditLogs}
           onLoadWithdrawalDetail={loadWithdrawalDetail}
@@ -1464,6 +1611,9 @@ function isOperationsBusyAction(
     case 'company-create':
     case 'game-budget':
     case 'game-create':
+    case 'kuaishou-authorize':
+    case 'kuaishou-refresh-token':
+    case 'kuaishou-token':
     case 'refresh':
     case 'settlement-confirm':
     case 'settlement-preview':

@@ -12,6 +12,7 @@ import {
   changeSettlementRange,
   getDefaultAdminCompanyId,
   getDefaultAdminGameId,
+  getDefaultKuaishouAppId,
   getAdminEntrySettlementGameRowId,
   getSettlementGameRowId,
   shouldApplySettlementBatchResponse,
@@ -21,6 +22,7 @@ import type {
   AdminGame,
   AdminSettlementBatch,
   AdminSettlementPreview,
+  KuaishouTokenStatusResult,
 } from '../types/api';
 
 const confirmableSettlementPreview: AdminSettlementPreview = {
@@ -74,6 +76,19 @@ const adminGame: AdminGame = {
   updatedAt: '2026-05-08T02:30:00.000Z',
 };
 
+const kuaishouTokenStatus: KuaishouTokenStatusResult = {
+  accessTokenExpiresAt: '2026-05-09T00:00:00.000Z',
+  advertiserId: 'advertiser-1',
+  appId: 'app-1',
+  authorizedAt: '2026-05-08T00:00:00.000Z',
+  configured: true,
+  lastError: null,
+  refreshTokenExpiresAt: '2026-06-07T00:00:00.000Z',
+  refreshedAt: null,
+  source: 'database',
+  status: 'ACTIVE',
+};
+
 function operationsWorkspaceProps(
   overrides: Partial<OperationsWorkspaceProps> = {},
 ): OperationsWorkspaceProps {
@@ -94,6 +109,9 @@ function operationsWorkspaceProps(
     gameAppId: 'game-1',
     games: [],
     jsCode: '',
+    kuaishouAppId: '',
+    kuaishouAuthCode: '',
+    kuaishouSecret: '',
     newCompanyName: '',
     newGameAppId: '',
     newGameCompanyId: '',
@@ -115,6 +133,12 @@ function operationsWorkspaceProps(
     onCreateSession: () => undefined,
     onGameChange: () => undefined,
     onJsCodeChange: () => undefined,
+    onKuaishouAppIdChange: () => undefined,
+    onKuaishouAuthCodeChange: () => undefined,
+    onKuaishouAuthorize: () => undefined,
+    onKuaishouRefreshToken: () => undefined,
+    onKuaishouSecretChange: () => undefined,
+    onLoadKuaishouTokenStatus: () => undefined,
     onLoadAdminResources: () => undefined,
     onLoadAuditLogs: () => undefined,
     onLoadWithdrawalDetail: () => undefined,
@@ -371,6 +395,29 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('创建游戏');
     expect(html).toContain('分配游戏预算');
   });
+
+  it('renders kuaishou platform authorization status and controls', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          kuaishouAppId: 'app-1',
+          kuaishouAuthCode: 'auth-code-1',
+          kuaishouSecret: 'secret-1',
+          kuaishouTokenStatus,
+        })}
+      />,
+    );
+
+    expect(html).toContain('平台授权');
+    expect(html).toContain('ACTIVE');
+    expect(html).toContain('database');
+    expect(html).toContain('advertiser-1');
+    expect(html).toContain('2026-05-09');
+    expect(html).toContain('提交授权');
+    expect(html).toContain('刷新 token');
+    expect(html).not.toContain('access-token');
+    expect(html).not.toContain('refresh-token');
+  });
 });
 
 describe('settlement range helpers', () => {
@@ -462,5 +509,23 @@ describe('admin resource helpers', () => {
     expect(getDefaultAdminGameId([adminGame], 'game-1')).toBe('game-1');
     expect(getDefaultAdminGameId([adminGame], 'missing-game')).toBe('game-1');
     expect(getDefaultAdminGameId([], 'game-1')).toBe('');
+  });
+});
+
+describe('kuaishou token helpers', () => {
+  it('keeps an entered platform app id and otherwise falls back to token status', () => {
+    expect(getDefaultKuaishouAppId(kuaishouTokenStatus, 'typed-app')).toBe(
+      'typed-app',
+    );
+    expect(getDefaultKuaishouAppId(kuaishouTokenStatus, '')).toBe('app-1');
+    expect(
+      getDefaultKuaishouAppId(
+        {
+          ...kuaishouTokenStatus,
+          appId: null,
+        },
+        '',
+      ),
+    ).toBe('');
   });
 });
