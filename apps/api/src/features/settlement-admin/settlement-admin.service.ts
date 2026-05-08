@@ -111,32 +111,13 @@ export class SettlementAdminService {
 
     const settlementAmountLi = sumDisplayAmount(boundRows);
     if (game.budgetLi < settlementAmountLi) {
-      await this.prisma.game.update({
-        data: {
-          settlementPaused: true,
-        },
-        where: {
-          id: game.id,
-        },
+      await this.persistBudgetInsufficient(input, {
+        budgetLi: game.budgetLi,
+        gameId: game.id,
+        requiredLi: settlementAmountLi,
+        settlementCount: boundRows.length,
+        unboundCount: unboundRows.length,
       });
-      await this.prisma.auditLog.create({
-        data: {
-          action: 'settlement.budget_insufficient',
-          actorId: input.operatorId,
-          actorType: input.operatorType,
-          metadata: {
-            budgetLi: game.budgetLi.toString(),
-            endedAt: input.endedAt.toISOString(),
-            requiredLi: settlementAmountLi.toString(),
-            settlementCount: boundRows.length,
-            startedAt: input.startedAt.toISOString(),
-            unboundCount: unboundRows.length,
-          },
-          targetId: game.id,
-          targetType: 'game',
-        },
-      });
-      throw new ConflictException('Game budget is insufficient');
     }
 
     try {
@@ -154,7 +135,13 @@ export class SettlementAdminService {
 
         const settlementAmountLi = sumDisplayAmount(boundRows);
         if (game.budgetLi < settlementAmountLi) {
-          throw new ConflictException('Game budget is insufficient');
+          throw new SettlementBudgetInsufficientError(
+            game.id,
+            game.budgetLi,
+            settlementAmountLi,
+            boundRows.length,
+            unboundRows.length,
+          );
         }
 
         const updated = await tx.rawEcpm.updateMany({
@@ -259,6 +246,15 @@ export class SettlementAdminService {
         };
       });
     } catch (error) {
+      if (error instanceof SettlementBudgetInsufficientError) {
+        await this.persistBudgetInsufficient(input, {
+          budgetLi: error.budgetLi,
+          gameId: error.gameId,
+          requiredLi: error.requiredLi,
+          settlementCount: error.settlementCount,
+          unboundCount: error.unboundCount,
+        });
+      }
       if (error instanceof SettlementConflictError) {
         await this.prisma.auditLog.create({
           data: {
@@ -277,6 +273,44 @@ export class SettlementAdminService {
       }
       throw error;
     }
+  }
+
+  private async persistBudgetInsufficient(
+    input: ConfirmSettlementInput,
+    failure: {
+      budgetLi: bigint;
+      gameId: string;
+      requiredLi: bigint;
+      settlementCount: number;
+      unboundCount: number;
+    },
+  ): Promise<never> {
+    await this.prisma.game.update({
+      data: {
+        settlementPaused: true,
+      },
+      where: {
+        id: failure.gameId,
+      },
+    });
+    await this.prisma.auditLog.create({
+      data: {
+        action: 'settlement.budget_insufficient',
+        actorId: input.operatorId,
+        actorType: input.operatorType,
+        metadata: {
+          budgetLi: failure.budgetLi.toString(),
+          endedAt: input.endedAt.toISOString(),
+          requiredLi: failure.requiredLi.toString(),
+          settlementCount: failure.settlementCount,
+          startedAt: input.startedAt.toISOString(),
+          unboundCount: failure.unboundCount,
+        },
+        targetId: failure.gameId,
+        targetType: 'game',
+      },
+    });
+    throw new ConflictException('Game budget is insufficient');
   }
 
   listBatches(input: { gameId?: string } = {}) {
@@ -394,6 +428,18 @@ class SettlementConflictError extends Error {
     readonly updatedCount: number,
   ) {
     super('Settlement update count mismatch');
+  }
+}
+
+class SettlementBudgetInsufficientError extends Error {
+  constructor(
+    readonly gameId: string,
+    readonly budgetLi: bigint,
+    readonly requiredLi: bigint,
+    readonly settlementCount: number,
+    readonly unboundCount: number,
+  ) {
+    super('Settlement budget insufficient');
   }
 }
 

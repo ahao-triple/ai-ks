@@ -84,6 +84,33 @@ describe('SettlementAdminService', () => {
     );
   });
 
+  it('marks the game paused and rejects when budget becomes insufficient during confirmation', async () => {
+    const prisma = createFakePrisma({
+      initialSettlementPaused: false,
+      transactionGameBudgetLi: 2500n,
+    });
+    const service = new SettlementAdminService(prisma);
+
+    await expect(
+      service.confirmSettlement({
+        gameId: 'game-1',
+        operatorId: 'admin',
+        operatorType: 'SUPER_ADMIN',
+        ...range,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.getGame('game-1')?.budgetLi).toBe(2500n);
+    expect(prisma.getGame('game-1')?.settlementPaused).toBe(true);
+    expect(prisma.getUser('user-1')?.availableBalanceLi).toBe(0n);
+    expect(prisma.getUser('user-2')?.availableBalanceLi).toBe(0n);
+    expect(prisma.getRawEcpm('ecpm-1')?.status).toBe('PENDING');
+    expect(prisma.getRawEcpm('ecpm-2')?.status).toBe('PENDING');
+    expect(prisma.getAuditActions()).toContain(
+      'settlement.budget_insufficient',
+    );
+  });
+
   it('rejects confirmation when no bound pending ECPM exists', async () => {
     const prisma = createFakePrisma({
       includeBoundRows: false,
@@ -202,6 +229,7 @@ function createFakePrisma(
     includeBoundRows?: boolean;
     updateManyCountOverride?: number;
     initialSettlementPaused?: boolean;
+    transactionGameBudgetLi?: bigint;
   } = {},
 ) {
   const games = new Map<string, FakeGame>([
@@ -285,27 +313,27 @@ function createFakePrisma(
       );
     }
 
-      if (row.gameId !== where.gameId) return false;
-      if (row.status !== where.status) return false;
-      if (row.eventTime < where.eventTime.gte) return false;
-      if (row.eventTime > where.eventTime.lte) return false;
-      if (where.openIdRecordId === null && row.openIdRecordId !== null) {
-        return false;
-      }
-      const relationFilter = where.openIdRecord?.is;
-      if (relationFilter?.userId?.not === null) {
-        return row.openIdRecord !== null && row.openIdRecord.userId !== null;
-      }
-      if (relationFilter?.userId === null) {
-        return row.openIdRecord !== null && row.openIdRecord.userId === null;
-      }
-      if (relationFilter?.userId) {
-        return (
-          row.openIdRecord !== null &&
-          row.openIdRecord.userId === relationFilter.userId
-        );
-      }
-      return true;
+    if (row.gameId !== where.gameId) return false;
+    if (row.status !== where.status) return false;
+    if (row.eventTime < where.eventTime.gte) return false;
+    if (row.eventTime > where.eventTime.lte) return false;
+    if (where.openIdRecordId === null && row.openIdRecordId !== null) {
+      return false;
+    }
+    const relationFilter = where.openIdRecord?.is;
+    if (relationFilter?.userId?.not === null) {
+      return row.openIdRecord !== null && row.openIdRecord.userId !== null;
+    }
+    if (relationFilter?.userId === null) {
+      return row.openIdRecord !== null && row.openIdRecord.userId === null;
+    }
+    if (relationFilter?.userId) {
+      return (
+        row.openIdRecord !== null &&
+        row.openIdRecord.userId === relationFilter.userId
+      );
+    }
+    return true;
   };
 
   const findPendingRows = (where: any) =>
@@ -340,6 +368,15 @@ function createFakePrisma(
     getUser(id: string): FakeUser | undefined;
   } = {
     $transaction: async (callback: any) => {
+      if (options.transactionGameBudgetLi !== undefined) {
+        const game = games.get('game-1');
+        if (game) {
+          games.set('game-1', {
+            ...game,
+            budgetLi: options.transactionGameBudgetLi,
+          });
+        }
+      }
       const gameSnapshot = cloneGames();
       const rawEcpmSnapshot = cloneRawEcpms();
       const userSnapshot = cloneUsers();
