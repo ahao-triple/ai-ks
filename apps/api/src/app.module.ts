@@ -8,6 +8,7 @@ import { AuditLogModule } from './features/audit/audit-log.module';
 import { DemoModule } from './features/demo/demo.module';
 import { GameSessionModule } from './features/game/game-session.module';
 import { KuaishouRefreshModule } from './features/kuaishou-admin/kuaishou-refresh.module';
+import { SettlementAdminModule } from './features/settlement-admin/settlement-admin.module';
 import { UserEarningsModule } from './features/user/user-earnings.module';
 import { WithdrawalReviewModule } from './features/withdrawal-admin/withdrawal-review.module';
 import { HealthModule } from './health/health.module';
@@ -26,6 +27,7 @@ import { HealthModule } from './health/health.module';
     DemoModule,
     GameSessionModule,
     KuaishouRefreshModule,
+    SettlementAdminModule,
     WithdrawalReviewModule,
     UserEarningsModule,
   ],
