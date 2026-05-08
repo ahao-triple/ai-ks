@@ -82,6 +82,10 @@ model Game {
   gameSecret       String    @map("game_secret")
   budgetLi         BigInt    @default(0) @map("budget_li")
   settlementPaused Boolean   @default(false) @map("settlement_paused")
+  ecpmAutoSyncEnabled        Boolean   @default(false) @map("ecpm_auto_sync_enabled")
+  ecpmAutoSyncIntervalHours  Int       @default(3) @map("ecpm_auto_sync_interval_hours")
+  ecpmAutoSyncNextRunAt      DateTime? @map("ecpm_auto_sync_next_run_at")
+  ecpmAutoSyncLastRunAt      DateTime? @map("ecpm_auto_sync_last_run_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
   deletedAt        DateTime? @map("deleted_at")
@@ -93,6 +97,7 @@ model Game {
 
   @@unique([id, companyId])
   @@index([companyId])
+  @@index([ecpmAutoSyncEnabled, ecpmAutoSyncNextRunAt])
   @@map("games")
 }
 
@@ -339,6 +344,9 @@ model KuaishouEcpmSyncJob {
   status               KuaishouEcpmSyncJobStatus @default(RUNNING)
   gameAppId            String                    @map("game_app_id")
   dataHour             String                    @map("data_hour")
+  lookbackHours        Int?                      @map("lookback_hours")
+  startedDataHour      String?                   @map("started_data_hour")
+  endedDataHour        String?                   @map("ended_data_hour")
   requestedOpenIdCount Int                       @map("requested_open_id_count")
   savedCount           Int                       @default(0) @map("saved_count")
   source               String?
@@ -352,6 +360,7 @@ model KuaishouEcpmSyncJob {
 
   @@index([createdAt])
   @@index([gameAppId, dataHour])
+  @@index([gameAppId, status])
   @@index([status])
   @@map("kuaishou_ecpm_sync_jobs")
 }
