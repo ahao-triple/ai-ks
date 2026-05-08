@@ -24,6 +24,7 @@ import type {
   EcpmRefreshResult,
   GameSessionResult,
   IntegrationStatus,
+  KuaishouTokenStatusResult,
   WithdrawalResult,
 } from '../types/api';
 
@@ -236,6 +237,41 @@ export const aiKsApi = {
       body: { gameAppId },
       method: 'POST',
     });
+  },
+
+  getKuaishouTokenStatus(adminAccessToken: string) {
+    return requestJson<KuaishouTokenStatusResult>('/admin/kuaishou/token', {
+      accessToken: adminAccessToken,
+    });
+  },
+
+  authorizeKuaishouToken(
+    adminAccessToken: string,
+    payload: {
+      appId: string;
+      authCode: string;
+      secret: string;
+    },
+  ) {
+    return requestJson<KuaishouTokenStatusResult>(
+      '/admin/kuaishou/token/authorize',
+      {
+        accessToken: adminAccessToken,
+        body: payload,
+        method: 'POST',
+      },
+    );
+  },
+
+  refreshKuaishouToken(adminAccessToken: string) {
+    return requestJson<KuaishouTokenStatusResult>(
+      '/admin/kuaishou/token/refresh',
+      {
+        accessToken: adminAccessToken,
+        body: {},
+        method: 'POST',
+      },
+    );
   },
 
   previewSettlement(adminAccessToken: string, range: AdminSettlementRange) {

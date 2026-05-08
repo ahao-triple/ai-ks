@@ -18,6 +18,19 @@ export type IntegrationStatus = {
   };
 };
 
+export type KuaishouTokenStatusResult = {
+  accessTokenExpiresAt: string | null;
+  advertiserId: string | null;
+  appId: string | null;
+  authorizedAt: string | null;
+  configured: boolean;
+  lastError: string | null;
+  refreshTokenExpiresAt: string | null;
+  refreshedAt: string | null;
+  source: 'database' | 'env' | 'none';
+  status: 'ACTIVE' | 'ERROR' | 'EXPIRED' | 'UNCONFIGURED';
+};
+
 export type GameSessionResult = {
   game: {
     gameAppId: string;

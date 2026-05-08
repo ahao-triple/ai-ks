@@ -13,6 +13,7 @@ import type {
   AdminSettlementListResult,
   AdminSettlementPreview,
   AdminWithdrawalBatch,
+  KuaishouTokenStatusResult,
 } from '../types/api';
 
 const originalFetch = globalThis.fetch;
@@ -138,6 +139,15 @@ describe('aiKsApi', () => {
       .returns.resolves.toEqualTypeOf<{ game: AdminGame }>();
     expectTypeOf(aiKsApi.allocateGameBudget)
       .returns.resolves.toEqualTypeOf<AdminGameBudgetAllocationResult>();
+  });
+
+  it('types kuaishou token methods as token status responses', () => {
+    expectTypeOf(aiKsApi.getKuaishouTokenStatus)
+      .returns.resolves.toEqualTypeOf<KuaishouTokenStatusResult>();
+    expectTypeOf(aiKsApi.authorizeKuaishouToken)
+      .returns.resolves.toEqualTypeOf<KuaishouTokenStatusResult>();
+    expectTypeOf(aiKsApi.refreshKuaishouToken)
+      .returns.resolves.toEqualTypeOf<KuaishouTokenStatusResult>();
   });
 
   it('loads admin companies with the admin token', async () => {
@@ -268,6 +278,68 @@ describe('aiKsApi', () => {
           amountYuan: '30.00',
           reason: 'launch',
         }),
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      },
+    );
+  });
+
+  it('loads kuaishou token status with the admin token', async () => {
+    mockJsonResponse({ configured: false, source: 'none', status: 'UNCONFIGURED' });
+
+    await aiKsApi.getKuaishouTokenStatus('admin-token');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/kuaishou/token`,
+      {
+        body: undefined,
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'GET',
+      },
+    );
+  });
+
+  it('authorizes kuaishou token credentials with the admin token', async () => {
+    mockJsonResponse({ configured: true, source: 'database', status: 'ACTIVE' });
+
+    await aiKsApi.authorizeKuaishouToken('admin-token', {
+      appId: 'app-1',
+      authCode: 'auth-code-1',
+      secret: 'secret-1',
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/kuaishou/token/authorize`,
+      {
+        body: JSON.stringify({
+          appId: 'app-1',
+          authCode: 'auth-code-1',
+          secret: 'secret-1',
+        }),
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      },
+    );
+  });
+
+  it('refreshes kuaishou token credentials with the admin token', async () => {
+    mockJsonResponse({ configured: true, source: 'database', status: 'ACTIVE' });
+
+    await aiKsApi.refreshKuaishouToken('admin-token');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/kuaishou/token/refresh`,
+      {
+        body: JSON.stringify({}),
         headers: {
           Authorization: 'Bearer admin-token',
           'Content-Type': 'application/json',
