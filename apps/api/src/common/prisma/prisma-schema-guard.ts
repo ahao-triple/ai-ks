@@ -13,6 +13,13 @@ export const REQUIRED_PRISMA_SCHEMA_COLUMNS: RequiredPrismaSchemaColumn[] = [
   { tableName: 'kuaishou_ecpm_sync_jobs', columnName: 'lookback_hours' },
   { tableName: 'kuaishou_ecpm_sync_jobs', columnName: 'started_data_hour' },
   { tableName: 'kuaishou_ecpm_sync_jobs', columnName: 'ended_data_hour' },
+  { tableName: 'company_admin_accounts', columnName: 'username' },
+  { tableName: 'company_admin_accounts', columnName: 'password_hash' },
+  { tableName: 'company_admin_accounts', columnName: 'display_name' },
+  { tableName: 'company_admin_accounts', columnName: 'enabled' },
+  { tableName: 'company_admin_scopes', columnName: 'principal_id' },
+  { tableName: 'company_admin_scopes', columnName: 'game_ids' },
+  { tableName: 'company_admin_scopes', columnName: 'operation_codes' },
 ];
 
 type SchemaColumnRow = {

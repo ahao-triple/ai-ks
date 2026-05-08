@@ -72,4 +72,22 @@ describe('PrismaSchemaGuard', () => {
       /games\.ecpm_auto_sync_enabled[\s\S]*kuaishou_ecpm_sync_jobs\.lookback_hours/,
     );
   });
+
+  it('requires company admin account and scope columns', async () => {
+    const requiredNames = REQUIRED_PRISMA_SCHEMA_COLUMNS.map(
+      (column) => `${column.tableName}.${column.columnName}`,
+    );
+
+    expect(requiredNames).toEqual(
+      expect.arrayContaining([
+        'company_admin_accounts.username',
+        'company_admin_accounts.password_hash',
+        'company_admin_accounts.display_name',
+        'company_admin_accounts.enabled',
+        'company_admin_scopes.principal_id',
+        'company_admin_scopes.game_ids',
+        'company_admin_scopes.operation_codes',
+      ]),
+    );
+  });
 });

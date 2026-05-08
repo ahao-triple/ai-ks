@@ -67,9 +67,9 @@ model Company {
   updatedAt DateTime  @updatedAt @map("updated_at")
   deletedAt DateTime? @map("deleted_at")
 
-  games             Game[]
-  admins            CompanyAdminScope[]
-  settlementBatches SettlementBatch[]
+  games              Game[]
+  companyAdminScopes CompanyAdminScope[]
+  settlementBatches  SettlementBatch[]
 
   @@map("companies")
 }
@@ -143,6 +143,22 @@ model Agent {
 
   @@index([parentAgentId])
   @@map("agents")
+}
+
+model CompanyAdminAccount {
+  id           String    @id @default(uuid())
+  username     String    @unique
+  passwordHash String    @map("password_hash")
+  displayName  String    @map("display_name")
+  enabled      Boolean   @default(true)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  deletedAt    DateTime? @map("deleted_at")
+
+  scopes CompanyAdminScope[]
+
+  @@index([enabled])
+  @@map("company_admin_accounts")
 }
 
 model GameOpenId {
@@ -253,15 +269,16 @@ model UserAgentBindingHistory {
 model CompanyAdminScope {
   id             String   @id @default(uuid())
   companyId      String   @map("company_id")
-  principalId    String   @map("principal_id")
+  companyAdminId String   @map("principal_id")
   gameIds        String[] @map("game_ids")
   operationCodes String[] @map("operation_codes")
   createdAt      DateTime @default(now()) @map("created_at")
 
-  company Company @relation(fields: [companyId], references: [id])
+  company      Company             @relation(fields: [companyId], references: [id])
+  companyAdmin CompanyAdminAccount @relation(fields: [companyAdminId], references: [id])
 
   @@index([companyId])
-  @@index([principalId])
+  @@index([companyAdminId])
   @@map("company_admin_scopes")
 }
 
