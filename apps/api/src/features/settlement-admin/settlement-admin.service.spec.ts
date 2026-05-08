@@ -165,6 +165,87 @@ describe('SettlementAdminService', () => {
     expect(prisma.getAuditActions()).toContain('settlement.conflict');
   });
 
+  it('rejects binding changes committed before open-id locks are acquired', async () => {
+    const prisma = createFakePrisma({
+      changeBindingBeforeOpenIdLock: {
+        openIdRecordId: 'open-row-1',
+        userId: 'user-2',
+      },
+    });
+    const service = new SettlementAdminService(prisma);
+
+    await expect(
+      service.confirmSettlement({
+        gameId: 'game-1',
+        operatorId: 'admin',
+        operatorType: 'SUPER_ADMIN',
+        ...range,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.getBatchCount()).toBe(0);
+    expect(prisma.getUser('user-1')?.availableBalanceLi).toBe(0n);
+    expect(prisma.getUser('user-2')?.availableBalanceLi).toBe(0n);
+    expect(prisma.getRawEcpm('ecpm-1')?.status).toBe('PENDING');
+    expect(prisma.getRawEcpm('ecpm-2')?.status).toBe('PENDING');
+    expect(prisma.getAuditActions()).toContain('settlement.conflict');
+  });
+
+  it('locks open-id rows before raw updates and credits', async () => {
+    const prisma = createFakePrisma({
+      changeBindingAfterOpenIdLock: {
+        openIdRecordId: 'open-row-1',
+        userId: 'user-2',
+      },
+    });
+    const service = new SettlementAdminService(prisma);
+
+    const result = await service.confirmSettlement({
+      gameId: 'game-1',
+      operatorId: 'admin',
+      operatorType: 'SUPER_ADMIN',
+      ...range,
+    });
+
+    expect(result.batch.status).toBe('CONFIRMED');
+    expect(prisma.getUser('user-1')?.availableBalanceLi).toBe(1000n);
+    expect(prisma.getUser('user-2')?.availableBalanceLi).toBe(2000n);
+    expect(prisma.getOpenId('open-row-1')?.userId).toBe('user-1');
+    expect(prisma.getEventNames()).toEqual(
+      expect.arrayContaining([
+        'lock:game',
+        'lock:openIds',
+        'rawEcpm.updateMany',
+        'userAccount.update',
+      ]),
+    );
+    expect(prisma.getEventNames().indexOf('lock:openIds')).toBeLessThan(
+      prisma.getEventNames().indexOf('rawEcpm.updateMany'),
+    );
+    expect(prisma.getEventNames().indexOf('lock:openIds')).toBeLessThan(
+      prisma.getEventNames().indexOf('userAccount.update'),
+    );
+  });
+
+  it('uses locked game budget state for settlement batch fields', async () => {
+    const prisma = createFakePrisma({
+      gameBudgetLi: 10000n,
+      gameBudgetBeforeLockLi: 5000n,
+    });
+    const service = new SettlementAdminService(prisma);
+
+    const result = await service.confirmSettlement({
+      gameId: 'game-1',
+      operatorId: 'admin',
+      operatorType: 'SUPER_ADMIN',
+      ...range,
+    });
+
+    expect(result.batch.budgetBeforeLi).toBe(5000n);
+    expect(result.batch.budgetAfterLi).toBe(2000n);
+    expect(prisma.getGame('game-1')?.budgetLi).toBe(2000n);
+  });
+
   it('rejects confirmation when no bound pending ECPM exists', async () => {
     const prisma = createFakePrisma({
       includeBoundRows: false,
@@ -285,8 +366,17 @@ function createFakePrisma(
     initialSettlementPaused?: boolean;
     transactionGameBudgetLi?: bigint;
     protectedBudgetUpdateFails?: boolean;
+    gameBudgetBeforeLockLi?: bigint;
     changeBindingBeforeRawUpdate?: {
       rawEcpmId: string;
+      userId: string | null;
+    };
+    changeBindingBeforeOpenIdLock?: {
+      openIdRecordId: string;
+      userId: string | null;
+    };
+    changeBindingAfterOpenIdLock?: {
+      openIdRecordId: string;
       userId: string | null;
     };
   } = {},
@@ -360,6 +450,10 @@ function createFakePrisma(
 
   const batches: any[] = [];
   const auditLogs: any[] = [];
+  const events: string[] = [];
+  const lockedOpenIdIds = new Set<string>();
+  let gameLockApplied = false;
+  let openIdLockApplied = false;
   let rawUpdateManyRemaining = options.updateManyCountOverride;
 
   const matchesWhere = (row: FakeRawEcpm, where: any): boolean => {
@@ -424,10 +518,85 @@ function createFakePrisma(
   const prisma: SettlementAdminPrisma & {
     getAuditActions(): string[];
     getBatchCount(): number;
+    getEventNames(): string[];
     getGame(id: string): FakeGame | undefined;
+    getOpenId(id: string): FakeOpenId | undefined;
     getRawEcpm(id: string): FakeRawEcpm | undefined;
     getUser(id: string): FakeUser | undefined;
   } = {
+    $queryRaw: (async (query: any) => {
+      const queryText = String(query?.strings?.join('') ?? query);
+      if (queryText.includes('FROM games')) {
+        events.push('lock:game');
+        if (
+          !gameLockApplied &&
+          options.gameBudgetBeforeLockLi !== undefined
+        ) {
+          const game = games.get('game-1');
+          if (game) {
+            games.set('game-1', {
+              ...game,
+              budgetLi: options.gameBudgetBeforeLockLi,
+            });
+          }
+          gameLockApplied = true;
+        }
+        const game = games.get('game-1');
+        return game
+          ? [
+              {
+                budgetLi: game.budgetLi,
+                companyId: game.companyId,
+                id: game.id,
+              },
+            ]
+          : [];
+      }
+      if (queryText.includes('FROM game_open_ids')) {
+        events.push('lock:openIds');
+        if (
+          !openIdLockApplied &&
+          options.changeBindingBeforeOpenIdLock !== undefined
+        ) {
+          const openId = openIds.get(
+            options.changeBindingBeforeOpenIdLock.openIdRecordId,
+          );
+          if (openId) {
+            openIds.set(openId.id, {
+              ...openId,
+              userId: options.changeBindingBeforeOpenIdLock.userId,
+            });
+          }
+        }
+        openIdLockApplied = true;
+        for (const rawEcpm of rawEcpms.values()) {
+          if (rawEcpm.openIdRecordId) {
+            lockedOpenIdIds.add(rawEcpm.openIdRecordId);
+          }
+        }
+        if (options.changeBindingAfterOpenIdLock !== undefined) {
+          const change = options.changeBindingAfterOpenIdLock;
+          if (!lockedOpenIdIds.has(change.openIdRecordId)) {
+            const openId = openIds.get(change.openIdRecordId);
+            if (openId) {
+              openIds.set(openId.id, {
+                ...openId,
+                userId: change.userId,
+              });
+            }
+          }
+          options.changeBindingAfterOpenIdLock = undefined;
+        }
+        return Array.from(lockedOpenIdIds)
+          .map((id) => openIds.get(id))
+          .filter(Boolean)
+          .map((openId) => ({
+            id: openId?.id,
+            userId: openId?.userId,
+          }));
+      }
+      return [];
+    }) as any,
     $transaction: async (callback: any) => {
       if (options.transactionGameBudgetLi !== undefined) {
         const game = games.get('game-1');
@@ -511,6 +680,7 @@ function createFakePrisma(
     rawEcpm: {
       findMany: async ({ where }: any) => findPendingRows(where),
       updateMany: async ({ data, where }: any) => {
+        events.push('rawEcpm.updateMany');
         if (options.changeBindingBeforeRawUpdate) {
           const row = rawEcpms.get(
             options.changeBindingBeforeRawUpdate.rawEcpmId,
@@ -591,6 +761,7 @@ function createFakePrisma(
     } as any,
     userAccount: {
       update: async ({ data, where }: any) => {
+        events.push('userAccount.update');
         const user = users.get(where.id);
         if (!user) throw new Error('user not found');
         user.availableBalanceLi += data.availableBalanceLi.increment;
@@ -599,7 +770,9 @@ function createFakePrisma(
     } as any,
     getAuditActions: () => auditLogs.map((row) => row.action),
     getBatchCount: () => batches.length,
+    getEventNames: () => events,
     getGame: (id: string) => games.get(id),
+    getOpenId: (id: string) => openIds.get(id),
     getRawEcpm: (id: string) => rawEcpms.get(id),
     getUser: (id: string) => users.get(id),
   };

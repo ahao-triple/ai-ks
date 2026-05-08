@@ -6,10 +6,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  Prisma,
   PrincipalType,
   SettlementBatchStatus,
   SettlementStatus,
-  type Prisma,
   type RawEcpm,
   type SettlementBatch,
   type SettlementBatchItem,
@@ -19,6 +19,7 @@ import { PrismaService } from '../../common/prisma/prisma.service';
 export type SettlementAdminPrisma = Pick<
   PrismaService,
   | '$transaction'
+  | '$queryRaw'
   | 'auditLog'
   | 'game'
   | 'rawEcpm'
@@ -43,6 +44,17 @@ type PendingSettlementRow = RawEcpm & {
     id: string;
     userId: string | null;
   } | null;
+};
+
+type LockedSettlementGame = {
+  budgetLi: bigint;
+  companyId: string;
+  id: string;
+};
+
+type LockedOpenId = {
+  id: string;
+  userId: string | null;
 };
 
 export type SettlementPreviewResult = {
@@ -131,12 +143,24 @@ export class SettlementAdminService {
         const service = new SettlementAdminService(
           tx as unknown as SettlementAdminPrisma,
         );
-        const game = await service.findGameOrThrow(input.gameId);
         const boundRows = await service.findPendingRows(input, true);
         const unboundRows = await service.findPendingRows(input, false);
 
         if (boundRows.length === 0) {
           throw new BadRequestException('No bound pending ECPM rows to settle');
+        }
+
+        const lockedGame = await tx.$queryRaw<LockedSettlementGame[]>(
+          Prisma.sql`
+            SELECT id, company_id AS "companyId", budget_li AS "budgetLi"
+            FROM games
+            WHERE id = ${input.gameId}
+            FOR UPDATE
+          `,
+        );
+        const game = lockedGame[0];
+        if (!game) {
+          throw new NotFoundException(`Game ${input.gameId} is not found`);
         }
 
         const settlementAmountLi = sumDisplayAmount(boundRows);
@@ -149,6 +173,12 @@ export class SettlementAdminService {
             unboundRows.length,
           );
         }
+
+        this.assertLockedOpenIdsMatch(
+          game.id,
+          boundRows,
+          await lockOpenIds(tx, boundRows),
+        );
 
         let updatedCount = 0;
         for (const row of boundRows) {
@@ -298,6 +328,25 @@ export class SettlementAdminService {
         throw new ConflictException('Settlement data changed, preview again');
       }
       throw error;
+    }
+  }
+
+  private assertLockedOpenIdsMatch(
+    gameId: string,
+    boundRows: PendingSettlementRow[],
+    lockedOpenIds: LockedOpenId[],
+  ) {
+    const lockedById = new Map(lockedOpenIds.map((row) => [row.id, row]));
+    for (const row of boundRows) {
+      const openIdRecordId = row.openIdRecordId;
+      const snapshotUserId = row.openIdRecord?.userId;
+      if (
+        !openIdRecordId ||
+        !snapshotUserId ||
+        lockedById.get(openIdRecordId)?.userId !== snapshotUserId
+      ) {
+        throw new SettlementConflictError(gameId, boundRows.length, 0);
+      }
     }
   }
 
@@ -496,4 +545,19 @@ function sumByUser(rows: PendingSettlementRow[]) {
   }
 
   return totals;
+}
+
+function lockOpenIds(
+  tx: Pick<SettlementAdminPrisma, '$queryRaw'>,
+  rows: PendingSettlementRow[],
+) {
+  const openIdRecordIds = rows.map((row) => row.openIdRecordId as string);
+  return tx.$queryRaw<LockedOpenId[]>(
+    Prisma.sql`
+      SELECT id, user_id AS "userId"
+      FROM game_open_ids
+      WHERE id IN (${Prisma.join(openIdRecordIds)})
+      FOR UPDATE
+    `,
+  );
 }
