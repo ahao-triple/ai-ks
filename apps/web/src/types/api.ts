@@ -49,19 +49,24 @@ export type EcpmRow = {
   rawCost: MoneyValue;
 };
 
+export type EcpmLookbackHours = 1 | 3 | 6 | 12 | 24;
+
 export type KuaishouEcpmSyncJob = {
   actorId: string;
   actorType: string;
   createdAt: string;
   dataHour: string;
+  endedDataHour: string | null;
   errorMessage: string | null;
   finishedAt: string | null;
   gameAppId: string;
   id: string;
+  lookbackHours: number | null;
   requestedOpenIdCount: number;
   savedCount: number;
   source: 'mock' | 'kuaishou' | null;
   startedAt: string;
+  startedDataHour: string | null;
   status: 'FAILED' | 'RUNNING' | 'SUCCEEDED';
   updatedAt: string;
 };
@@ -124,6 +129,10 @@ export type AdminGame = {
   companyId: string;
   companyName: string;
   createdAt: string;
+  ecpmAutoSyncEnabled: boolean;
+  ecpmAutoSyncIntervalHours: EcpmLookbackHours;
+  ecpmAutoSyncLastRunAt: string | null;
+  ecpmAutoSyncNextRunAt: string | null;
   gameAppId: string;
   gameSecret: string;
   id: string;

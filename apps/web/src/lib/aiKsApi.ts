@@ -21,6 +21,7 @@ import type {
   AuthResult,
   DemoGame,
   EarningsResult,
+  EcpmLookbackHours,
   EcpmRefreshResult,
   GameSessionResult,
   IntegrationStatus,
@@ -198,6 +199,8 @@ export const aiKsApi = {
     adminAccessToken: string,
     gameId: string,
     payload: {
+      ecpmAutoSyncEnabled?: boolean;
+      ecpmAutoSyncIntervalHours?: EcpmLookbackHours;
       gameSecret?: string;
       name?: string;
       settlementPaused?: boolean;
@@ -232,17 +235,30 @@ export const aiKsApi = {
     });
   },
 
-  refreshEcpm(adminAccessToken: string, gameAppId: string) {
+  refreshEcpm(
+    adminAccessToken: string,
+    gameAppId: string,
+    lookbackHours: EcpmLookbackHours = 1,
+  ) {
     return requestJson<EcpmRefreshResult>('/admin/kuaishou/ecpm/refresh', {
       accessToken: adminAccessToken,
-      body: { gameAppId },
+      body: { gameAppId, lookbackHours },
       method: 'POST',
     });
   },
 
-  getKuaishouEcpmJobs(adminAccessToken: string, limit = 20) {
+  getKuaishouEcpmJobs(
+    adminAccessToken: string,
+    limit = 20,
+    gameAppId?: string,
+  ) {
+    const query = new URLSearchParams({ limit: String(limit) });
+    if (gameAppId) {
+      query.set('gameAppId', gameAppId);
+    }
+
     return requestJson<KuaishouEcpmSyncJobListResult>(
-      `/admin/kuaishou/ecpm/jobs?limit=${encodeURIComponent(String(limit))}`,
+      `/admin/kuaishou/ecpm/jobs?${query}`,
       {
         accessToken: adminAccessToken,
       },

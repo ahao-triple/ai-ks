@@ -250,6 +250,8 @@ describe('aiKsApi', () => {
     mockJsonResponse({ game: { id: 'game 1/2' } });
 
     await aiKsApi.updateAdminGame('admin-token', 'game 1/2', {
+      ecpmAutoSyncEnabled: true,
+      ecpmAutoSyncIntervalHours: 6,
       gameSecret: 'secret-2',
       name: 'Runner Pro',
       settlementPaused: false,
@@ -259,6 +261,8 @@ describe('aiKsApi', () => {
       `${API_BASE_URL}/admin/games/game%201%2F2`,
       {
         body: JSON.stringify({
+          ecpmAutoSyncEnabled: true,
+          ecpmAutoSyncIntervalHours: 6,
           gameSecret: 'secret-2',
           name: 'Runner Pro',
           settlementPaused: false,
@@ -296,6 +300,39 @@ describe('aiKsApi', () => {
     );
   });
 
+  it('refreshes kuaishou ecpm with lookback hours', async () => {
+    mockJsonResponse({ requestedOpenIds: [], rows: [], savedCount: 0 });
+
+    await aiKsApi.refreshEcpm('admin-token', 'ks game/1', 12);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/kuaishou/ecpm/refresh`,
+      {
+        body: JSON.stringify({
+          gameAppId: 'ks game/1',
+          lookbackHours: 12,
+        }),
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      },
+    );
+  });
+
+  it('defaults kuaishou ecpm refresh lookback to one hour', async () => {
+    mockJsonResponse({ requestedOpenIds: [], rows: [], savedCount: 0 });
+
+    await aiKsApi.refreshEcpm('admin-token', 'ks_game_001');
+
+    const requestInit = vi.mocked(globalThis.fetch).mock.calls[0]?.[1];
+    expect(JSON.parse(requestInit?.body as string)).toEqual({
+      gameAppId: 'ks_game_001',
+      lookbackHours: 1,
+    });
+  });
+
   it('loads kuaishou token status with the admin token', async () => {
     mockJsonResponse({ configured: false, source: 'none', status: 'UNCONFIGURED' });
 
@@ -321,6 +358,24 @@ describe('aiKsApi', () => {
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       `${API_BASE_URL}/admin/kuaishou/ecpm/jobs?limit=50`,
+      {
+        body: undefined,
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'GET',
+      },
+    );
+  });
+
+  it('loads kuaishou ecpm sync jobs with an optional encoded game app id', async () => {
+    mockJsonResponse({ jobs: [] });
+
+    await aiKsApi.getKuaishouEcpmJobs('admin-token', 50, 'ks game/1');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/kuaishou/ecpm/jobs?limit=50&gameAppId=ks+game%2F1`,
       {
         body: undefined,
         headers: {
