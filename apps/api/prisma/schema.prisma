@@ -53,6 +53,12 @@ enum KuaishouTokenStatus {
   ERROR
 }
 
+enum KuaishouEcpmSyncJobStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}
+
 model Company {
   id        String    @id @default(uuid())
   name      String
@@ -326,4 +332,26 @@ model KuaishouPlatformToken {
   updatedAt             DateTime            @updatedAt @map("updated_at")
 
   @@map("kuaishou_platform_tokens")
+}
+
+model KuaishouEcpmSyncJob {
+  id                   String                    @id @default(uuid())
+  status               KuaishouEcpmSyncJobStatus @default(RUNNING)
+  gameAppId            String                    @map("game_app_id")
+  dataHour             String                    @map("data_hour")
+  requestedOpenIdCount Int                       @map("requested_open_id_count")
+  savedCount           Int                       @default(0) @map("saved_count")
+  source               String?
+  errorMessage         String?                   @map("error_message")
+  actorId              String                    @map("actor_id")
+  actorType            String                    @map("actor_type")
+  startedAt            DateTime                  @default(now()) @map("started_at")
+  finishedAt           DateTime?                 @map("finished_at")
+  createdAt            DateTime                  @default(now()) @map("created_at")
+  updatedAt            DateTime                  @updatedAt @map("updated_at")
+
+  @@index([createdAt])
+  @@index([gameAppId, dataHour])
+  @@index([status])
+  @@map("kuaishou_ecpm_sync_jobs")
 }
