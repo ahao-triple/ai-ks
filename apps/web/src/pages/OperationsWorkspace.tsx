@@ -144,6 +144,7 @@ export function OperationsWorkspace({
               <span className="ui-input-label">游戏</span>
               <span className="ui-input-control">
                 <select
+                  disabled={workspaceBusy}
                   onChange={(event) => onGameChange(event.currentTarget.value)}
                   value={gameAppId}
                 >
@@ -218,18 +219,21 @@ export function OperationsWorkspace({
       <Panel description="按游戏和日期范围入账" title="结算确认">
         <div className="query-form">
           <InputField
+            disabled={workspaceBusy}
             label="开始日期"
             onChange={onSettlementStartDateChange}
             type="date"
             value={settlementStartDate}
           />
           <InputField
+            disabled={workspaceBusy}
             label="结束日期"
             onChange={onSettlementEndDateChange}
             type="date"
             value={settlementEndDate}
           />
           <InputField
+            disabled={workspaceBusy}
             label="用户 ID"
             onChange={onSettlementUserIdChange}
             placeholder="可选"

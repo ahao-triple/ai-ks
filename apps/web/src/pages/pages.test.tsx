@@ -3,7 +3,81 @@ import { describe, expect, it } from 'vitest';
 import { LoginPage } from './LoginPage';
 import { GuestQueryPage } from './GuestQueryPage';
 import { AccountWorkspace } from './AccountWorkspace';
-import { OperationsWorkspace } from './OperationsWorkspace';
+import {
+  OperationsWorkspace,
+  type OperationsWorkspaceProps,
+} from './OperationsWorkspace';
+import { changeSettlementRange } from '../App';
+import type {
+  AdminSettlementBatch,
+  AdminSettlementPreview,
+} from '../types/api';
+
+const confirmableSettlementPreview: AdminSettlementPreview = {
+  budgetAfter: { li: '7000', yuan: '70.00' },
+  budgetBefore: { li: '10000', yuan: '100.00' },
+  canConfirm: true,
+  companyId: 'company-1',
+  gameId: 'game-1',
+  settlementAmount: { li: '3000', yuan: '30.00' },
+  settlementCount: 2,
+  unboundCount: 0,
+  userCount: 2,
+};
+
+const serverSettlementBatch: AdminSettlementBatch = {
+  budgetAfter: { li: '7000', yuan: '70.00' },
+  budgetBefore: { li: '10000', yuan: '100.00' },
+  companyId: 'company-1',
+  configSnapshot: {},
+  createdAt: '2026-05-08T12:00:00.000Z',
+  endedAt: '2026-05-08T23:59:59.999Z',
+  gameId: 'game-1',
+  id: 'settlement-batch-1',
+  operatorId: 'admin',
+  operatorType: 'SUPER_ADMIN',
+  settledAmount: { li: '3000', yuan: '30.00' },
+  settledCount: 2,
+  startedAt: '2026-05-08T00:00:00.000Z',
+  status: 'CONFIRMED',
+  userCount: 2,
+};
+
+function operationsWorkspaceProps(
+  overrides: Partial<OperationsWorkspaceProps> = {},
+): OperationsWorkspaceProps {
+  return {
+    adminName: '',
+    adminWithdrawalStatus: 'PENDING_REVIEW',
+    adminWithdrawals: [],
+    auditLogs: [],
+    busyAction: '',
+    gameAppId: 'game-1',
+    games: [],
+    jsCode: '',
+    onApproveWithdrawal: () => undefined,
+    onCloseWithdrawal: () => undefined,
+    onConfirmSettlement: () => undefined,
+    onCreateSession: () => undefined,
+    onGameChange: () => undefined,
+    onJsCodeChange: () => undefined,
+    onLoadAuditLogs: () => undefined,
+    onLoadWithdrawalDetail: () => undefined,
+    onLoadWithdrawals: () => undefined,
+    onPayWithdrawal: () => undefined,
+    onPreviewSettlement: () => undefined,
+    onRefreshEcpm: () => undefined,
+    onSettlementEndDateChange: () => undefined,
+    onSettlementStartDateChange: () => undefined,
+    onSettlementUserIdChange: () => undefined,
+    sampleJsCodes: [],
+    settlementBatches: [],
+    settlementEndDate: '2026-05-08',
+    settlementStartDate: '2026-05-08',
+    settlementUserId: '',
+    ...overrides,
+  };
+}
 
 describe('LoginPage', () => {
   it('renders a clean login page with guest entry', () => {
@@ -135,36 +209,7 @@ describe('AccountWorkspace', () => {
 describe('OperationsWorkspace', () => {
   it('renders admin operations sections', () => {
     const html = renderToStaticMarkup(
-      <OperationsWorkspace
-        adminName=""
-        adminWithdrawalStatus="PENDING_REVIEW"
-        adminWithdrawals={[]}
-        auditLogs={[]}
-        busyAction=""
-        gameAppId=""
-        games={[]}
-        jsCode=""
-        onApproveWithdrawal={() => undefined}
-        onCloseWithdrawal={() => undefined}
-        onConfirmSettlement={() => undefined}
-        onCreateSession={() => undefined}
-        onGameChange={() => undefined}
-        onJsCodeChange={() => undefined}
-        onLoadAuditLogs={() => undefined}
-        onLoadWithdrawalDetail={() => undefined}
-        onLoadWithdrawals={() => undefined}
-        onPayWithdrawal={() => undefined}
-        onPreviewSettlement={() => undefined}
-        onRefreshEcpm={() => undefined}
-        onSettlementEndDateChange={() => undefined}
-        onSettlementStartDateChange={() => undefined}
-        onSettlementUserIdChange={() => undefined}
-        sampleJsCodes={[]}
-        settlementBatches={[]}
-        settlementEndDate="2026-05-08"
-        settlementStartDate="2026-05-08"
-        settlementUserId=""
-      />,
+      <OperationsWorkspace {...operationsWorkspaceProps({ gameAppId: '' })} />,
     );
 
     expect(html).toContain('游戏端登录');
@@ -178,46 +223,78 @@ describe('OperationsWorkspace', () => {
   it('disables all top-level actions while an operations action is busy', () => {
     const html = renderToStaticMarkup(
       <OperationsWorkspace
-        adminName="admin"
-        adminWithdrawalStatus="PENDING_REVIEW"
-        adminWithdrawals={[]}
-        auditLogs={[]}
-        busyAction="refresh"
-        gameAppId="game-1"
-        games={[
+        {...operationsWorkspaceProps({
+          adminName: 'admin',
+          busyAction: 'refresh',
+          games: [
           {
             companyName: 'Demo Studio',
             gameAppId: 'game-1',
             id: 'game-row-1',
             name: 'Demo Game',
           },
-        ]}
-        jsCode="mock-js-code-001"
-        onApproveWithdrawal={() => undefined}
-        onCloseWithdrawal={() => undefined}
-        onConfirmSettlement={() => undefined}
-        onCreateSession={() => undefined}
-        onGameChange={() => undefined}
-        onJsCodeChange={() => undefined}
-        onLoadAuditLogs={() => undefined}
-        onLoadWithdrawalDetail={() => undefined}
-        onLoadWithdrawals={() => undefined}
-        onPayWithdrawal={() => undefined}
-        onPreviewSettlement={() => undefined}
-        onRefreshEcpm={() => undefined}
-        onSettlementEndDateChange={() => undefined}
-        onSettlementStartDateChange={() => undefined}
-        onSettlementUserIdChange={() => undefined}
-        sampleJsCodes={[]}
-        settlementBatches={[]}
-        settlementEndDate="2026-05-08"
-        settlementStartDate="2026-05-08"
-        settlementUserId=""
+          ],
+          jsCode: 'mock-js-code-001',
+        })}
       />,
     );
 
     expect(html.match(/<button\b[^>]*disabled=""/g)).toHaveLength(8);
     expect(html).toContain('换取 open_id');
     expect(html).toContain('刷新日志');
+  });
+
+  it('requires a confirmable settlement preview before enabling confirmation', () => {
+    const withoutPreview = renderToStaticMarkup(
+      <OperationsWorkspace {...operationsWorkspaceProps()} />,
+    );
+    const withPreview = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          settlementPreview: confirmableSettlementPreview,
+        })}
+      />,
+    );
+
+    expect(withoutPreview).toContain(
+      '<button class="ui-button ui-button-primary" type="button" disabled="">确认结算</button>',
+    );
+    expect(withPreview).toContain(
+      '<button class="ui-button ui-button-primary" type="button">确认结算</button>',
+    );
+  });
+
+  it('renders server-provided settlement batch rows', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          settlementBatches: [serverSettlementBatch],
+        })}
+      />,
+    );
+
+    expect(html).toContain('settlement-batch-1');
+    expect(html).toContain('CONFIRMED');
+    expect(html).toContain('¥ 30.00');
+    expect(html).toContain('¥ 70.00');
+    expect(html).not.toContain('暂无结算批次');
+  });
+});
+
+describe('settlement range helpers', () => {
+  it('clears a stale settlement preview when a range field changes', () => {
+    const result = changeSettlementRange(
+      {
+        gameAppId: 'game-1',
+        settlementEndDate: '2026-05-08',
+        settlementPreview: confirmableSettlementPreview,
+        settlementStartDate: '2026-05-08',
+        settlementUserId: '',
+      },
+      { settlementUserId: 'user-1' },
+    );
+
+    expect(result.settlementUserId).toBe('user-1');
+    expect(result.settlementPreview).toBeUndefined();
   });
 });

@@ -35,6 +35,7 @@ import type {
   AccountResult,
   AdminSettlementBatch,
   AdminSettlementPreview,
+  AdminSettlementRange,
   AdminWithdrawalBatch,
   AdminWithdrawalDetailResult,
   AuditLogRow,
@@ -54,8 +55,27 @@ type AppBusyAction =
 
 type AuthScope = 'account' | 'admin' | 'none';
 
+type SettlementRangeState = {
+  gameAppId: string;
+  settlementEndDate: string;
+  settlementPreview?: AdminSettlementPreview;
+  settlementStartDate: string;
+  settlementUserId: string;
+};
+
 function todayDateText() {
   return new Date().toISOString().slice(0, 10);
+}
+
+export function changeSettlementRange(
+  state: SettlementRangeState,
+  patch: Partial<Omit<SettlementRangeState, 'settlementPreview'>>,
+): SettlementRangeState {
+  return {
+    ...state,
+    ...patch,
+    settlementPreview: undefined,
+  };
 }
 
 export function App() {
@@ -573,13 +593,85 @@ export function App() {
     }, 'account');
   }
 
-  function getSettlementRange() {
+  function currentSettlementRangeState(): SettlementRangeState {
+    return {
+      gameAppId,
+      settlementEndDate,
+      settlementPreview,
+      settlementStartDate,
+      settlementUserId,
+    };
+  }
+
+  function applySettlementRangeChange(
+    patch: Partial<Omit<SettlementRangeState, 'settlementPreview'>>,
+  ) {
+    const next = changeSettlementRange(currentSettlementRangeState(), patch);
+
+    setGameAppId(next.gameAppId);
+    setSettlementStartDate(next.settlementStartDate);
+    setSettlementEndDate(next.settlementEndDate);
+    setSettlementUserId(next.settlementUserId);
+    setSettlementPreview(next.settlementPreview);
+  }
+
+  function changeGameAppId(value: string) {
+    applySettlementRangeChange({ gameAppId: value });
+    if (!adminAccessToken) {
+      return;
+    }
+
+    setSettlementBatches([]);
+    void loadSettlementBatches(adminAccessToken, value).catch((nextError) => {
+      setError(
+        nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+      );
+    });
+  }
+
+  function changeSettlementStartDate(value: string) {
+    applySettlementRangeChange({ settlementStartDate: value });
+  }
+
+  function changeSettlementEndDate(value: string) {
+    applySettlementRangeChange({ settlementEndDate: value });
+  }
+
+  function changeSettlementUserId(value: string) {
+    applySettlementRangeChange({ settlementUserId: value });
+  }
+
+  function getSettlementRange(): AdminSettlementRange {
     return {
       endDate: settlementEndDate,
       gameId: gameAppId,
       startDate: settlementStartDate,
       ...(settlementUserId.trim() ? { userId: settlementUserId.trim() } : {}),
     };
+  }
+
+  function canConfirmSettlement() {
+    return Boolean(
+      settlementPreview?.canConfirm && settlementPreview.settlementCount > 0,
+    );
+  }
+
+  async function loadSettlementBatches(
+    token: string,
+    targetGameAppId: string,
+    isCurrent = () => true,
+  ) {
+    if (!targetGameAppId) {
+      setSettlementBatches([]);
+      return;
+    }
+
+    const result = await aiKsApi.getSettlementBatches(token, targetGameAppId);
+    if (!isCurrent()) {
+      return;
+    }
+
+    setSettlementBatches(result.batches);
   }
 
   async function previewSettlement() {
@@ -589,15 +681,17 @@ export function App() {
     }
 
     await runAction('settlement-preview', async (isCurrent) => {
-      const result = await aiKsApi.previewSettlement(
-        adminAccessToken,
-        getSettlementRange(),
-      );
+      const range = getSettlementRange();
+      const [result, batchResult] = await Promise.all([
+        aiKsApi.previewSettlement(adminAccessToken, range),
+        aiKsApi.getSettlementBatches(adminAccessToken, range.gameId),
+      ]);
       if (!isCurrent()) {
         return;
       }
 
       setSettlementPreview(result);
+      setSettlementBatches(batchResult.batches);
       setNotice(`待结算 ${result.settlementCount} 条`);
     }, 'admin');
   }
@@ -608,10 +702,16 @@ export function App() {
       return;
     }
 
+    if (!canConfirmSettlement()) {
+      setError('请先预览可结算收益');
+      return;
+    }
+
     await runAction('settlement-confirm', async (isCurrent) => {
+      const range = getSettlementRange();
       const result = await aiKsApi.confirmSettlement(
         adminAccessToken,
-        getSettlementRange(),
+        range,
       );
       if (!isCurrent()) {
         return;
@@ -619,6 +719,11 @@ export function App() {
 
       setSettlementPreview(undefined);
       setSettlementBatches((current) => [result.batch, ...current].slice(0, 20));
+      await loadSettlementBatches(adminAccessToken, range.gameId, isCurrent);
+      if (!isCurrent()) {
+        return;
+      }
+
       setNotice(`结算成功，入账 ${result.batch.settledCount} 条`);
     }, 'admin');
   }
@@ -850,7 +955,7 @@ export function App() {
           onCloseWithdrawal={closeAdminWithdrawal}
           onConfirmSettlement={confirmSettlement}
           onCreateSession={createGameSession}
-          onGameChange={setGameAppId}
+          onGameChange={changeGameAppId}
           onJsCodeChange={setJsCode}
           onLoadAuditLogs={loadAuditLogs}
           onLoadWithdrawalDetail={loadWithdrawalDetail}
@@ -858,9 +963,9 @@ export function App() {
           onPayWithdrawal={payAdminWithdrawal}
           onPreviewSettlement={previewSettlement}
           onRefreshEcpm={refreshEcpm}
-          onSettlementEndDateChange={setSettlementEndDate}
-          onSettlementStartDateChange={setSettlementStartDate}
-          onSettlementUserIdChange={setSettlementUserId}
+          onSettlementEndDateChange={changeSettlementEndDate}
+          onSettlementStartDateChange={changeSettlementStartDate}
+          onSettlementUserIdChange={changeSettlementUserId}
           refreshResult={refreshResult}
           sampleJsCodes={sampleJsCodes}
           selectedGame={selectedGame}
