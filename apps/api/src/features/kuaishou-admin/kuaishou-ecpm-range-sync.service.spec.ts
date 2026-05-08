@@ -198,6 +198,43 @@ describe('KuaishouEcpmRangeSyncService', () => {
     });
   });
 
+  it('fails job without marking token errors when upstream refresh fails and markTokenError is false', async () => {
+    const dependencies = createDependencies();
+    dependencies.ecpmClient.refresh.mockRejectedValueOnce(
+      new Error('token expired'),
+    );
+    const service = createService(dependencies);
+
+    await expect(
+      service.refreshRange({
+        actorId: 'system',
+        actorType: 'system',
+        gameAppId: 'game-1',
+        lookbackHours: 1,
+        markTokenError: false,
+      }),
+    ).rejects.toThrow('token expired');
+
+    expect(dependencies.syncJobService.failJob).toHaveBeenCalledWith({
+      errorMessage: 'token expired',
+      jobId: 'job-1',
+    });
+    expect(dependencies.tokenService.markTokenError).not.toHaveBeenCalled();
+    expect(dependencies.auditLogService.record).toHaveBeenCalledWith({
+      action: 'kuaishou.ecpm_refresh_failed',
+      actorId: 'system',
+      actorType: 'system',
+      metadata: expect.objectContaining({
+        dataHours: ['2026-05-08T14:00:00+08:00'],
+        error: 'token expired',
+        jobId: 'job-1',
+        requestedOpenIds: ['open-1'],
+      }),
+      targetId: 'game-1',
+      targetType: 'kuaishou_ecpm_refresh',
+    });
+  });
+
   it('fails job without marking token errors when save fails and markTokenError is false', async () => {
     const dependencies = createDependencies();
     dependencies.demoStore.addEcpmRows.mockRejectedValueOnce(
@@ -270,6 +307,59 @@ describe('KuaishouEcpmRangeSyncService', () => {
       targetId: 'game-1',
       targetType: 'kuaishou_ecpm_refresh',
     });
+  });
+
+  it('does not fail job or mark token errors when job completion fails after rows are saved', async () => {
+    const dependencies = createDependencies();
+    dependencies.syncJobService.completeJob.mockRejectedValueOnce(
+      new Error('job update failed'),
+    );
+    const service = createService(dependencies);
+
+    await expect(
+      service.refreshRange({
+        actorId: 'admin',
+        actorType: 'SUPER_ADMIN',
+        gameAppId: 'game-1',
+        lookbackHours: 1,
+        markTokenError: true,
+      }),
+    ).rejects.toThrow('job update failed');
+
+    expect(dependencies.demoStore.addEcpmRows).toHaveBeenCalledWith({
+      gameAppId: 'game-1',
+      rows: [expect.objectContaining({ platformEventId: 'event-1' })],
+    });
+    expect(dependencies.syncJobService.failJob).not.toHaveBeenCalled();
+    expect(dependencies.tokenService.markTokenError).not.toHaveBeenCalled();
+    expect(dependencies.auditLogService.record).not.toHaveBeenCalled();
+  });
+
+  it('does not fail job or mark token errors when success audit fails after rows are saved', async () => {
+    const dependencies = createDependencies();
+    dependencies.auditLogService.record.mockRejectedValueOnce(
+      new Error('audit unavailable'),
+    );
+    const service = createService(dependencies);
+
+    await expect(
+      service.refreshRange({
+        actorId: 'admin',
+        actorType: 'SUPER_ADMIN',
+        gameAppId: 'game-1',
+        lookbackHours: 1,
+        markTokenError: true,
+      }),
+    ).rejects.toThrow('audit unavailable');
+
+    expect(dependencies.demoStore.addEcpmRows).toHaveBeenCalled();
+    expect(dependencies.syncJobService.completeJob).toHaveBeenCalledWith({
+      jobId: 'job-1',
+      savedCount: 3,
+      source: 'mock',
+    });
+    expect(dependencies.syncJobService.failJob).not.toHaveBeenCalled();
+    expect(dependencies.tokenService.markTokenError).not.toHaveBeenCalled();
   });
 });
 

@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { z } from 'zod';
 import { type AdminPrincipal } from '../admin-auth/admin-auth.service';
 import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
@@ -17,11 +25,13 @@ const lookbackHoursSchema = z.union([
   z.literal(24),
 ]);
 
-const refreshEcpmSchema = z.object({
-  gameAppId: z.string().min(1),
-  lookbackHours: lookbackHoursSchema.optional(),
-  openIds: z.array(z.string().min(1)).optional(),
-});
+const refreshEcpmSchema = z
+  .object({
+    gameAppId: z.string().min(1),
+    lookbackHours: lookbackHoursSchema.optional(),
+    openIds: z.array(z.string().min(1)).optional(),
+  })
+  .strict();
 
 @Controller('admin/kuaishou')
 @UseGuards(AdminJwtGuard)
@@ -33,7 +43,11 @@ export class KuaishouRefreshController {
 
   @Post('ecpm/refresh')
   async refresh(@CurrentAdmin() admin: AdminPrincipal, @Body() body: unknown) {
-    const input = refreshEcpmSchema.parse(body);
+    const parsed = refreshEcpmSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException('Invalid ECPM refresh request');
+    }
+    const input = parsed.data;
 
     return this.rangeSyncService.refreshRange({
       actorId: admin.username,

@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { KuaishouRefreshController } from './kuaishou-refresh.controller';
 
 describe('KuaishouRefreshController', () => {
@@ -38,6 +39,20 @@ describe('KuaishouRefreshController', () => {
       markTokenError: true,
       openIds: undefined,
     });
+  });
+
+  it('rejects legacy dataHour requests instead of silently ignoring them', async () => {
+    const dependencies = createDependencies();
+    const controller = createController(dependencies);
+
+    await expect(
+      controller.refresh(admin, {
+        dataHour: '2026-05-08',
+        gameAppId: 'game-1',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(dependencies.rangeSyncService.refreshRange).not.toHaveBeenCalled();
   });
 
   it('lists recent ECPM sync jobs filtered by gameAppId', async () => {
