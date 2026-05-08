@@ -27,8 +27,22 @@ pnpm dev:api
 ```
 
 Key server variables include `API_PORT`, `DATABASE_URL`,
-`PRISMA_CONNECT_ON_BOOT`, `JWT_SECRET`, `ADMIN_JWT_SECRET`,
-`KUAISHOU_API_MODE`, and the real Kuaishou credentials when real mode is used.
+`PRISMA_CONNECT_ON_BOOT`, `PRISMA_SCHEMA_CHECK_ON_BOOT`, `JWT_SECRET`,
+`ADMIN_JWT_SECRET`, `KUAISHOU_API_MODE`, and the real Kuaishou credentials
+when real mode is used.
+
+The API checks key database tables and columns on startup by default. If the
+database schema is behind the Prisma schema, startup fails with a message that
+lists the missing columns. Confirm the root `.env` `DATABASE_URL` points to the
+intended database, then run:
+
+```bash
+pnpm --filter api prisma:push
+```
+
+Do not use `PRISMA_SCHEMA_CHECK_ON_BOOT=false` for normal development. It is
+only for tests or short maintenance windows where the database is being updated
+separately.
 
 ## Web Client
 
