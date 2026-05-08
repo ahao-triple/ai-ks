@@ -86,6 +86,85 @@ describe('KuaishouRefreshController', () => {
     });
   });
 
+  it('fails the job without marking token errors after local ECPM rows fail to save', async () => {
+    const dependencies = createDependencies();
+    dependencies.demoStore.addEcpmRows.mockRejectedValueOnce(
+      new Error('database unavailable'),
+    );
+    const controller = createController(dependencies);
+
+    await expect(
+      controller.refresh(admin, {
+        dataHour: '2026-05-08',
+        gameAppId: 'game-1',
+        openIds: ['open-1'],
+      }),
+    ).rejects.toThrow('database unavailable');
+
+    expect(dependencies.syncJobService.failJob).toHaveBeenCalledWith({
+      errorMessage: 'database unavailable',
+      jobId: 'job-1',
+    });
+    expect(dependencies.tokenService.markTokenError).not.toHaveBeenCalled();
+    expect(dependencies.auditLogService.record).toHaveBeenCalledWith({
+      action: 'kuaishou.ecpm_refresh_failed',
+      actorId: 'admin',
+      actorType: 'SUPER_ADMIN',
+      metadata: {
+        dataHour: '2026-05-08',
+        error: 'database unavailable',
+        jobId: 'job-1',
+        requestedOpenIds: ['open-1'],
+      },
+      targetId: 'game-1',
+      targetType: 'kuaishou_ecpm_refresh',
+    });
+  });
+
+  it('does not fail the job or mark token errors when job completion fails after rows are saved', async () => {
+    const dependencies = createDependencies();
+    dependencies.syncJobService.completeJob.mockRejectedValueOnce(
+      new Error('job update failed'),
+    );
+    const controller = createController(dependencies);
+
+    await expect(
+      controller.refresh(admin, {
+        dataHour: '2026-05-08',
+        gameAppId: 'game-1',
+        openIds: ['open-1'],
+      }),
+    ).rejects.toThrow('job update failed');
+
+    expect(dependencies.demoStore.addEcpmRows).toHaveBeenCalled();
+    expect(dependencies.syncJobService.failJob).not.toHaveBeenCalled();
+    expect(dependencies.tokenService.markTokenError).not.toHaveBeenCalled();
+  });
+
+  it('does not fail the job or mark token errors when success audit fails after completion', async () => {
+    const dependencies = createDependencies();
+    dependencies.auditLogService.record.mockRejectedValueOnce(
+      new Error('audit unavailable'),
+    );
+    const controller = createController(dependencies);
+
+    await expect(
+      controller.refresh(admin, {
+        dataHour: '2026-05-08',
+        gameAppId: 'game-1',
+        openIds: ['open-1'],
+      }),
+    ).rejects.toThrow('audit unavailable');
+
+    expect(dependencies.syncJobService.completeJob).toHaveBeenCalledWith({
+      jobId: 'job-1',
+      savedCount: 1,
+      source: 'kuaishou',
+    });
+    expect(dependencies.syncJobService.failJob).not.toHaveBeenCalled();
+    expect(dependencies.tokenService.markTokenError).not.toHaveBeenCalled();
+  });
+
   it('lists recent ECPM sync jobs with a clamped limit', async () => {
     const dependencies = createDependencies();
     const controller = createController(dependencies);

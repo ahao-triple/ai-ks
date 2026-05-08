@@ -46,65 +46,80 @@ export class KuaishouRefreshController {
       requestedOpenIdCount: openIds.length,
     });
 
+    let refreshResult: Awaited<ReturnType<KuaishouEcpmClient['refresh']>>;
     try {
-      const refreshResult = await this.ecpmClient.refresh({
+      refreshResult = await this.ecpmClient.refresh({
         dataHour,
         gameAppId: input.gameAppId,
         openIds,
       });
-      const savedRows = await this.demoStore.addEcpmRows({
+    } catch (error) {
+      try {
+        await this.recordRefreshFailure({
+          admin,
+          dataHour,
+          error,
+          gameAppId: input.gameAppId,
+          jobId: job.id,
+          markTokenError: true,
+          openIds,
+        });
+      } catch {
+        // Preserve the original upstream error for callers.
+      }
+      throw error;
+    }
+
+    let savedRows: Awaited<ReturnType<DemoStore['addEcpmRows']>>;
+    try {
+      savedRows = await this.demoStore.addEcpmRows({
         gameAppId: input.gameAppId,
         rows: refreshResult.rows,
       });
-      const completedJob = await this.syncJobService.completeJob({
-        jobId: job.id,
-        savedCount: savedRows.length,
-        source: refreshResult.source,
-      });
-      await this.auditLogService.record({
-        action: 'kuaishou.ecpm_refreshed',
-        actorId: admin.username,
-        actorType: admin.role,
-        metadata: {
-          dataHour,
-          jobId: job.id,
-          requestedOpenIds: openIds,
-          savedCount: savedRows.length,
-          source: refreshResult.source,
-        },
-        targetId: input.gameAppId,
-        targetType: 'kuaishou_ecpm_refresh',
-      });
-
-      return {
-        job: presentKuaishouEcpmSyncJob(completedJob),
-        requestedOpenIds: openIds,
-        rows: savedRows.map(presentEcpmRow),
-        savedCount: savedRows.length,
-        source: refreshResult.source,
-      };
     } catch (error) {
-      const message = readErrorMessage(error);
-      await this.syncJobService.failJob({
-        errorMessage: message,
-        jobId: job.id,
-      });
-      await this.tokenService.markTokenError(message);
-      await this.auditLogService.record({
-        action: 'kuaishou.ecpm_refresh_failed',
-        actorId: admin.username,
-        actorType: admin.role,
-        metadata: {
+      try {
+        await this.recordRefreshFailure({
+          admin,
           dataHour,
-          error: message,
+          error,
+          gameAppId: input.gameAppId,
           jobId: job.id,
-          requestedOpenIds: openIds,
-        },
-        targetId: input.gameAppId,
-        targetType: 'kuaishou_ecpm_refresh',
-      });
+          markTokenError: false,
+          openIds,
+        });
+      } catch {
+        // Preserve the original local save error for callers.
+      }
       throw error;
     }
+
+    const completedJob = await this.syncJobService.completeJob({
+      jobId: job.id,
+      savedCount: savedRows.length,
+      source: refreshResult.source,
+    });
+    await this.auditLogService.record({
+      action: 'kuaishou.ecpm_refreshed',
+      actorId: admin.username,
+      actorType: admin.role,
+      metadata: {
+        dataHour,
+        jobId: job.id,
+        requestedOpenIds: openIds,
+        savedCount: savedRows.length,
+        source: refreshResult.source,
+      },
+      targetId: input.gameAppId,
+      targetType: 'kuaishou_ecpm_refresh',
+    });
+
+    return {
+      job: presentKuaishouEcpmSyncJob(completedJob),
+      requestedOpenIds: openIds,
+      rows: savedRows.map(presentEcpmRow),
+      savedCount: savedRows.length,
+      source: refreshResult.source,
+    };
   }
 
   @Get('ecpm/jobs')
@@ -116,6 +131,38 @@ export class KuaishouRefreshController {
     return {
       jobs: jobs.map(presentKuaishouEcpmSyncJob),
     };
+  }
+
+  private async recordRefreshFailure(input: {
+    admin: AdminPrincipal;
+    dataHour: string;
+    error: unknown;
+    gameAppId: string;
+    jobId: string;
+    markTokenError: boolean;
+    openIds: string[];
+  }) {
+    const message = readErrorMessage(input.error);
+    await this.syncJobService.failJob({
+      errorMessage: message,
+      jobId: input.jobId,
+    });
+    if (input.markTokenError) {
+      await this.tokenService.markTokenError(message);
+    }
+    await this.auditLogService.record({
+      action: 'kuaishou.ecpm_refresh_failed',
+      actorId: input.admin.username,
+      actorType: input.admin.role,
+      metadata: {
+        dataHour: input.dataHour,
+        error: message,
+        jobId: input.jobId,
+        requestedOpenIds: input.openIds,
+      },
+      targetId: input.gameAppId,
+      targetType: 'kuaishou_ecpm_refresh',
+    });
   }
 }
 
