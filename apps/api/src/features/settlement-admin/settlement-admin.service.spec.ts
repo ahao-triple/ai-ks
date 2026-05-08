@@ -1,0 +1,366 @@
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  SettlementAdminService,
+  type SettlementAdminPrisma,
+} from './settlement-admin.service';
+
+describe('SettlementAdminService', () => {
+  const range = {
+    endedAt: new Date('2026-05-08T23:59:59.999Z'),
+    startedAt: new Date('2026-05-08T00:00:00.000Z'),
+  };
+
+  it('previews bound pending ECPM against game budget while counting unbound rows', async () => {
+    const prisma = createFakePrisma();
+    const service = new SettlementAdminService(prisma);
+
+    const result = await service.previewSettlement({
+      gameId: 'game-1',
+      ...range,
+    });
+
+    expect(result).toMatchObject({
+      budgetAfterLi: 7000n,
+      budgetBeforeLi: 10000n,
+      canConfirm: true,
+      gameId: 'game-1',
+      settlementAmountLi: 3000n,
+      settlementCount: 2,
+      unboundCount: 1,
+      userCount: 2,
+    });
+  });
+
+  it('confirms settlement by creating a batch, crediting users, and deducting budget', async () => {
+    const prisma = createFakePrisma();
+    const service = new SettlementAdminService(prisma);
+
+    const result = await service.confirmSettlement({
+      gameId: 'game-1',
+      operatorId: 'admin',
+      operatorType: 'SUPER_ADMIN',
+      ...range,
+    });
+
+    expect(result.batch.status).toBe('CONFIRMED');
+    expect(result.batch.settledAmountLi).toBe(3000n);
+    expect(result.items).toHaveLength(2);
+    expect(prisma.getGame('game-1')?.budgetLi).toBe(7000n);
+    expect(prisma.getGame('game-1')?.settlementPaused).toBe(false);
+    expect(prisma.getUser('user-1')?.availableBalanceLi).toBe(1000n);
+    expect(prisma.getUser('user-2')?.availableBalanceLi).toBe(2000n);
+    expect(prisma.getRawEcpm('ecpm-1')?.status).toBe('SETTLED');
+    expect(prisma.getRawEcpm('ecpm-2')?.status).toBe('SETTLED');
+    expect(prisma.getRawEcpm('ecpm-unbound')?.status).toBe('PENDING');
+    expect(prisma.getAuditActions()).toContain('settlement.confirmed');
+  });
+
+  it('marks the game paused and rejects confirmation when budget is insufficient', async () => {
+    const prisma = createFakePrisma({
+      gameBudgetLi: 2500n,
+    });
+    const service = new SettlementAdminService(prisma);
+
+    await expect(
+      service.confirmSettlement({
+        gameId: 'game-1',
+        operatorId: 'admin',
+        operatorType: 'SUPER_ADMIN',
+        ...range,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.getGame('game-1')?.budgetLi).toBe(2500n);
+    expect(prisma.getGame('game-1')?.settlementPaused).toBe(true);
+    expect(prisma.getUser('user-1')?.availableBalanceLi).toBe(0n);
+    expect(prisma.getRawEcpm('ecpm-1')?.status).toBe('PENDING');
+    expect(prisma.getAuditActions()).toContain(
+      'settlement.budget_insufficient',
+    );
+  });
+
+  it('rejects confirmation when no bound pending ECPM exists', async () => {
+    const prisma = createFakePrisma({
+      includeBoundRows: false,
+    });
+    const service = new SettlementAdminService(prisma);
+
+    await expect(
+      service.confirmSettlement({
+        gameId: 'game-1',
+        operatorId: 'admin',
+        operatorType: 'SUPER_ADMIN',
+        ...range,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects missing games', async () => {
+    const prisma = createFakePrisma();
+    const service = new SettlementAdminService(prisma);
+
+    await expect(
+      service.previewSettlement({
+        gameId: 'missing',
+        ...range,
+      }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rejects invalid date ranges', async () => {
+    const prisma = createFakePrisma();
+    const service = new SettlementAdminService(prisma);
+
+    await expect(
+      service.previewSettlement({
+        endedAt: range.startedAt,
+        gameId: 'game-1',
+        startedAt: range.endedAt,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects concurrent settlement changes', async () => {
+    const prisma = createFakePrisma({
+      updateManyCountOverride: 1,
+    });
+    const service = new SettlementAdminService(prisma);
+
+    await expect(
+      service.confirmSettlement({
+        gameId: 'game-1',
+        operatorId: 'admin',
+        operatorType: 'SUPER_ADMIN',
+        ...range,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.getGame('game-1')?.budgetLi).toBe(10000n);
+    expect(prisma.getAuditActions()).toContain('settlement.conflict');
+  });
+
+  it('lists and gets settlement batches with items', async () => {
+    const prisma = createFakePrisma();
+    const service = new SettlementAdminService(prisma);
+
+    const confirmed = await service.confirmSettlement({
+      gameId: 'game-1',
+      operatorId: 'admin',
+      operatorType: 'SUPER_ADMIN',
+      ...range,
+    });
+
+    await expect(service.listBatches({ gameId: 'game-1' })).resolves.toEqual([
+      confirmed.batch,
+    ]);
+    await expect(service.getBatch('batch-1')).resolves.toEqual(
+      confirmed.batch,
+    );
+    await expect(service.getBatch('missing')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+});
+
+type FakeGame = {
+  id: string;
+  budgetLi: bigint;
+  companyId: string;
+  settlementPaused: boolean;
+};
+
+type FakeOpenId = {
+  id: string;
+  openId: string;
+  userId: string | null;
+};
+
+type FakeRawEcpm = {
+  id: string;
+  displayAmountLi: bigint;
+  eventTime: Date;
+  gameId: string;
+  openId: string;
+  openIdRecord: FakeOpenId | null;
+  openIdRecordId: string | null;
+  status: string;
+};
+
+type FakeUser = {
+  id: string;
+  availableBalanceLi: bigint;
+};
+
+function createFakePrisma(
+  options: {
+    gameBudgetLi?: bigint;
+    includeBoundRows?: boolean;
+    updateManyCountOverride?: number;
+  } = {},
+) {
+  const games = new Map<string, FakeGame>([
+    [
+      'game-1',
+      {
+        budgetLi: options.gameBudgetLi ?? 10000n,
+        companyId: 'company-1',
+        id: 'game-1',
+        settlementPaused: true,
+      },
+    ],
+  ]);
+
+  const openIds = new Map<string, FakeOpenId>([
+    ['open-row-1', { id: 'open-row-1', openId: 'open-1', userId: 'user-1' }],
+    ['open-row-2', { id: 'open-row-2', openId: 'open-2', userId: 'user-2' }],
+    ['open-row-3', { id: 'open-row-3', openId: 'open-3', userId: null }],
+  ]);
+
+  const users = new Map<string, FakeUser>([
+    ['user-1', { availableBalanceLi: 0n, id: 'user-1' }],
+    ['user-2', { availableBalanceLi: 0n, id: 'user-2' }],
+  ]);
+
+  const rawEcpms = new Map<string, FakeRawEcpm>();
+  if (options.includeBoundRows !== false) {
+    rawEcpms.set('ecpm-1', {
+      displayAmountLi: 1000n,
+      eventTime: new Date('2026-05-08T01:00:00.000Z'),
+      gameId: 'game-1',
+      id: 'ecpm-1',
+      openId: 'open-1',
+      openIdRecord: openIds.get('open-row-1') ?? null,
+      openIdRecordId: 'open-row-1',
+      status: 'PENDING',
+    });
+    rawEcpms.set('ecpm-2', {
+      displayAmountLi: 2000n,
+      eventTime: new Date('2026-05-08T02:00:00.000Z'),
+      gameId: 'game-1',
+      id: 'ecpm-2',
+      openId: 'open-2',
+      openIdRecord: openIds.get('open-row-2') ?? null,
+      openIdRecordId: 'open-row-2',
+      status: 'PENDING',
+    });
+  }
+  rawEcpms.set('ecpm-unbound', {
+    displayAmountLi: 9000n,
+    eventTime: new Date('2026-05-08T03:00:00.000Z'),
+    gameId: 'game-1',
+    id: 'ecpm-unbound',
+    openId: 'open-3',
+    openIdRecord: openIds.get('open-row-3') ?? null,
+    openIdRecordId: 'open-row-3',
+    status: 'PENDING',
+  });
+
+  const batches: any[] = [];
+  const auditLogs: any[] = [];
+
+  const findPendingRows = (where: any) =>
+    Array.from(rawEcpms.values()).filter((row) => {
+      if (row.gameId !== where.gameId) return false;
+      if (row.status !== where.status) return false;
+      if (row.eventTime < where.eventTime.gte) return false;
+      if (row.eventTime > where.eventTime.lte) return false;
+      const relationFilter = where.openIdRecord?.is;
+      if (relationFilter?.userId?.not === null) {
+        return row.openIdRecord?.userId !== null;
+      }
+      if (relationFilter?.userId === null) {
+        return row.openIdRecord?.userId === null;
+      }
+      if (relationFilter?.userId) {
+        return row.openIdRecord?.userId === relationFilter.userId;
+      }
+      return true;
+    });
+
+  const prisma: SettlementAdminPrisma & {
+    getAuditActions(): string[];
+    getGame(id: string): FakeGame | undefined;
+    getRawEcpm(id: string): FakeRawEcpm | undefined;
+    getUser(id: string): FakeUser | undefined;
+  } = {
+    $transaction: async (callback: any) => callback(prisma),
+    auditLog: {
+      create: async ({ data }: any) => {
+        auditLogs.push(data);
+        return data;
+      },
+    } as any,
+    game: {
+      findUnique: async ({ where }: any) => games.get(where.id) ?? null,
+      update: async ({ data, where }: any) => {
+        const game = games.get(where.id);
+        if (!game) throw new Error('game not found');
+        const next = {
+          ...game,
+          budgetLi:
+            data.budgetLi?.decrement === undefined
+              ? game.budgetLi
+              : game.budgetLi - data.budgetLi.decrement,
+          settlementPaused: data.settlementPaused ?? game.settlementPaused,
+        };
+        games.set(where.id, next);
+        return next;
+      },
+    } as any,
+    rawEcpm: {
+      findMany: async ({ where }: any) => findPendingRows(where),
+      updateMany: async ({ data, where }: any) => {
+        const rows = Array.from(rawEcpms.values()).filter(
+          (row) => where.id.in.includes(row.id) && row.status === where.status,
+        );
+        for (const row of rows) {
+          row.status = data.status;
+        }
+        return {
+          count: options.updateManyCountOverride ?? rows.length,
+        };
+      },
+    } as any,
+    settlementBatch: {
+      create: async ({ data }: any) => {
+        const batch = {
+          ...data,
+          createdAt: new Date('2026-05-08T04:00:00.000Z'),
+          id: 'batch-1',
+          items: data.items.create.map((item: any, index: number) => ({
+            ...item,
+            batchId: 'batch-1',
+            createdAt: new Date('2026-05-08T04:00:00.000Z'),
+            id: `item-${index + 1}`,
+          })),
+        };
+        batches.unshift(batch);
+        return batch;
+      },
+      findMany: async ({ where }: any = {}) =>
+        where?.gameId
+          ? batches.filter((batch) => batch.gameId === where.gameId)
+          : batches,
+      findUnique: async ({ where }: any) =>
+        batches.find((batch) => batch.id === where.id) ?? null,
+    } as any,
+    userAccount: {
+      update: async ({ data, where }: any) => {
+        const user = users.get(where.id);
+        if (!user) throw new Error('user not found');
+        user.availableBalanceLi += data.availableBalanceLi.increment;
+        return user;
+      },
+    } as any,
+    getAuditActions: () => auditLogs.map((row) => row.action),
+    getGame: (id: string) => games.get(id),
+    getRawEcpm: (id: string) => rawEcpms.get(id),
+    getUser: (id: string) => users.get(id),
+  };
+
+  return prisma;
+}
