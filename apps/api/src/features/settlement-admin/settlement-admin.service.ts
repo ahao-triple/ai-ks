@@ -101,158 +101,182 @@ export class SettlementAdminService {
   ): Promise<ConfirmSettlementResult> {
     this.assertValidRange(input);
 
-    return this.prisma.$transaction(async (tx) => {
-      const service = new SettlementAdminService(
-        tx as unknown as SettlementAdminPrisma,
-      );
-      const game = await service.findGameOrThrow(input.gameId);
-      const boundRows = await service.findPendingRows(input, true);
-      const unboundRows = await service.findPendingRows(input, false);
+    const game = await this.findGameOrThrow(input.gameId);
+    const boundRows = await this.findPendingRows(input, true);
+    const unboundRows = await this.findPendingRows(input, false);
 
-      if (boundRows.length === 0) {
-        throw new BadRequestException('No bound pending ECPM rows to settle');
-      }
+    if (boundRows.length === 0) {
+      throw new BadRequestException('No bound pending ECPM rows to settle');
+    }
 
-      const settlementAmountLi = sumDisplayAmount(boundRows);
-      if (game.budgetLi < settlementAmountLi) {
-        await tx.game.update({
-          data: {
-            settlementPaused: true,
-          },
-          where: {
-            id: game.id,
-          },
-        });
-        await tx.auditLog.create({
-          data: {
-            action: 'settlement.budget_insufficient',
-            actorId: input.operatorId,
-            actorType: input.operatorType,
-            metadata: {
-              budgetLi: game.budgetLi.toString(),
-              endedAt: input.endedAt.toISOString(),
-              requiredLi: settlementAmountLi.toString(),
-              settlementCount: boundRows.length,
-              startedAt: input.startedAt.toISOString(),
-              unboundCount: unboundRows.length,
-            },
-            targetId: game.id,
-            targetType: 'game',
-          },
-        });
-        throw new ConflictException('Game budget is insufficient');
-      }
-
-      const updated = await tx.rawEcpm.updateMany({
+    const settlementAmountLi = sumDisplayAmount(boundRows);
+    if (game.budgetLi < settlementAmountLi) {
+      await this.prisma.game.update({
         data: {
-          status: SettlementStatus.SETTLED,
-        },
-        where: {
-          id: {
-            in: boundRows.map((row) => row.id),
-          },
-          status: SettlementStatus.PENDING,
-        },
-      });
-
-      if (updated.count !== boundRows.length) {
-        await tx.auditLog.create({
-          data: {
-            action: 'settlement.conflict',
-            actorId: input.operatorId,
-            actorType: input.operatorType,
-            metadata: {
-              expectedCount: boundRows.length,
-              updatedCount: updated.count,
-            },
-            targetId: game.id,
-            targetType: 'game',
-          },
-        });
-        throw new ConflictException('Settlement data changed, preview again');
-      }
-
-      const batch = await tx.settlementBatch.create({
-        data: {
-          budgetAfterLi: game.budgetLi - settlementAmountLi,
-          budgetBeforeLi: game.budgetLi,
-          companyId: game.companyId,
-          configSnapshot: createSettlementConfigSnapshot(),
-          endedAt: input.endedAt,
-          gameId: game.id,
-          items: {
-            create: boundRows.map((row) => ({
-              displayAmountLi: row.displayAmountLi,
-              gameOpenIdId: row.openIdRecordId as string,
-              openId: row.openId,
-              rawEcpmId: row.id,
-              settlementAmountLi: row.displayAmountLi,
-              userId: row.openIdRecord?.userId as string,
-            })),
-          },
-          operatorId: input.operatorId,
-          operatorType: input.operatorType,
-          settledAmountLi: settlementAmountLi,
-          settledCount: boundRows.length,
-          startedAt: input.startedAt,
-          status: SettlementBatchStatus.CONFIRMED,
-          userCount: countUsers(boundRows),
-        },
-        include: {
-          items: true,
-        },
-      });
-
-      for (const [userId, amountLi] of sumByUser(boundRows)) {
-        await tx.userAccount.update({
-          data: {
-            availableBalanceLi: {
-              increment: amountLi,
-            },
-          },
-          where: {
-            id: userId,
-          },
-        });
-      }
-
-      await tx.game.update({
-        data: {
-          budgetLi: {
-            decrement: settlementAmountLi,
-          },
-          settlementPaused: false,
+          settlementPaused: true,
         },
         where: {
           id: game.id,
         },
       });
-
-      await tx.auditLog.create({
+      await this.prisma.auditLog.create({
         data: {
-          action: 'settlement.confirmed',
+          action: 'settlement.budget_insufficient',
           actorId: input.operatorId,
           actorType: input.operatorType,
           metadata: {
-            budgetAfterLi: (game.budgetLi - settlementAmountLi).toString(),
-            budgetBeforeLi: game.budgetLi.toString(),
+            budgetLi: game.budgetLi.toString(),
             endedAt: input.endedAt.toISOString(),
-            settledAmountLi: settlementAmountLi.toString(),
-            settledCount: boundRows.length,
+            requiredLi: settlementAmountLi.toString(),
+            settlementCount: boundRows.length,
             startedAt: input.startedAt.toISOString(),
             unboundCount: unboundRows.length,
-            userCount: countUsers(boundRows),
           },
-          targetId: batch.id,
-          targetType: 'settlement_batch',
+          targetId: game.id,
+          targetType: 'game',
         },
       });
+      throw new ConflictException('Game budget is insufficient');
+    }
 
-      return {
-        batch: batch as SettlementBatchWithItems,
-        items: batch.items,
-      };
-    });
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const service = new SettlementAdminService(
+          tx as unknown as SettlementAdminPrisma,
+        );
+        const game = await service.findGameOrThrow(input.gameId);
+        const boundRows = await service.findPendingRows(input, true);
+        const unboundRows = await service.findPendingRows(input, false);
+
+        if (boundRows.length === 0) {
+          throw new BadRequestException('No bound pending ECPM rows to settle');
+        }
+
+        const settlementAmountLi = sumDisplayAmount(boundRows);
+        if (game.budgetLi < settlementAmountLi) {
+          throw new ConflictException('Game budget is insufficient');
+        }
+
+        const updated = await tx.rawEcpm.updateMany({
+          data: {
+            status: SettlementStatus.SETTLED,
+          },
+          where: {
+            id: {
+              in: boundRows.map((row) => row.id),
+            },
+            status: SettlementStatus.PENDING,
+          },
+        });
+
+        if (updated.count !== boundRows.length) {
+          throw new SettlementConflictError(
+            game.id,
+            boundRows.length,
+            updated.count,
+          );
+        }
+
+        const batch = await tx.settlementBatch.create({
+          data: {
+            budgetAfterLi: game.budgetLi - settlementAmountLi,
+            budgetBeforeLi: game.budgetLi,
+            companyId: game.companyId,
+            configSnapshot: createSettlementConfigSnapshot(),
+            endedAt: input.endedAt,
+            gameId: game.id,
+            items: {
+              create: boundRows.map((row) => ({
+                displayAmountLi: row.displayAmountLi,
+                gameOpenIdId: row.openIdRecordId as string,
+                openId: row.openId,
+                rawEcpmId: row.id,
+                settlementAmountLi: row.displayAmountLi,
+                userId: row.openIdRecord?.userId as string,
+              })),
+            },
+            operatorId: input.operatorId,
+            operatorType: input.operatorType,
+            settledAmountLi: settlementAmountLi,
+            settledCount: boundRows.length,
+            startedAt: input.startedAt,
+            status: SettlementBatchStatus.CONFIRMED,
+            userCount: countUsers(boundRows),
+          },
+          include: {
+            items: true,
+          },
+        });
+
+        for (const [userId, amountLi] of sumByUser(boundRows)) {
+          await tx.userAccount.update({
+            data: {
+              availableBalanceLi: {
+                increment: amountLi,
+              },
+            },
+            where: {
+              id: userId,
+            },
+          });
+        }
+
+        await tx.game.update({
+          data: {
+            budgetLi: {
+              decrement: settlementAmountLi,
+            },
+            settlementPaused: false,
+          },
+          where: {
+            id: game.id,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            action: 'settlement.confirmed',
+            actorId: input.operatorId,
+            actorType: input.operatorType,
+            metadata: {
+              budgetAfterLi: (game.budgetLi - settlementAmountLi).toString(),
+              budgetBeforeLi: game.budgetLi.toString(),
+              endedAt: input.endedAt.toISOString(),
+              settledAmountLi: settlementAmountLi.toString(),
+              settledCount: boundRows.length,
+              startedAt: input.startedAt.toISOString(),
+              unboundCount: unboundRows.length,
+              userCount: countUsers(boundRows),
+            },
+            targetId: batch.id,
+            targetType: 'settlement_batch',
+          },
+        });
+
+        return {
+          batch: batch as SettlementBatchWithItems,
+          items: batch.items,
+        };
+      });
+    } catch (error) {
+      if (error instanceof SettlementConflictError) {
+        await this.prisma.auditLog.create({
+          data: {
+            action: 'settlement.conflict',
+            actorId: input.operatorId,
+            actorType: input.operatorType,
+            metadata: {
+              expectedCount: error.expectedCount,
+              updatedCount: error.updatedCount,
+            },
+            targetId: error.gameId,
+            targetType: 'game',
+          },
+        });
+        throw new ConflictException('Settlement data changed, preview again');
+      }
+      throw error;
+    }
   }
 
   listBatches(input: { gameId?: string } = {}) {
@@ -310,22 +334,42 @@ export class SettlementAdminService {
   }
 
   private findPendingRows(input: SettlementRangeInput, bound: boolean) {
-    const openIdRecordFilter = bound
+    const baseWhere = {
+      eventTime: {
+        gte: input.startedAt,
+        lte: input.endedAt,
+      },
+      gameId: input.gameId,
+      status: SettlementStatus.PENDING,
+    };
+
+    const relationWhere = bound
       ? {
-          is: input.userId
-            ? {
-                userId: input.userId,
-              }
-            : {
-                userId: {
-                  not: null,
+          openIdRecord: {
+            is: input.userId
+              ? {
+                  userId: input.userId,
+                }
+              : {
+                  userId: {
+                    not: null,
+                  },
                 },
-              },
+          },
         }
       : {
-          is: {
-            userId: null,
-          },
+          OR: [
+            {
+              openIdRecord: {
+                is: {
+                  userId: null,
+                },
+              },
+            },
+            {
+              openIdRecordId: null,
+            },
+          ],
         };
 
     return this.prisma.rawEcpm.findMany({
@@ -336,15 +380,20 @@ export class SettlementAdminService {
         eventTime: 'asc',
       },
       where: {
-        eventTime: {
-          gte: input.startedAt,
-          lte: input.endedAt,
-        },
-        gameId: input.gameId,
-        openIdRecord: openIdRecordFilter,
-        status: SettlementStatus.PENDING,
+        ...baseWhere,
+        ...relationWhere,
       },
     }) as Promise<PendingSettlementRow[]>;
+  }
+}
+
+class SettlementConflictError extends Error {
+  constructor(
+    readonly gameId: string,
+    readonly expectedCount: number,
+    readonly updatedCount: number,
+  ) {
+    super('Settlement update count mismatch');
   }
 }
 

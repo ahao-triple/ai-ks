@@ -30,7 +30,7 @@ describe('SettlementAdminService', () => {
       gameId: 'game-1',
       settlementAmountLi: 3000n,
       settlementCount: 2,
-      unboundCount: 1,
+      unboundCount: 2,
       userCount: 2,
     });
   });
@@ -62,6 +62,7 @@ describe('SettlementAdminService', () => {
   it('marks the game paused and rejects confirmation when budget is insufficient', async () => {
     const prisma = createFakePrisma({
       gameBudgetLi: 2500n,
+      initialSettlementPaused: false,
     });
     const service = new SettlementAdminService(prisma);
 
@@ -200,6 +201,7 @@ function createFakePrisma(
     gameBudgetLi?: bigint;
     includeBoundRows?: boolean;
     updateManyCountOverride?: number;
+    initialSettlementPaused?: boolean;
   } = {},
 ) {
   const games = new Map<string, FakeGame>([
@@ -209,7 +211,7 @@ function createFakePrisma(
         budgetLi: options.gameBudgetLi ?? 10000n,
         companyId: 'company-1',
         id: 'game-1',
-        settlementPaused: true,
+        settlementPaused: options.initialSettlementPaused ?? true,
       },
     ],
   ]);
@@ -258,28 +260,78 @@ function createFakePrisma(
     openIdRecordId: 'open-row-3',
     status: 'PENDING',
   });
+  rawEcpms.set('ecpm-no-open-id-record', {
+    displayAmountLi: 8000n,
+    eventTime: new Date('2026-05-08T03:30:00.000Z'),
+    gameId: 'game-1',
+    id: 'ecpm-no-open-id-record',
+    openId: 'open-no-record',
+    openIdRecord: null,
+    openIdRecordId: null,
+    status: 'PENDING',
+  });
 
   const batches: any[] = [];
   const auditLogs: any[] = [];
 
-  const findPendingRows = (where: any) =>
-    Array.from(rawEcpms.values()).filter((row) => {
+  const matchesWhere = (row: FakeRawEcpm, where: any): boolean => {
+    if (where.OR) {
+      return where.OR.some((branch: any) =>
+        matchesWhere(row, {
+          ...where,
+          OR: undefined,
+          ...branch,
+        }),
+      );
+    }
+
       if (row.gameId !== where.gameId) return false;
       if (row.status !== where.status) return false;
       if (row.eventTime < where.eventTime.gte) return false;
       if (row.eventTime > where.eventTime.lte) return false;
+      if (where.openIdRecordId === null && row.openIdRecordId !== null) {
+        return false;
+      }
       const relationFilter = where.openIdRecord?.is;
       if (relationFilter?.userId?.not === null) {
-        return row.openIdRecord?.userId !== null;
+        return row.openIdRecord !== null && row.openIdRecord.userId !== null;
       }
       if (relationFilter?.userId === null) {
-        return row.openIdRecord?.userId === null;
+        return row.openIdRecord !== null && row.openIdRecord.userId === null;
       }
       if (relationFilter?.userId) {
-        return row.openIdRecord?.userId === relationFilter.userId;
+        return (
+          row.openIdRecord !== null &&
+          row.openIdRecord.userId === relationFilter.userId
+        );
       }
       return true;
-    });
+  };
+
+  const findPendingRows = (where: any) =>
+    Array.from(rawEcpms.values()).filter((row) => matchesWhere(row, where));
+
+  const cloneGames = () =>
+    new Map(
+      Array.from(games.entries()).map(([key, value]) => [key, { ...value }]),
+    );
+  const cloneRawEcpms = () =>
+    new Map(
+      Array.from(rawEcpms.entries()).map(([key, value]) => [
+        key,
+        { ...value },
+      ]),
+    );
+  const cloneUsers = () =>
+    new Map(
+      Array.from(users.entries()).map(([key, value]) => [key, { ...value }]),
+    );
+  const restoreMap = <T>(target: Map<string, T>, snapshot: Map<string, T>) => {
+    target.clear();
+    for (const [key, value] of snapshot) {
+      target.set(key, value);
+    }
+  };
 
   const prisma: SettlementAdminPrisma & {
     getAuditActions(): string[];
@@ -287,7 +339,26 @@ function createFakePrisma(
     getRawEcpm(id: string): FakeRawEcpm | undefined;
     getUser(id: string): FakeUser | undefined;
   } = {
-    $transaction: async (callback: any) => callback(prisma),
+    $transaction: async (callback: any) => {
+      const gameSnapshot = cloneGames();
+      const rawEcpmSnapshot = cloneRawEcpms();
+      const userSnapshot = cloneUsers();
+      const batchSnapshot = [...batches];
+      const auditLogSnapshot = [...auditLogs];
+
+      try {
+        return await callback(prisma);
+      } catch (error) {
+        restoreMap(games, gameSnapshot);
+        restoreMap(rawEcpms, rawEcpmSnapshot);
+        restoreMap(users, userSnapshot);
+        batches.length = 0;
+        batches.push(...batchSnapshot);
+        auditLogs.length = 0;
+        auditLogs.push(...auditLogSnapshot);
+        throw error;
+      }
+    },
     auditLog: {
       create: async ({ data }: any) => {
         auditLogs.push(data);
