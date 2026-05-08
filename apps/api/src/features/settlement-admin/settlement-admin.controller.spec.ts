@@ -20,6 +20,38 @@ describe('parseSettlementRange', () => {
     });
   });
 
+  it('trims valid padded game and user ids', () => {
+    expect(
+      parseSettlementRange({
+        endDate: '2026-05-08',
+        gameId: ' game-1 ',
+        startDate: '2026-05-08',
+        userId: ' user-1 ',
+      }),
+    ).toMatchObject({
+      gameId: 'game-1',
+      userId: 'user-1',
+    });
+  });
+
+  it('rejects whitespace-only ids', () => {
+    expect(() =>
+      parseSettlementRange({
+        endDate: '2026-05-08',
+        gameId: '   ',
+        startDate: '2026-05-08',
+      }),
+    ).toThrow(BadRequestException);
+    expect(() =>
+      parseSettlementRange({
+        endDate: '2026-05-08',
+        gameId: 'game-1',
+        startDate: '2026-05-08',
+        userId: '   ',
+      }),
+    ).toThrow(BadRequestException);
+  });
+
   it('rejects invalid calendar dates', () => {
     expect(() =>
       parseSettlementRange({
@@ -52,13 +84,15 @@ describe('parseSettlementRange', () => {
 
 describe('SettlementAdminController', () => {
   it('presents preview money and counts', async () => {
-    const controller = new SettlementAdminController(createService());
+    const service = createService();
+    const controller = new SettlementAdminController(service);
 
     await expect(
       controller.preview({
         endDate: '2026-05-08',
-        gameId: 'game-1',
+        gameId: ' game-1 ',
         startDate: '2026-05-08',
+        userId: ' user-1 ',
       }),
     ).resolves.toMatchObject({
       budgetAfter: {
@@ -73,6 +107,12 @@ describe('SettlementAdminController', () => {
       settlementCount: 2,
       userCount: 2,
     });
+    expect(service.lastPreviewInput).toEqual({
+      endedAt: new Date('2026-05-08T23:59:59.999Z'),
+      gameId: 'game-1',
+      startedAt: new Date('2026-05-08T00:00:00.000Z'),
+      userId: 'user-1',
+    });
   });
 
   it('passes current admin into confirmation', async () => {
@@ -86,21 +126,36 @@ describe('SettlementAdminController', () => {
       },
       {
         endDate: '2026-05-08',
-        gameId: 'game-1',
+        gameId: ' game-1 ',
         startDate: '2026-05-08',
+        userId: ' user-1 ',
       },
     );
 
     expect(result.batch.operatorId).toBe('admin');
     expect(result.batch.operatorType).toBe('SUPER_ADMIN');
-    expect(service.lastOperatorId).toBe('admin');
-    expect(service.lastOperatorType).toBe('SUPER_ADMIN');
+    expect(result.batch).not.toHaveProperty('items');
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        id: 'item-1',
+      }),
+    ]);
+    expect(service.lastConfirmInput).toEqual({
+      endedAt: new Date('2026-05-08T23:59:59.999Z'),
+      gameId: 'game-1',
+      operatorId: 'admin',
+      operatorType: 'SUPER_ADMIN',
+      startedAt: new Date('2026-05-08T00:00:00.000Z'),
+      userId: 'user-1',
+    });
   });
 
   it('presents batch lists with money and ISO dates', async () => {
-    const controller = new SettlementAdminController(createService());
+    const service = createService();
+    const controller = new SettlementAdminController(service);
+    const result = await controller.list(' game-1 ');
 
-    await expect(controller.list(' game-1 ')).resolves.toEqual({
+    expect(result).toEqual({
       batches: [
         expect.objectContaining({
           budgetBefore: {
@@ -109,14 +164,6 @@ describe('SettlementAdminController', () => {
           },
           createdAt: '2026-05-08T04:00:00.000Z',
           id: 'batch-1',
-          items: [
-            expect.objectContaining({
-              settlementAmount: {
-                li: '1000',
-                yuan: '1.00',
-              },
-            }),
-          ],
           settledAmount: {
             li: '3000',
             yuan: '3.00',
@@ -124,12 +171,18 @@ describe('SettlementAdminController', () => {
         }),
       ],
     });
+    expect(result.batches[0]).not.toHaveProperty('items');
+    expect(service.lastListInput).toEqual({
+      gameId: 'game-1',
+    });
   });
 
   it('presents batch details with item money and ISO dates', async () => {
-    const controller = new SettlementAdminController(createService());
+    const service = createService();
+    const controller = new SettlementAdminController(service);
+    const result = await controller.detail('batch-1');
 
-    await expect(controller.detail('batch-1')).resolves.toEqual({
+    expect(result).toEqual({
       batch: expect.objectContaining({
         endedAt: '2026-05-08T23:59:59.999Z',
         id: 'batch-1',
@@ -150,44 +203,52 @@ describe('SettlementAdminController', () => {
         }),
       ],
     });
+    expect(result.batch).not.toHaveProperty('items');
+    expect(service.lastGetBatchId).toBe('batch-1');
   });
 });
 
 function createService() {
   const service = {
-    lastOperatorId: '',
-    lastOperatorType: '',
     confirmSettlement: async (input: any) => {
+      service.lastConfirmInput = input;
       const batch = createBatch({
         endedAt: input.endedAt,
         operatorId: input.operatorId,
         operatorType: input.operatorType,
         startedAt: input.startedAt,
       });
-      service.lastOperatorId = input.operatorId;
-      service.lastOperatorType = input.operatorType;
       return {
         batch,
         items: batch.items,
       };
     },
-    getBatch: async () => createBatch(),
+    getBatch: async (batchId: string) => {
+      service.lastGetBatchId = batchId;
+      return createBatch();
+    },
+    lastConfirmInput: undefined as any,
+    lastGetBatchId: '',
+    lastListInput: undefined as any,
+    lastPreviewInput: undefined as any,
     listBatches: async (input: { gameId?: string }) => {
-      service.lastGameId = input.gameId ?? '';
+      service.lastListInput = input;
       return [createBatch()];
     },
-    lastGameId: '',
-    previewSettlement: async () => ({
-      budgetAfterLi: 7000n,
-      budgetBeforeLi: 10000n,
-      canConfirm: true,
-      companyId: 'company-1',
-      gameId: 'game-1',
-      settlementAmountLi: 3000n,
-      settlementCount: 2,
-      unboundCount: 1,
-      userCount: 2,
-    }),
+    previewSettlement: async (input: any) => {
+      service.lastPreviewInput = input;
+      return {
+        budgetAfterLi: 7000n,
+        budgetBeforeLi: 10000n,
+        canConfirm: true,
+        companyId: 'company-1',
+        gameId: 'game-1',
+        settlementAmountLi: 3000n,
+        settlementCount: 2,
+        unboundCount: 1,
+        userCount: 2,
+      };
+    },
   };
 
   return service as any;

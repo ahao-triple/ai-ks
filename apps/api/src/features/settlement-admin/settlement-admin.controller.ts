@@ -20,12 +20,13 @@ import {
 } from './settlement-admin.service';
 
 const dateOnlySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const idSchema = z.string().trim().min(1);
 
 const settlementRangeSchema = z.object({
   endDate: dateOnlySchema,
-  gameId: z.string().min(1),
+  gameId: idSchema,
   startDate: dateOnlySchema,
-  userId: z.string().min(1).optional(),
+  userId: idSchema.optional(),
 });
 
 @Controller('admin/settlements')
@@ -146,7 +147,6 @@ function presentSettlementBatch(batch: SettlementBatchWithItems) {
     endedAt: batch.endedAt.toISOString(),
     gameId: batch.gameId,
     id: batch.id,
-    items: batch.items.map(presentSettlementItem),
     operatorId: batch.operatorId,
     operatorType: batch.operatorType,
     settledAmount: presentMoneyLi(batch.settledAmountLi),
