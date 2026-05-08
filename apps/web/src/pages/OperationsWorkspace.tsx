@@ -1,4 +1,4 @@
-import { KeyRound, RefreshCw, Send } from 'lucide-react';
+import { KeyRound, RefreshCw, Send, Settings, X } from 'lucide-react';
 import {
   AuditLogTable,
   EcpmTable,
@@ -17,6 +17,7 @@ import type {
   AdminSettlementPreview,
   DemoGame,
   EcpmRefreshResult,
+  EcpmLookbackHours,
   GameSessionResult,
   KuaishouEcpmSyncJob,
   KuaishouTokenStatusResult,
@@ -30,6 +31,9 @@ export type OperationsWorkspaceBusyAction =
   | 'company-balance'
   | 'company-create'
   | 'game-budget'
+  | 'game-config'
+  | 'game-config-budget'
+  | 'game-config-ecpm-refresh'
   | 'game-create'
   | 'kuaishou-authorize'
   | 'kuaishou-ecpm-jobs'
@@ -45,6 +49,16 @@ export type OperationsWorkspaceBusyAction =
   | `pay-failed-${string}`
   | `pay-success-${string}`;
 
+type GameConfigSection = 'audit' | 'basic' | 'budget' | 'ecpm';
+
+type GameConfigDraft = {
+  ecpmAutoSyncEnabled: boolean;
+  ecpmAutoSyncIntervalHours: EcpmLookbackHours;
+  gameSecret: string;
+  name: string;
+  settlementPaused: boolean;
+};
+
 export interface OperationsWorkspaceProps {
   adminCompanies: AdminCompany[];
   adminGames: AdminGame[];
@@ -59,6 +73,11 @@ export interface OperationsWorkspaceProps {
   budgetGameId: string;
   budgetReason: string;
   busyAction: OperationsWorkspaceBusyAction;
+  configBudgetAmountYuan: string;
+  configBudgetReason: string;
+  configEcpmLookbackHours: EcpmLookbackHours;
+  configGameDraft?: GameConfigDraft;
+  configSection: GameConfigSection;
   gameAppId: string;
   games: DemoGame[];
   jsCode: string;
@@ -81,8 +100,14 @@ export interface OperationsWorkspaceProps {
   onBudgetAmountChange(value: string): void;
   onBudgetGameIdChange(value: string): void;
   onBudgetReasonChange(value: string): void;
+  onCloseGameConfig(): void;
   onCloseWithdrawal(batchId: string): void;
   onConfirmSettlement(): void;
+  onConfigBudgetAmountChange(value: string): void;
+  onConfigBudgetReasonChange(value: string): void;
+  onConfigEcpmLookbackHoursChange(value: EcpmLookbackHours): void;
+  onConfigGameDraftChange(patch: Partial<GameConfigDraft>): void;
+  onConfigSectionChange(section: GameConfigSection): void;
   onCreateCompany(): void;
   onCreateGame(): void;
   onCreateSession(): void;
@@ -106,12 +131,18 @@ export interface OperationsWorkspaceProps {
   onNewGameSecretChange(value: string): void;
   onPayWithdrawal(batchId: string, result: 'failed' | 'success'): void;
   onPreviewSettlement(): void;
+  onOpenGameConfig(gameId: string): void;
+  onRefreshConfigGameEcpm(): void;
   onRefreshEcpm(): void;
+  onSaveGameConfig(): void;
   onSettlementEndDateChange(value: string): void;
   onSettlementStartDateChange(value: string): void;
   onSettlementUserIdChange(value: string): void;
+  onSubmitConfigBudget(): void;
   refreshResult?: EcpmRefreshResult;
   sampleJsCodes: string[];
+  selectedConfigGame?: AdminGame;
+  selectedConfigGameId: string;
   selectedGame?: DemoGame;
   selectedWithdrawalDetail?: AdminWithdrawalDetailResult;
   settlementBatches: AdminSettlementBatch[];
@@ -170,6 +201,31 @@ function formatTokenDate(value?: string | null) {
   return value.replace('T', ' ').slice(0, 16);
 }
 
+const ecpmLookbackOptions: EcpmLookbackHours[] = [1, 3, 6, 12, 24];
+
+function formatDateTime(value?: string | null) {
+  if (!value) {
+    return '-';
+  }
+
+  return value.replace('T', ' ').slice(0, 16);
+}
+
+function formatSyncRange(job: KuaishouEcpmSyncJob) {
+  if (job.startedDataHour && job.endedDataHour) {
+    return `${formatDateTime(job.startedDataHour)} - ${formatDateTime(
+      job.endedDataHour,
+    )}`;
+  }
+
+  return job.dataHour;
+}
+
+function parseEcpmLookback(value: string): EcpmLookbackHours {
+  const parsed = Number(value) as EcpmLookbackHours;
+  return ecpmLookbackOptions.includes(parsed) ? parsed : 3;
+}
+
 export function OperationsWorkspace({
   adminCompanies,
   adminGames,
@@ -184,6 +240,11 @@ export function OperationsWorkspace({
   budgetGameId,
   budgetReason,
   busyAction,
+  configBudgetAmountYuan,
+  configBudgetReason,
+  configEcpmLookbackHours,
+  configGameDraft,
+  configSection,
   gameAppId,
   games,
   jsCode,
@@ -206,8 +267,14 @@ export function OperationsWorkspace({
   onBudgetAmountChange,
   onBudgetGameIdChange,
   onBudgetReasonChange,
+  onCloseGameConfig,
   onCloseWithdrawal,
   onConfirmSettlement,
+  onConfigBudgetAmountChange,
+  onConfigBudgetReasonChange,
+  onConfigEcpmLookbackHoursChange,
+  onConfigGameDraftChange,
+  onConfigSectionChange,
   onCreateCompany,
   onCreateGame,
   onCreateSession,
@@ -231,12 +298,18 @@ export function OperationsWorkspace({
   onNewGameSecretChange,
   onPayWithdrawal,
   onPreviewSettlement,
+  onOpenGameConfig,
+  onRefreshConfigGameEcpm,
   onRefreshEcpm,
+  onSaveGameConfig,
   onSettlementEndDateChange,
   onSettlementStartDateChange,
   onSettlementUserIdChange,
+  onSubmitConfigBudget,
   refreshResult,
   sampleJsCodes,
+  selectedConfigGame,
+  selectedConfigGameId,
   selectedGame,
   selectedWithdrawalDetail,
   settlementBatches,
@@ -257,6 +330,8 @@ export function OperationsWorkspace({
     newGameSecret.trim().length > 0;
   const canAllocateBudget =
     budgetGameId.trim().length > 0 && budgetAmountYuan.trim().length > 0;
+  const canAllocateConfigBudget =
+    Boolean(selectedConfigGame) && configBudgetAmountYuan.trim().length > 0;
   const canAuthorizeKuaishou =
     kuaishouAppId.trim().length > 0 &&
     kuaishouAuthCode.trim().length > 0 &&
@@ -335,6 +410,7 @@ export function OperationsWorkspace({
                 <th>AppID</th>
                 <th>预算</th>
                 <th>状态</th>
+                <th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -349,11 +425,24 @@ export function OperationsWorkspace({
                       {game.settlementPaused ? '已暂停' : '可结算'}
                     </StatusBadge>
                   </td>
+                  <td>
+                    <Button
+                      compact
+                      disabled={workspaceBusy}
+                      icon={<Settings size={14} />}
+                      onClick={() => onOpenGameConfig(game.id)}
+                      variant={
+                        selectedConfigGameId === game.id ? 'primary' : 'secondary'
+                      }
+                    >
+                      配置
+                    </Button>
+                  </td>
                 </tr>
               ))}
               {adminGames.length === 0 ? (
                 <tr>
-                  <td colSpan={5}>暂无游戏</td>
+                  <td colSpan={6}>暂无游戏</td>
                 </tr>
               ) : null}
             </tbody>
@@ -505,6 +594,30 @@ export function OperationsWorkspace({
           </Button>
         </div>
       </Panel>
+
+      {selectedConfigGame && configGameDraft ? (
+        <GameConfigView
+          budgetAmountYuan={configBudgetAmountYuan}
+          budgetReason={configBudgetReason}
+          busyAction={busyAction}
+          canAllocateBudget={canAllocateConfigBudget}
+          draft={configGameDraft}
+          ecpmLookbackHours={configEcpmLookbackHours}
+          game={selectedConfigGame}
+          jobs={kuaishouEcpmJobs}
+          onBudgetAmountChange={onConfigBudgetAmountChange}
+          onBudgetReasonChange={onConfigBudgetReasonChange}
+          onClose={onCloseGameConfig}
+          onDraftChange={onConfigGameDraftChange}
+          onEcpmLookbackHoursChange={onConfigEcpmLookbackHoursChange}
+          onRefreshEcpm={onRefreshConfigGameEcpm}
+          onSave={onSaveGameConfig}
+          onSectionChange={onConfigSectionChange}
+          onSubmitBudget={onSubmitConfigBudget}
+          section={configSection}
+          workspaceBusy={workspaceBusy}
+        />
+      ) : null}
 
       <Panel
         actions={
@@ -715,7 +828,7 @@ export function OperationsWorkspace({
                     </StatusBadge>
                   </td>
                   <td>{job.gameAppId}</td>
-                  <td>{job.dataHour}</td>
+                  <td>{formatSyncRange(job)}</td>
                   <td>{job.requestedOpenIdCount}</td>
                   <td>{job.savedCount}</td>
                   <td>{job.source ?? '-'}</td>
@@ -898,6 +1011,342 @@ export function OperationsWorkspace({
         <AuditLogTable rows={auditLogs} />
       </Panel>
     </div>
+  );
+}
+
+function GameConfigView({
+  budgetAmountYuan,
+  budgetReason,
+  busyAction,
+  canAllocateBudget,
+  draft,
+  ecpmLookbackHours,
+  game,
+  jobs,
+  onBudgetAmountChange,
+  onBudgetReasonChange,
+  onClose,
+  onDraftChange,
+  onEcpmLookbackHoursChange,
+  onRefreshEcpm,
+  onSave,
+  onSectionChange,
+  onSubmitBudget,
+  section,
+  workspaceBusy,
+}: {
+  budgetAmountYuan: string;
+  budgetReason: string;
+  busyAction: OperationsWorkspaceBusyAction;
+  canAllocateBudget: boolean;
+  draft: GameConfigDraft;
+  ecpmLookbackHours: EcpmLookbackHours;
+  game: AdminGame;
+  jobs: KuaishouEcpmSyncJob[];
+  onBudgetAmountChange(value: string): void;
+  onBudgetReasonChange(value: string): void;
+  onClose(): void;
+  onDraftChange(patch: Partial<GameConfigDraft>): void;
+  onEcpmLookbackHoursChange(value: EcpmLookbackHours): void;
+  onRefreshEcpm(): void;
+  onSave(): void;
+  onSectionChange(section: GameConfigSection): void;
+  onSubmitBudget(): void;
+  section: GameConfigSection;
+  workspaceBusy: boolean;
+}) {
+  const gameJobs = jobs.filter(
+    (job) => job.gameAppId === game.gameAppId || job.gameAppId === game.id,
+  );
+  const sections: Array<{ key: GameConfigSection; label: string }> = [
+    { key: 'basic', label: '基础信息' },
+    { key: 'budget', label: '预算与结算' },
+    { key: 'ecpm', label: 'ECPM 同步' },
+    { key: 'audit', label: '审计/任务历史' },
+  ];
+
+  return (
+    <Panel
+      actions={
+        <Button
+          compact
+          disabled={workspaceBusy}
+          icon={<X size={14} />}
+          onClick={onClose}
+          variant="ghost"
+        >
+          关闭
+        </Button>
+      }
+      description={`${game.name} / ${game.gameAppId}`}
+      title="游戏配置"
+    >
+      <div className="game-config-shell">
+        <nav className="game-config-nav" aria-label="游戏配置模块">
+          {sections.map((item) => (
+            <button
+              aria-current={section === item.key ? 'page' : undefined}
+              className="game-config-nav-item"
+              disabled={workspaceBusy}
+              key={item.key}
+              onClick={() => onSectionChange(item.key)}
+              type="button"
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <div className="game-config-content">
+          {section === 'basic' ? (
+            <section className="game-config-section">
+              <div className="section-copy">
+                <h3>基础信息</h3>
+                <p>修改游戏展示名称和 game_secret，保存后会影响后续游戏端登录校验。</p>
+              </div>
+              <ReadoutGrid
+                items={[
+                  { label: 'game_app_id', value: game.gameAppId },
+                  { label: '所属公司', value: game.companyName },
+                ]}
+              />
+              <div className="query-form">
+                <InputField
+                  disabled={workspaceBusy}
+                  label="游戏名称"
+                  onChange={(value) => onDraftChange({ name: value })}
+                  value={draft.name}
+                />
+                <InputField
+                  disabled={workspaceBusy}
+                  label="game_secret"
+                  onChange={(value) => onDraftChange({ gameSecret: value })}
+                  value={draft.gameSecret}
+                />
+                <Button disabled={workspaceBusy} onClick={onSave}>
+                  {busyAction === 'game-config' ? '保存中' : '保存基础信息'}
+                </Button>
+              </div>
+            </section>
+          ) : null}
+
+          {section === 'budget' ? (
+            <section className="game-config-section">
+              <div className="section-copy">
+                <h3>预算与结算</h3>
+                <p>预算用于结算扣减；暂停结算后，该游戏不会进入管理员确认结算流程。</p>
+              </div>
+              <ReadoutGrid
+                items={[
+                  { label: '当前预算', value: formatMoney(game.budget) },
+                  { label: '所属公司', value: game.companyName },
+                  {
+                    label: '结算状态',
+                    value: draft.settlementPaused ? '已暂停' : '可结算',
+                  },
+                ]}
+              />
+              <label className="setting-toggle">
+                <input
+                  checked={draft.settlementPaused}
+                  disabled={workspaceBusy}
+                  onChange={(event) =>
+                    onDraftChange({
+                      settlementPaused: event.currentTarget.checked,
+                    })
+                  }
+                  type="checkbox"
+                />
+                <span>暂停结算</span>
+              </label>
+              <div className="query-form">
+                <InputField
+                  disabled={workspaceBusy}
+                  label="分配金额"
+                  onChange={onBudgetAmountChange}
+                  placeholder="例如 50.00"
+                  value={budgetAmountYuan}
+                />
+                <InputField
+                  disabled={workspaceBusy}
+                  label="分配原因"
+                  onChange={onBudgetReasonChange}
+                  placeholder="可选"
+                  value={budgetReason}
+                />
+                <Button
+                  disabled={workspaceBusy || !canAllocateBudget}
+                  onClick={onSubmitBudget}
+                  variant="secondary"
+                >
+                  {busyAction === 'game-config-budget'
+                    ? '提交中'
+                    : '分配预算'}
+                </Button>
+                <Button disabled={workspaceBusy} onClick={onSave}>
+                  {busyAction === 'game-config' ? '保存中' : '保存结算配置'}
+                </Button>
+              </div>
+            </section>
+          ) : null}
+
+          {section === 'ecpm' ? (
+            <section className="game-config-section">
+              <div className="section-copy">
+                <h3>ECPM 同步</h3>
+                <p>
+                  自动同步默认关闭，只有管理员启用后才会运行。默认频率为 3 小时，
+                  只能选择 1/3/6/12/24 小时。
+                </p>
+                <p>
+                  自动同步使用配置频率对应的准确时间窗口，不会扩大到任意更长范围；
+                  失败不会自动重试，需要管理员手动处理。
+                </p>
+                <p>手动刷新可选择回看 1/3/6/12/24 小时。</p>
+              </div>
+              <div className="button-row">
+                <StatusBadge tone={draft.ecpmAutoSyncEnabled ? 'success' : 'muted'}>
+                  {draft.ecpmAutoSyncEnabled ? '自动同步已启用' : '默认关闭'}
+                </StatusBadge>
+                <StatusBadge tone="warning">失败不会自动重试</StatusBadge>
+              </div>
+              <ReadoutGrid
+                items={[
+                  { label: '默认频率', value: '3 小时' },
+                  {
+                    label: '配置频率',
+                    value: `${draft.ecpmAutoSyncIntervalHours} 小时`,
+                  },
+                  {
+                    label: '上次运行',
+                    value: formatDateTime(game.ecpmAutoSyncLastRunAt),
+                  },
+                  {
+                    label: '下次运行',
+                    value: formatDateTime(game.ecpmAutoSyncNextRunAt),
+                  },
+                ]}
+              />
+              <div className="query-form">
+                <label className="setting-toggle">
+                  <input
+                    checked={draft.ecpmAutoSyncEnabled}
+                    disabled={workspaceBusy}
+                    onChange={(event) =>
+                      onDraftChange({
+                        ecpmAutoSyncEnabled: event.currentTarget.checked,
+                      })
+                    }
+                    type="checkbox"
+                  />
+                  <span>启用自动同步</span>
+                </label>
+                <label className="ui-input-field">
+                  <span className="ui-input-label">自动同步频率</span>
+                  <span className="ui-input-control">
+                    <select
+                      disabled={workspaceBusy}
+                      onChange={(event) =>
+                        onDraftChange({
+                          ecpmAutoSyncIntervalHours: parseEcpmLookback(
+                            event.currentTarget.value,
+                          ),
+                        })
+                      }
+                      value={draft.ecpmAutoSyncIntervalHours}
+                    >
+                      {ecpmLookbackOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option} 小时
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                </label>
+                <Button disabled={workspaceBusy} onClick={onSave}>
+                  {busyAction === 'game-config' ? '保存中' : '保存同步配置'}
+                </Button>
+              </div>
+              <div className="query-form">
+                <label className="ui-input-field">
+                  <span className="ui-input-label">手动回看范围</span>
+                  <span className="ui-input-control">
+                    <select
+                      disabled={workspaceBusy}
+                      onChange={(event) =>
+                        onEcpmLookbackHoursChange(
+                          parseEcpmLookback(event.currentTarget.value),
+                        )
+                      }
+                      value={ecpmLookbackHours}
+                    >
+                      {ecpmLookbackOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option} 小时
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                </label>
+                <Button
+                  disabled={workspaceBusy}
+                  icon={<RefreshCw size={16} />}
+                  onClick={onRefreshEcpm}
+                  variant="secondary"
+                >
+                  {busyAction === 'game-config-ecpm-refresh'
+                    ? '刷新中'
+                    : '手动刷新 ECPM'}
+                </Button>
+              </div>
+            </section>
+          ) : null}
+
+          {section === 'audit' ? (
+            <section className="game-config-section">
+              <div className="section-copy">
+                <h3>审计/任务历史</h3>
+                <p>展示当前游戏的 ECPM 同步任务，优先使用任务返回的开始和结束数据小时。</p>
+              </div>
+              <div className="data-table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>任务</th>
+                      <th>状态</th>
+                      <th>同步范围</th>
+                      <th>open_id</th>
+                      <th>写入</th>
+                      <th>错误</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gameJobs.map((job) => (
+                      <tr key={job.id}>
+                        <td>{job.id}</td>
+                        <td>
+                          <StatusBadge tone={syncJobTone(job.status)}>
+                            {job.status}
+                          </StatusBadge>
+                        </td>
+                        <td>{formatSyncRange(job)}</td>
+                        <td>{job.requestedOpenIdCount}</td>
+                        <td>{job.savedCount}</td>
+                        <td>{job.errorMessage ?? '-'}</td>
+                      </tr>
+                    ))}
+                    {gameJobs.length === 0 ? (
+                      <tr>
+                        <td colSpan={6}>暂无该游戏同步任务</td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
+        </div>
+      </div>
+    </Panel>
   );
 }
 

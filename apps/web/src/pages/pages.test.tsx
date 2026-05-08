@@ -131,6 +131,11 @@ function operationsWorkspaceProps(
     budgetGameId: '',
     budgetReason: '',
     busyAction: '',
+    configBudgetAmountYuan: '',
+    configBudgetReason: '',
+    configEcpmLookbackHours: 3,
+    configGameDraft: undefined,
+    configSection: 'basic',
     gameAppId: 'game-1',
     games: [],
     jsCode: '',
@@ -154,9 +159,15 @@ function operationsWorkspaceProps(
     onBudgetReasonChange: () => undefined,
     onCloseWithdrawal: () => undefined,
     onConfirmSettlement: () => undefined,
+    onCloseGameConfig: () => undefined,
     onCreateCompany: () => undefined,
     onCreateGame: () => undefined,
     onCreateSession: () => undefined,
+    onConfigBudgetAmountChange: () => undefined,
+    onConfigBudgetReasonChange: () => undefined,
+    onConfigEcpmLookbackHoursChange: () => undefined,
+    onConfigGameDraftChange: () => undefined,
+    onConfigSectionChange: () => undefined,
     onGameChange: () => undefined,
     onJsCodeChange: () => undefined,
     onKuaishouAppIdChange: () => undefined,
@@ -178,10 +189,16 @@ function operationsWorkspaceProps(
     onPayWithdrawal: () => undefined,
     onPreviewSettlement: () => undefined,
     onRefreshEcpm: () => undefined,
+    onRefreshConfigGameEcpm: () => undefined,
+    onSaveGameConfig: () => undefined,
     onSettlementEndDateChange: () => undefined,
     onSettlementStartDateChange: () => undefined,
     onSettlementUserIdChange: () => undefined,
+    onOpenGameConfig: () => undefined,
+    onSubmitConfigBudget: () => undefined,
     sampleJsCodes: [],
+    selectedConfigGame: undefined,
+    selectedConfigGameId: '',
     settlementBatches: [],
     settlementEndDate: '2026-05-08',
     settlementStartDate: '2026-05-08',
@@ -421,6 +438,55 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('充值公司余额');
     expect(html).toContain('创建游戏');
     expect(html).toContain('分配游戏预算');
+  });
+
+  it('renders a config button for each admin game', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          adminGames: [
+            adminGame,
+            {
+              ...adminGame,
+              gameAppId: 'ks_game_002',
+              id: 'game-2',
+              name: 'Puzzle',
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(html.match(/配置/g)).toHaveLength(2);
+  });
+
+  it('renders selected game config modules and ecpm sync policy copy', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          adminGames: [adminGame],
+          configGameDraft: {
+            ecpmAutoSyncEnabled: false,
+            ecpmAutoSyncIntervalHours: 3,
+            gameSecret: 'secret-1',
+            name: 'Runner',
+            settlementPaused: true,
+          },
+          configSection: 'ecpm',
+          kuaishouEcpmJobs: [kuaishouEcpmJob],
+          selectedConfigGame: adminGame,
+          selectedConfigGameId: 'game-1',
+        })}
+      />,
+    );
+
+    expect(html).toContain('游戏配置');
+    expect(html).toContain('基础信息');
+    expect(html).toContain('预算与结算');
+    expect(html).toContain('ECPM 同步');
+    expect(html).toContain('审计/任务历史');
+    expect(html).toContain('默认关闭');
+    expect(html).toContain('失败不会自动重试');
   });
 
   it('renders kuaishou platform authorization status and controls', () => {

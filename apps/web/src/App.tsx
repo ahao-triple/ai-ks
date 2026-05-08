@@ -43,6 +43,7 @@ import type {
   AuditLogRow,
   DemoGame,
   EarningsResult,
+  EcpmLookbackHours,
   EcpmRefreshResult,
   GameSessionResult,
   IntegrationStatus,
@@ -65,6 +66,16 @@ type SettlementRangeState = {
   settlementPreview?: AdminSettlementPreview;
   settlementStartDate: string;
   settlementUserId: string;
+};
+
+type GameConfigSection = 'audit' | 'basic' | 'budget' | 'ecpm';
+
+type GameConfigDraft = {
+  ecpmAutoSyncEnabled: boolean;
+  ecpmAutoSyncIntervalHours: EcpmLookbackHours;
+  gameSecret: string;
+  name: string;
+  settlementPaused: boolean;
 };
 
 function todayDateText() {
@@ -137,6 +148,16 @@ export function getDefaultKuaishouAppId(
   return currentAppId.trim() || status?.appId || '';
 }
 
+function buildGameConfigDraft(game: AdminGame): GameConfigDraft {
+  return {
+    ecpmAutoSyncEnabled: game.ecpmAutoSyncEnabled,
+    ecpmAutoSyncIntervalHours: game.ecpmAutoSyncIntervalHours,
+    gameSecret: game.gameSecret,
+    name: game.name,
+    settlementPaused: game.settlementPaused,
+  };
+}
+
 export function shouldApplySettlementBatchResponse(
   requestVersion: number,
   currentVersion: number,
@@ -194,6 +215,14 @@ export function App() {
   const [budgetGameId, setBudgetGameId] = useState('');
   const [budgetAmountYuan, setBudgetAmountYuan] = useState('');
   const [budgetReason, setBudgetReason] = useState('');
+  const [selectedConfigGameId, setSelectedConfigGameId] = useState('');
+  const [configSection, setConfigSection] =
+    useState<GameConfigSection>('basic');
+  const [configGameDraft, setConfigGameDraft] = useState<GameConfigDraft>();
+  const [configBudgetAmountYuan, setConfigBudgetAmountYuan] = useState('');
+  const [configBudgetReason, setConfigBudgetReason] = useState('');
+  const [configEcpmLookbackHours, setConfigEcpmLookbackHours] =
+    useState<EcpmLookbackHours>(3);
   const [accountEarnings, setAccountEarnings] =
     useState<AccountEarningsResult>();
   const [alipayAccount, setAlipayAccount] = useState('');
@@ -230,6 +259,10 @@ export function App() {
   const selectedGame = useMemo(
     () => games.find((game) => game.gameAppId === gameAppId),
     [gameAppId, games],
+  );
+  const selectedConfigGame = useMemo(
+    () => adminGames.find((game) => game.id === selectedConfigGameId),
+    [adminGames, selectedConfigGameId],
   );
   const modeText =
     status?.kuaishouApiMode === 'mock'
@@ -291,6 +324,17 @@ export function App() {
       isCurrentSessionVersion(jobSessionVersion),
     );
   }, [adminAccessToken, appSession.mode]);
+
+  useEffect(() => {
+    if (!selectedConfigGameId) {
+      return;
+    }
+
+    const game = adminGames.find((row) => row.id === selectedConfigGameId);
+    if (!game) {
+      closeGameConfig();
+    }
+  }, [adminGames, selectedConfigGameId]);
 
   function bumpSessionVersion() {
     sessionVersionRef.current += 1;
@@ -683,6 +727,16 @@ export function App() {
     setBudgetGameId('');
     setBudgetAmountYuan('');
     setBudgetReason('');
+    clearGameConfigState();
+  }
+
+  function clearGameConfigState() {
+    setSelectedConfigGameId('');
+    setConfigSection('basic');
+    setConfigGameDraft(undefined);
+    setConfigBudgetAmountYuan('');
+    setConfigBudgetReason('');
+    setConfigEcpmLookbackHours(3);
   }
 
   function clearKuaishouTokenState() {
@@ -815,10 +869,14 @@ export function App() {
   async function loadKuaishouEcpmJobsForToken(
     token: string,
     isCurrent = () => true,
-    options: { reportError?: boolean } = {},
+    options: { gameAppId?: string; reportError?: boolean } = {},
   ) {
     try {
-      const result = await aiKsApi.getKuaishouEcpmJobs(token, 20);
+      const result = await aiKsApi.getKuaishouEcpmJobs(
+        token,
+        20,
+        options.gameAppId,
+      );
       if (!isCurrent()) {
         return false;
       }
@@ -1061,6 +1119,157 @@ export function App() {
       }
 
       setNotice('游戏预算已分配');
+    }, 'admin');
+  }
+
+  function openGameConfig(gameId: string) {
+    const game = adminGames.find((row) => row.id === gameId);
+    if (!game) {
+      setError('未找到要配置的游戏');
+      return;
+    }
+
+    setSelectedConfigGameId(game.id);
+    setConfigSection('basic');
+    setConfigGameDraft(buildGameConfigDraft(game));
+    setConfigBudgetAmountYuan('');
+    setConfigBudgetReason('');
+    setConfigEcpmLookbackHours(3);
+
+    if (adminAccessToken) {
+      const configSessionVersion = sessionVersionRef.current;
+      void loadKuaishouEcpmJobsForToken(
+        adminAccessToken,
+        () => isCurrentSessionVersion(configSessionVersion),
+        {
+          gameAppId: game.gameAppId,
+          reportError: false,
+        },
+      );
+    }
+  }
+
+  function closeGameConfig() {
+    setSelectedConfigGameId('');
+    setConfigGameDraft(undefined);
+    setConfigBudgetAmountYuan('');
+    setConfigBudgetReason('');
+  }
+
+  function changeConfigGameDraft(patch: Partial<GameConfigDraft>) {
+    setConfigGameDraft((current) =>
+      current ? { ...current, ...patch } : current,
+    );
+  }
+
+  async function saveGameConfig() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+
+    const game = selectedConfigGame;
+    const draft = configGameDraft;
+    if (!game || !draft) {
+      setError('请选择要配置的游戏');
+      return;
+    }
+
+    const name = draft.name.trim();
+    const gameSecret = draft.gameSecret.trim();
+    if (!name || !gameSecret) {
+      setError('请填写游戏名称和密钥');
+      return;
+    }
+
+    await runAction('game-config', async (isCurrent) => {
+      const result = await aiKsApi.updateAdminGame(adminAccessToken, game.id, {
+        ecpmAutoSyncEnabled: draft.ecpmAutoSyncEnabled,
+        ecpmAutoSyncIntervalHours: draft.ecpmAutoSyncIntervalHours,
+        gameSecret,
+        name,
+        settlementPaused: draft.settlementPaused,
+      });
+      if (!isCurrent()) {
+        return;
+      }
+
+      await Promise.all([
+        loadAdminResourcesForToken(adminAccessToken, isCurrent),
+        reloadDemoContext(isCurrent),
+      ]);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setConfigGameDraft(buildGameConfigDraft(result.game));
+      setNotice('游戏配置已保存');
+    }, 'admin');
+  }
+
+  async function submitConfigBudget() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+
+    const game = selectedConfigGame;
+    if (!game || !configBudgetAmountYuan.trim()) {
+      setError('请选择游戏并填写分配金额');
+      return;
+    }
+
+    await runAction('game-config-budget', async (isCurrent) => {
+      await aiKsApi.allocateGameBudget(adminAccessToken, game.id, {
+        amountYuan: configBudgetAmountYuan,
+        reason: configBudgetReason,
+      });
+      if (!isCurrent()) {
+        return;
+      }
+
+      setConfigBudgetAmountYuan('');
+      await loadAdminResourcesForToken(adminAccessToken, isCurrent);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setNotice('游戏配置预算已分配');
+    }, 'admin');
+  }
+
+  async function refreshConfigGameEcpm() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+
+    const game = selectedConfigGame;
+    if (!game) {
+      setError('请选择要刷新的游戏');
+      return;
+    }
+
+    await runAction('game-config-ecpm-refresh', async (isCurrent) => {
+      const result = await aiKsApi.refreshEcpm(
+        adminAccessToken,
+        game.gameAppId,
+        configEcpmLookbackHours,
+      );
+      if (!isCurrent()) {
+        return;
+      }
+
+      setRefreshResult(result);
+      await loadKuaishouEcpmJobsForToken(adminAccessToken, isCurrent, {
+        gameAppId: game.gameAppId,
+        reportError: false,
+      });
+      if (!isCurrent()) {
+        return;
+      }
+
+      setNotice(`ECPM 手动刷新成功，写入 ${result.savedCount} 条明细`);
     }, 'admin');
   }
 
@@ -1581,6 +1790,11 @@ export function App() {
           budgetGameId={budgetGameId}
           budgetReason={budgetReason}
           busyAction={operationsBusyAction(busyAction)}
+          configBudgetAmountYuan={configBudgetAmountYuan}
+          configBudgetReason={configBudgetReason}
+          configEcpmLookbackHours={configEcpmLookbackHours}
+          configGameDraft={configGameDraft}
+          configSection={configSection}
           gameAppId={gameAppId}
           games={games}
           jsCode={jsCode}
@@ -1603,8 +1817,14 @@ export function App() {
           onBudgetAmountChange={setBudgetAmountYuan}
           onBudgetGameIdChange={setBudgetGameId}
           onBudgetReasonChange={setBudgetReason}
+          onCloseGameConfig={closeGameConfig}
           onCloseWithdrawal={closeAdminWithdrawal}
           onConfirmSettlement={confirmSettlement}
+          onConfigBudgetAmountChange={setConfigBudgetAmountYuan}
+          onConfigBudgetReasonChange={setConfigBudgetReason}
+          onConfigEcpmLookbackHoursChange={setConfigEcpmLookbackHours}
+          onConfigGameDraftChange={changeConfigGameDraft}
+          onConfigSectionChange={setConfigSection}
           onCreateCompany={createAdminCompany}
           onCreateGame={createAdminGame}
           onCreateSession={createGameSession}
@@ -1628,12 +1848,18 @@ export function App() {
           onNewGameSecretChange={setNewGameSecret}
           onPayWithdrawal={payAdminWithdrawal}
           onPreviewSettlement={previewSettlement}
+          onOpenGameConfig={openGameConfig}
+          onRefreshConfigGameEcpm={refreshConfigGameEcpm}
           onRefreshEcpm={refreshEcpm}
+          onSaveGameConfig={saveGameConfig}
           onSettlementEndDateChange={changeSettlementEndDate}
           onSettlementStartDateChange={changeSettlementStartDate}
           onSettlementUserIdChange={changeSettlementUserId}
+          onSubmitConfigBudget={submitConfigBudget}
           refreshResult={refreshResult}
           sampleJsCodes={sampleJsCodes}
+          selectedConfigGame={selectedConfigGame}
+          selectedConfigGameId={selectedConfigGameId}
           selectedGame={selectedGame}
           selectedWithdrawalDetail={selectedWithdrawalDetail}
           settlementBatches={settlementBatches}
@@ -1691,6 +1917,9 @@ function isOperationsBusyAction(
     case 'company-balance':
     case 'company-create':
     case 'game-budget':
+    case 'game-config':
+    case 'game-config-budget':
+    case 'game-config-ecpm-refresh':
     case 'game-create':
     case 'kuaishou-authorize':
     case 'kuaishou-ecpm-jobs':

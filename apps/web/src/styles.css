@@ -823,6 +823,91 @@ select {
   border-bottom: 0;
 }
 
+.game-config-shell {
+  display: grid;
+  grid-template-columns: 184px minmax(0, 1fr);
+  gap: 16px;
+  min-width: 0;
+}
+
+.game-config-nav {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  border-right: 1px solid var(--border);
+  padding-right: 12px;
+}
+
+.game-config-nav-item {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 650;
+  text-align: left;
+  cursor: pointer;
+}
+
+.game-config-nav-item:hover:not(:disabled),
+.game-config-nav-item[aria-current="page"] {
+  border-color: var(--border-strong);
+  background: var(--surface-soft);
+  color: var(--foreground);
+}
+
+.game-config-nav-item[aria-current="page"] {
+  border-color: rgba(204, 120, 92, 0.32);
+  color: var(--primary-hover);
+}
+
+.game-config-content,
+.game-config-section,
+.section-copy {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.section-copy h3,
+.section-copy p {
+  margin: 0;
+}
+
+.section-copy h3 {
+  font-size: 16px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.section-copy p {
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.setting-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 38px;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.setting-toggle input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+}
+
 .ui-data-table-right {
   text-align: right !important;
   font-variant-numeric: tabular-nums;
@@ -853,6 +938,22 @@ select {
 
   .query-form {
     grid-template-columns: 1fr;
+  }
+
+  .game-config-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .game-config-nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding-right: 0;
+    padding-bottom: 12px;
+  }
+
+  .game-config-nav-item {
+    text-align: center;
   }
 }
 
@@ -906,5 +1007,13 @@ select {
 
   .ui-panel-actions {
     justify-content: flex-start;
+  }
+
+  .game-config-nav {
+    grid-template-columns: 1fr;
+  }
+
+  .game-config-nav-item {
+    text-align: left;
   }
 }
