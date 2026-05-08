@@ -78,6 +78,7 @@ model Game {
   rawEcpms          RawEcpm[]
   settlementBatches SettlementBatch[]
 
+  @@unique([id, companyId])
   @@index([companyId])
   @@map("games")
 }
@@ -185,7 +186,7 @@ model SettlementBatch {
   configSnapshot  Json                  @map("config_snapshot")
   createdAt       DateTime              @default(now()) @map("created_at")
 
-  game    Game                  @relation(fields: [gameId], references: [id])
+  game    Game                  @relation(fields: [gameId, companyId], references: [id, companyId])
   company Company               @relation(fields: [companyId], references: [id])
   items   SettlementBatchItem[]
 
