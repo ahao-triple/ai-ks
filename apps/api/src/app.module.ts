@@ -6,6 +6,7 @@ import { AdminAuthModule } from './features/admin-auth/admin-auth.module';
 import { AdminResourcesModule } from './features/admin-resources/admin-resources.module';
 import { AccountModule } from './features/account/account.module';
 import { AuditLogModule } from './features/audit/audit-log.module';
+import { CompanyAdminModule } from './features/company-admin/company-admin.module';
 import { DemoModule } from './features/demo/demo.module';
 import { GameSessionModule } from './features/game/game-session.module';
 import { KuaishouRefreshModule } from './features/kuaishou-admin/kuaishou-refresh.module';
@@ -24,6 +25,7 @@ import { HealthModule } from './health/health.module';
     HealthModule,
     AdminAuthModule,
     AdminResourcesModule,
+    CompanyAdminModule,
     AuditLogModule,
     AccountModule,
     DemoModule,
