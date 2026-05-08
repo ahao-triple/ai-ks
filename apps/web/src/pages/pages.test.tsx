@@ -22,6 +22,7 @@ import type {
   AdminGame,
   AdminSettlementBatch,
   AdminSettlementPreview,
+  KuaishouEcpmSyncJob,
   KuaishouTokenStatusResult,
 } from '../types/api';
 
@@ -89,6 +90,23 @@ const kuaishouTokenStatus: KuaishouTokenStatusResult = {
   status: 'ACTIVE',
 };
 
+const kuaishouEcpmJob: KuaishouEcpmSyncJob = {
+  actorId: 'admin',
+  actorType: 'SUPER_ADMIN',
+  createdAt: '2026-05-08T00:00:00.000Z',
+  dataHour: '2026-05-08',
+  errorMessage: null,
+  finishedAt: '2026-05-08T00:01:00.000Z',
+  gameAppId: 'game-1',
+  id: 'job-1',
+  requestedOpenIdCount: 2,
+  savedCount: 1,
+  source: 'kuaishou',
+  startedAt: '2026-05-08T00:00:00.000Z',
+  status: 'SUCCEEDED',
+  updatedAt: '2026-05-08T00:01:00.000Z',
+};
+
 function operationsWorkspaceProps(
   overrides: Partial<OperationsWorkspaceProps> = {},
 ): OperationsWorkspaceProps {
@@ -111,6 +129,7 @@ function operationsWorkspaceProps(
     jsCode: '',
     kuaishouAppId: '',
     kuaishouAuthCode: '',
+    kuaishouEcpmJobs: [],
     kuaishouSecret: '',
     newCompanyName: '',
     newGameAppId: '',
@@ -138,6 +157,7 @@ function operationsWorkspaceProps(
     onKuaishouAuthorize: () => undefined,
     onKuaishouRefreshToken: () => undefined,
     onKuaishouSecretChange: () => undefined,
+    onLoadKuaishouEcpmJobs: () => undefined,
     onLoadKuaishouTokenStatus: () => undefined,
     onLoadAdminResources: () => undefined,
     onLoadAuditLogs: () => undefined,
@@ -417,6 +437,31 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('刷新 token');
     expect(html).not.toContain('access-token');
     expect(html).not.toContain('refresh-token');
+  });
+
+  it('renders recent kuaishou ecpm sync jobs', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          kuaishouEcpmJobs: [
+            kuaishouEcpmJob,
+            {
+              ...kuaishouEcpmJob,
+              errorMessage: 'token expired',
+              id: 'job-2',
+              status: 'FAILED',
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(html).toContain('同步任务');
+    expect(html).toContain('job-1');
+    expect(html).toContain('SUCCEEDED');
+    expect(html).toContain('FAILED');
+    expect(html).toContain('token expired');
+    expect(html).toContain('kuaishou');
   });
 });
 

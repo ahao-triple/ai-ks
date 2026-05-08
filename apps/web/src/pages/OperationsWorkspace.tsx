@@ -18,6 +18,7 @@ import type {
   DemoGame,
   EcpmRefreshResult,
   GameSessionResult,
+  KuaishouEcpmSyncJob,
   KuaishouTokenStatusResult,
 } from '../types/api';
 
@@ -31,6 +32,7 @@ export type OperationsWorkspaceBusyAction =
   | 'game-budget'
   | 'game-create'
   | 'kuaishou-authorize'
+  | 'kuaishou-ecpm-jobs'
   | 'kuaishou-refresh-token'
   | 'kuaishou-token'
   | 'refresh'
@@ -62,6 +64,7 @@ export interface OperationsWorkspaceProps {
   jsCode: string;
   kuaishouAppId: string;
   kuaishouAuthCode: string;
+  kuaishouEcpmJobs: KuaishouEcpmSyncJob[];
   kuaishouSecret: string;
   kuaishouTokenStatus?: KuaishouTokenStatusResult;
   newCompanyName: string;
@@ -90,6 +93,7 @@ export interface OperationsWorkspaceProps {
   onKuaishouAuthorize(): void;
   onKuaishouRefreshToken(): void;
   onKuaishouSecretChange(value: string): void;
+  onLoadKuaishouEcpmJobs(): void;
   onLoadKuaishouTokenStatus(): void;
   onLoadAdminResources(): void;
   onLoadAuditLogs(): void;
@@ -146,6 +150,18 @@ function tokenStatusTone(status?: KuaishouTokenStatusResult['status']) {
   return 'muted';
 }
 
+function syncJobTone(status: KuaishouEcpmSyncJob['status']) {
+  if (status === 'SUCCEEDED') {
+    return 'success';
+  }
+
+  if (status === 'FAILED') {
+    return 'danger';
+  }
+
+  return 'warning';
+}
+
 function formatTokenDate(value?: string | null) {
   if (!value) {
     return '-';
@@ -173,6 +189,7 @@ export function OperationsWorkspace({
   jsCode,
   kuaishouAppId,
   kuaishouAuthCode,
+  kuaishouEcpmJobs,
   kuaishouSecret,
   kuaishouTokenStatus,
   newCompanyName,
@@ -201,6 +218,7 @@ export function OperationsWorkspace({
   onKuaishouAuthorize,
   onKuaishouRefreshToken,
   onKuaishouSecretChange,
+  onLoadKuaishouEcpmJobs,
   onLoadKuaishouTokenStatus,
   onLoadAdminResources,
   onLoadAuditLogs,
@@ -658,6 +676,61 @@ export function OperationsWorkspace({
         rows={refreshResult?.rows ?? []}
         title="刷新明细"
       />
+
+      <Panel
+        actions={
+          <Button
+            disabled={workspaceBusy}
+            icon={<RefreshCw size={16} />}
+            onClick={onLoadKuaishouEcpmJobs}
+            variant="secondary"
+          >
+            {busyAction === 'kuaishou-ecpm-jobs' ? '加载中' : '刷新任务'}
+          </Button>
+        }
+        description="最近同步"
+        title="同步任务"
+      >
+        <div className="data-table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>任务</th>
+                <th>状态</th>
+                <th>游戏</th>
+                <th>数据小时</th>
+                <th>open_id</th>
+                <th>写入</th>
+                <th>来源</th>
+                <th>错误</th>
+              </tr>
+            </thead>
+            <tbody>
+              {kuaishouEcpmJobs.map((job) => (
+                <tr key={job.id}>
+                  <td>{job.id}</td>
+                  <td>
+                    <StatusBadge tone={syncJobTone(job.status)}>
+                      {job.status}
+                    </StatusBadge>
+                  </td>
+                  <td>{job.gameAppId}</td>
+                  <td>{job.dataHour}</td>
+                  <td>{job.requestedOpenIdCount}</td>
+                  <td>{job.savedCount}</td>
+                  <td>{job.source ?? '-'}</td>
+                  <td>{job.errorMessage ?? '-'}</td>
+                </tr>
+              ))}
+              {kuaishouEcpmJobs.length === 0 ? (
+                <tr>
+                  <td colSpan={8}>暂无同步任务</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
 
       <Panel description="按游戏和日期范围入账" title="结算确认">
         <div className="query-form">

@@ -46,6 +46,7 @@ import type {
   EcpmRefreshResult,
   GameSessionResult,
   IntegrationStatus,
+  KuaishouEcpmSyncJob,
   KuaishouTokenStatusResult,
   WithdrawalResult,
 } from './types/api';
@@ -155,6 +156,9 @@ export function App() {
   const [status, setStatus] = useState<IntegrationStatus>();
   const [kuaishouTokenStatus, setKuaishouTokenStatus] =
     useState<KuaishouTokenStatusResult>();
+  const [kuaishouEcpmJobs, setKuaishouEcpmJobs] = useState<
+    KuaishouEcpmSyncJob[]
+  >([]);
   const [kuaishouAppId, setKuaishouAppId] = useState('');
   const [kuaishouSecret, setKuaishouSecret] = useState('');
   const [kuaishouAuthCode, setKuaishouAuthCode] = useState('');
@@ -274,6 +278,17 @@ export function App() {
     const tokenSessionVersion = sessionVersionRef.current;
     void loadKuaishouTokenStatusForToken(adminAccessToken, () =>
       isCurrentSessionVersion(tokenSessionVersion),
+    );
+  }, [adminAccessToken, appSession.mode]);
+
+  useEffect(() => {
+    if (appSession.mode !== 'admin' || !adminAccessToken) {
+      return;
+    }
+
+    const jobSessionVersion = sessionVersionRef.current;
+    void loadKuaishouEcpmJobsForToken(adminAccessToken, () =>
+      isCurrentSessionVersion(jobSessionVersion),
     );
   }, [adminAccessToken, appSession.mode]);
 
@@ -451,6 +466,7 @@ export function App() {
     setAdminName('');
     clearAdminResourceState();
     clearKuaishouTokenState();
+    setKuaishouEcpmJobs([]);
     setAdminWithdrawals([]);
     setAuditLogs([]);
     setSelectedWithdrawalDetail(undefined);
@@ -591,6 +607,7 @@ export function App() {
     setAdminName('');
     clearAdminResourceState();
     clearKuaishouTokenState();
+    setKuaishouEcpmJobs([]);
     setAppSession(createSignedOutSession());
     setActiveView('query');
     setGameSession(undefined);
@@ -638,6 +655,12 @@ export function App() {
       }
 
       setRefreshResult(result);
+      setKuaishouEcpmJobs((current) => [result.job, ...current].slice(0, 20));
+      await loadKuaishouEcpmJobsForToken(adminAccessToken, isCurrent);
+      if (!isCurrent()) {
+        return;
+      }
+
       setNotice(`ECPM 刷新成功，写入 ${result.savedCount} 条明细`);
     }, 'admin');
   }
@@ -782,6 +805,55 @@ export function App() {
       }
 
       setNotice('平台授权状态已刷新');
+    }, 'admin');
+  }
+
+  async function loadKuaishouEcpmJobsForToken(
+    token: string,
+    isCurrent = () => true,
+  ) {
+    try {
+      const result = await aiKsApi.getKuaishouEcpmJobs(token, 20);
+      if (!isCurrent()) {
+        return false;
+      }
+
+      setKuaishouEcpmJobs(result.jobs);
+      return true;
+    } catch (nextError) {
+      if (!isCurrent()) {
+        return false;
+      }
+
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        handleUnauthorized('admin');
+        setError(nextError.message);
+        return false;
+      }
+
+      setError(
+        nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+      );
+      return false;
+    }
+  }
+
+  async function loadKuaishouEcpmJobs() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+
+    await runAction('kuaishou-ecpm-jobs', async (isCurrent) => {
+      const loaded = await loadKuaishouEcpmJobsForToken(
+        adminAccessToken,
+        isCurrent,
+      );
+      if (!isCurrent() || !loaded) {
+        return;
+      }
+
+      setNotice('同步任务已刷新');
     }, 'admin');
   }
 
@@ -1507,6 +1579,7 @@ export function App() {
           jsCode={jsCode}
           kuaishouAppId={kuaishouAppId}
           kuaishouAuthCode={kuaishouAuthCode}
+          kuaishouEcpmJobs={kuaishouEcpmJobs}
           kuaishouSecret={kuaishouSecret}
           kuaishouTokenStatus={kuaishouTokenStatus}
           newCompanyName={newCompanyName}
@@ -1535,6 +1608,7 @@ export function App() {
           onKuaishouAuthorize={authorizeKuaishouToken}
           onKuaishouRefreshToken={refreshKuaishouToken}
           onKuaishouSecretChange={setKuaishouSecret}
+          onLoadKuaishouEcpmJobs={loadKuaishouEcpmJobs}
           onLoadKuaishouTokenStatus={loadKuaishouTokenStatus}
           onLoadAdminResources={loadAdminResources}
           onLoadAuditLogs={loadAuditLogs}
@@ -1612,6 +1686,7 @@ function isOperationsBusyAction(
     case 'game-budget':
     case 'game-create':
     case 'kuaishou-authorize':
+    case 'kuaishou-ecpm-jobs':
     case 'kuaishou-refresh-token':
     case 'kuaishou-token':
     case 'refresh':
