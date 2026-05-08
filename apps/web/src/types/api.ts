@@ -113,12 +113,6 @@ export type AdminWithdrawalListResult = {
   batches: AdminWithdrawalBatch[];
 };
 
-export type SettlementResult = {
-  settledAmount: MoneyValue;
-  settledCount: number;
-  userId: string;
-};
-
 export type AuditLogRow = {
   action: string;
   actorId: string;
@@ -137,4 +131,65 @@ export type AuditLogListResult = {
 export type AdminWithdrawalDetailResult = {
   auditLogs: AuditLogRow[];
   batch: AdminWithdrawalBatch;
+};
+
+export type AdminSettlementRange = {
+  endDate: string;
+  gameId: string;
+  startDate: string;
+  userId?: string;
+};
+
+export type AdminSettlementPreview = {
+  budgetAfter: MoneyValue;
+  budgetBefore: MoneyValue;
+  canConfirm: boolean;
+  companyId: string;
+  gameId: string;
+  settlementAmount: MoneyValue;
+  settlementCount: number;
+  unboundCount: number;
+  userCount: number;
+};
+
+export type AdminSettlementItem = {
+  createdAt: string;
+  displayAmount: MoneyValue;
+  gameOpenIdId: string;
+  id: string;
+  openId: string;
+  rawEcpmId: string;
+  settlementAmount: MoneyValue;
+  userId: string;
+};
+
+export type AdminSettlementBatch = {
+  budgetAfter: MoneyValue;
+  budgetBefore: MoneyValue;
+  companyId: string;
+  createdAt: string;
+  endedAt: string;
+  gameId: string;
+  id: string;
+  operatorId: string;
+  operatorType: string;
+  settledAmount: MoneyValue;
+  settledCount: number;
+  startedAt: string;
+  status: string;
+  userCount: number;
+};
+
+export type AdminSettlementConfirmResult = {
+  batch: AdminSettlementBatch;
+  items: AdminSettlementItem[];
+};
+
+export type AdminSettlementListResult = {
+  batches: AdminSettlementBatch[];
+};
+
+export type AdminSettlementDetailResult = {
+  batch: AdminSettlementBatch;
+  items: AdminSettlementItem[];
 };

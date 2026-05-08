@@ -3,6 +3,11 @@ import type {
   AccountEarningsResult,
   AccountResult,
   AdminAuthResult,
+  AdminSettlementConfirmResult,
+  AdminSettlementDetailResult,
+  AdminSettlementListResult,
+  AdminSettlementPreview,
+  AdminSettlementRange,
   AdminWithdrawalBatch,
   AdminWithdrawalDetailResult,
   AdminWithdrawalListResult,
@@ -14,12 +19,33 @@ import type {
   EcpmRefreshResult,
   GameSessionResult,
   IntegrationStatus,
-  SettlementResult,
   WithdrawalResult,
 } from '../types/api';
 
 function withdrawalPath(batchId: string, suffix = '') {
   return `/admin/withdrawals/${encodeURIComponent(batchId)}${suffix}`;
+}
+
+function settlementQuery(range: AdminSettlementRange) {
+  const query = new URLSearchParams({
+    gameId: range.gameId,
+    startDate: range.startDate,
+    endDate: range.endDate,
+  });
+  if (range.userId?.trim()) {
+    query.set('userId', range.userId.trim());
+  }
+
+  return query.toString();
+}
+
+function compactSettlementRange(range: AdminSettlementRange) {
+  return {
+    endDate: range.endDate,
+    gameId: range.gameId,
+    startDate: range.startDate,
+    ...(range.userId?.trim() ? { userId: range.userId.trim() } : {}),
+  };
 }
 
 export const aiKsApi = {
@@ -71,14 +97,6 @@ export const aiKsApi = {
     });
   },
 
-  confirmSettlement(accessToken: string) {
-    return requestJson<SettlementResult>('/accounts/me/settlements/confirm', {
-      accessToken,
-      body: {},
-      method: 'POST',
-    });
-  },
-
   getAlipayProfile(accessToken: string) {
     return requestJson<AlipayProfile>('/accounts/me/alipay', { accessToken });
   },
@@ -122,6 +140,38 @@ export const aiKsApi = {
       body: { gameAppId },
       method: 'POST',
     });
+  },
+
+  previewSettlement(adminAccessToken: string, range: AdminSettlementRange) {
+    return requestJson<AdminSettlementPreview>(
+      `/admin/settlements/preview?${settlementQuery(range)}`,
+      { accessToken: adminAccessToken },
+    );
+  },
+
+  confirmSettlement(adminAccessToken: string, range: AdminSettlementRange) {
+    return requestJson<AdminSettlementConfirmResult>(
+      '/admin/settlements/confirm',
+      {
+        accessToken: adminAccessToken,
+        body: compactSettlementRange(range),
+        method: 'POST',
+      },
+    );
+  },
+
+  getSettlementBatches(adminAccessToken: string, gameId?: string) {
+    const query = gameId ? `?gameId=${encodeURIComponent(gameId)}` : '';
+    return requestJson<AdminSettlementListResult>(`/admin/settlements${query}`, {
+      accessToken: adminAccessToken,
+    });
+  },
+
+  getSettlementDetail(adminAccessToken: string, batchId: string) {
+    return requestJson<AdminSettlementDetailResult>(
+      `/admin/settlements/${encodeURIComponent(batchId)}`,
+      { accessToken: adminAccessToken },
+    );
   },
 
   getAdminWithdrawals(adminAccessToken: string, status: string) {
