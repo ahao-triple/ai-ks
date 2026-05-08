@@ -1,168 +1,63 @@
 import { KuaishouRefreshController } from './kuaishou-refresh.controller';
 
 describe('KuaishouRefreshController', () => {
-  it('records audit metadata after an ECPM refresh succeeds', async () => {
+  it('delegates manual lookback refresh to the range sync service', async () => {
     const dependencies = createDependencies();
     const controller = createController(dependencies);
 
     const result = await controller.refresh(admin, {
-      dataHour: '2026-05-08',
       gameAppId: 'game-1',
-      openIds: ['open-1'],
+      lookbackHours: 3,
+      openIds: ['open-1', 'open-2'],
     });
 
-    expect(result).toMatchObject({
-      job: expect.objectContaining({
-        id: 'job-1',
-        savedCount: 1,
-        status: 'SUCCEEDED',
-      }),
-      requestedOpenIds: ['open-1'],
-      savedCount: 1,
-      source: 'kuaishou',
-    });
-    expect(dependencies.syncJobService.startJob).toHaveBeenCalledWith({
+    expect(dependencies.rangeSyncService.refreshRange).toHaveBeenCalledWith({
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
-      dataHour: '2026-05-08',
       gameAppId: 'game-1',
-      requestedOpenIdCount: 1,
+      lookbackHours: 3,
+      markTokenError: true,
+      openIds: ['open-1', 'open-2'],
     });
-    expect(dependencies.syncJobService.completeJob).toHaveBeenCalledWith({
-      jobId: 'job-1',
-      savedCount: 1,
-      source: 'kuaishou',
+    expect(result).toEqual(refreshResult);
+  });
+
+  it('defaults missing lookbackHours to 1 when delegating refresh', async () => {
+    const dependencies = createDependencies();
+    const controller = createController(dependencies);
+
+    await controller.refresh(admin, {
+      gameAppId: 'game-1',
     });
-    expect(dependencies.auditLogService.record).toHaveBeenCalledWith({
-      action: 'kuaishou.ecpm_refreshed',
+
+    expect(dependencies.rangeSyncService.refreshRange).toHaveBeenCalledWith({
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
-      metadata: {
-        dataHour: '2026-05-08',
-        jobId: 'job-1',
-        requestedOpenIds: ['open-1'],
-        savedCount: 1,
-        source: 'kuaishou',
-      },
-      targetId: 'game-1',
-      targetType: 'kuaishou_ecpm_refresh',
+      gameAppId: 'game-1',
+      lookbackHours: 1,
+      markTokenError: true,
+      openIds: undefined,
     });
   });
 
-  it('records audit metadata and marks token errors after an ECPM refresh fails', async () => {
+  it('lists recent ECPM sync jobs filtered by gameAppId', async () => {
     const dependencies = createDependencies();
-    dependencies.ecpmClient.refresh.mockRejectedValueOnce(
-      new Error('token expired'),
-    );
     const controller = createController(dependencies);
 
-    await expect(
-      controller.refresh(admin, {
-        dataHour: '2026-05-08',
-        gameAppId: 'game-1',
-        openIds: ['open-1'],
-      }),
-    ).rejects.toThrow('token expired');
+    const result = await controller.jobs('20', 'game-1');
 
-    expect(dependencies.tokenService.markTokenError).toHaveBeenCalledWith(
-      'token expired',
-    );
-    expect(dependencies.syncJobService.failJob).toHaveBeenCalledWith({
-      errorMessage: 'token expired',
-      jobId: 'job-1',
+    expect(dependencies.syncJobService.listJobs).toHaveBeenCalledWith({
+      gameAppId: 'game-1',
+      limit: 20,
     });
-    expect(dependencies.auditLogService.record).toHaveBeenCalledWith({
-      action: 'kuaishou.ecpm_refresh_failed',
-      actorId: 'admin',
-      actorType: 'SUPER_ADMIN',
-      metadata: {
-        dataHour: '2026-05-08',
-        error: 'token expired',
-        jobId: 'job-1',
-        requestedOpenIds: ['open-1'],
-      },
-      targetId: 'game-1',
-      targetType: 'kuaishou_ecpm_refresh',
+    expect(result).toEqual({
+      jobs: [
+        expect.objectContaining({
+          id: 'job-1',
+          status: 'SUCCEEDED',
+        }),
+      ],
     });
-  });
-
-  it('fails the job without marking token errors after local ECPM rows fail to save', async () => {
-    const dependencies = createDependencies();
-    dependencies.demoStore.addEcpmRows.mockRejectedValueOnce(
-      new Error('database unavailable'),
-    );
-    const controller = createController(dependencies);
-
-    await expect(
-      controller.refresh(admin, {
-        dataHour: '2026-05-08',
-        gameAppId: 'game-1',
-        openIds: ['open-1'],
-      }),
-    ).rejects.toThrow('database unavailable');
-
-    expect(dependencies.syncJobService.failJob).toHaveBeenCalledWith({
-      errorMessage: 'database unavailable',
-      jobId: 'job-1',
-    });
-    expect(dependencies.tokenService.markTokenError).not.toHaveBeenCalled();
-    expect(dependencies.auditLogService.record).toHaveBeenCalledWith({
-      action: 'kuaishou.ecpm_refresh_failed',
-      actorId: 'admin',
-      actorType: 'SUPER_ADMIN',
-      metadata: {
-        dataHour: '2026-05-08',
-        error: 'database unavailable',
-        jobId: 'job-1',
-        requestedOpenIds: ['open-1'],
-      },
-      targetId: 'game-1',
-      targetType: 'kuaishou_ecpm_refresh',
-    });
-  });
-
-  it('does not fail the job or mark token errors when job completion fails after rows are saved', async () => {
-    const dependencies = createDependencies();
-    dependencies.syncJobService.completeJob.mockRejectedValueOnce(
-      new Error('job update failed'),
-    );
-    const controller = createController(dependencies);
-
-    await expect(
-      controller.refresh(admin, {
-        dataHour: '2026-05-08',
-        gameAppId: 'game-1',
-        openIds: ['open-1'],
-      }),
-    ).rejects.toThrow('job update failed');
-
-    expect(dependencies.demoStore.addEcpmRows).toHaveBeenCalled();
-    expect(dependencies.syncJobService.failJob).not.toHaveBeenCalled();
-    expect(dependencies.tokenService.markTokenError).not.toHaveBeenCalled();
-  });
-
-  it('does not fail the job or mark token errors when success audit fails after completion', async () => {
-    const dependencies = createDependencies();
-    dependencies.auditLogService.record.mockRejectedValueOnce(
-      new Error('audit unavailable'),
-    );
-    const controller = createController(dependencies);
-
-    await expect(
-      controller.refresh(admin, {
-        dataHour: '2026-05-08',
-        gameAppId: 'game-1',
-        openIds: ['open-1'],
-      }),
-    ).rejects.toThrow('audit unavailable');
-
-    expect(dependencies.syncJobService.completeJob).toHaveBeenCalledWith({
-      jobId: 'job-1',
-      savedCount: 1,
-      source: 'kuaishou',
-    });
-    expect(dependencies.syncJobService.failJob).not.toHaveBeenCalled();
-    expect(dependencies.tokenService.markTokenError).not.toHaveBeenCalled();
   });
 
   it('lists recent ECPM sync jobs with a clamped limit', async () => {
@@ -172,6 +67,7 @@ describe('KuaishouRefreshController', () => {
     const result = await controller.jobs('200');
 
     expect(dependencies.syncJobService.listJobs).toHaveBeenCalledWith({
+      gameAppId: undefined,
       limit: 100,
     });
     expect(result).toEqual({
@@ -187,82 +83,52 @@ describe('KuaishouRefreshController', () => {
 
 const admin = { role: 'SUPER_ADMIN' as const, username: 'admin' };
 
+const refreshResult = {
+  job: {
+    id: 'job-1',
+    savedCount: 1,
+    status: 'SUCCEEDED',
+  },
+  requestedOpenIds: ['open-1'],
+  rows: [],
+  savedCount: 1,
+  source: 'kuaishou' as const,
+};
+
 function createController(dependencies: ReturnType<typeof createDependencies>) {
   return new (KuaishouRefreshController as any)(
-    dependencies.demoStore,
-    dependencies.ecpmClient,
-    dependencies.auditLogService,
-    dependencies.tokenService,
+    dependencies.rangeSyncService,
     dependencies.syncJobService,
   ) as KuaishouRefreshController;
 }
 
 function createDependencies() {
-  const savedRow = {
-    configSnapshot: {
-      ratioPercent: 50,
-    },
-    displayAmountLi: 1150n,
-    eventTime: new Date('2026-05-08T01:00:00.000Z'),
-    gameAppId: 'game-1',
-    openId: 'open-1',
-    platformEventId: 'event-1',
-    rawCostLi: 2300n,
-  };
   const syncJob = {
     actorId: 'admin',
     actorType: 'SUPER_ADMIN',
     createdAt: new Date('2026-05-08T00:00:00.000Z'),
-    dataHour: '2026-05-08',
+    dataHour: '2026-05-08T14:00:00+08:00',
+    endedDataHour: '2026-05-08T14:00:00+08:00',
     errorMessage: null,
     finishedAt: new Date('2026-05-08T00:01:00.000Z'),
     gameAppId: 'game-1',
     id: 'job-1',
+    lookbackHours: 1,
     requestedOpenIdCount: 1,
     savedCount: 1,
     source: 'kuaishou',
     startedAt: new Date('2026-05-08T00:00:00.000Z'),
+    startedDataHour: '2026-05-08T14:00:00+08:00',
     status: 'SUCCEEDED',
     updatedAt: new Date('2026-05-08T00:01:00.000Z'),
   };
 
   return {
-    auditLogService: {
-      record: jest.fn(async () => undefined),
-    },
-    demoStore: {
-      addEcpmRows: jest.fn(async () => [savedRow]),
-      listOpenIds: jest.fn(async () => [{ openId: 'open-1' }]),
-    },
-    ecpmClient: {
-      refresh: jest.fn(async () => ({
-        rows: [
-          {
-            eventTime: new Date('2026-05-08T01:00:00.000Z'),
-            openId: 'open-1',
-            platformEventId: 'event-1',
-            rawCostLi: 2300n,
-          },
-        ],
-        source: 'kuaishou' as const,
-      })),
-    },
-    tokenService: {
-      markTokenError: jest.fn(async () => undefined),
+    rangeSyncService: {
+      refreshRange: jest.fn(async () => refreshResult),
     },
     syncJobService: {
-      completeJob: jest.fn(async () => syncJob),
-      failJob: jest.fn(async () => ({
-        ...syncJob,
-        errorMessage: 'token expired',
-        status: 'FAILED',
-      })),
       listJobs: jest.fn(async () => [syncJob]),
-      startJob: jest.fn(async () => ({
-        ...syncJob,
-        savedCount: 0,
-        status: 'RUNNING',
-      })),
     },
   };
 }
