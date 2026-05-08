@@ -90,6 +90,25 @@ describe('AdminResourcesController', () => {
     });
   });
 
+  it('presents game ECPM auto sync timestamps as ISO strings', async () => {
+    const service = createService({
+      game: {
+        ecpmAutoSyncEnabled: true,
+        ecpmAutoSyncLastRunAt: new Date('2026-05-08T03:00:00.000Z'),
+        ecpmAutoSyncNextRunAt: new Date('2026-05-08T06:00:00.000Z'),
+      },
+    });
+    const controller = new AdminResourcesController(service);
+
+    const result = await controller.listGames({});
+
+    expect(result.games[0]).toMatchObject({
+      ecpmAutoSyncEnabled: true,
+      ecpmAutoSyncLastRunAt: '2026-05-08T03:00:00.000Z',
+      ecpmAutoSyncNextRunAt: '2026-05-08T06:00:00.000Z',
+    });
+  });
+
   it('creates a game with trimmed fields and current admin', async () => {
     const service = createService();
     const controller = new AdminResourcesController(service);
@@ -214,7 +233,7 @@ const admin = {
   username: 'admin',
 };
 
-function createService() {
+function createService(options: { game?: Record<string, unknown> } = {}) {
   const company = {
     id: 'company-1',
     balanceLi: 12345n,
@@ -239,6 +258,7 @@ function createService() {
     name: 'Runner',
     settlementPaused: true,
     updatedAt: new Date('2026-05-08T02:30:00.000Z'),
+    ...options.game,
   };
 
   return {

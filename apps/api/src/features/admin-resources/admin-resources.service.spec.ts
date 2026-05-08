@@ -253,6 +253,92 @@ describe('AdminResourcesService', () => {
     ]);
   });
 
+  it('keeps next run when enabling already enabled game ECPM auto sync', async () => {
+    const nextRunAt = new Date('2026-05-08T06:00:00.000Z');
+    const nowProvider = jest.fn(() => new Date('2026-05-08T07:00:00.000Z'));
+    const prisma = createFakePrisma({
+      companies: [
+        {
+          id: 'company-1',
+          balanceLi: 0n,
+          name: 'Acme Studio',
+        },
+      ],
+      games: [
+        {
+          id: 'game-1',
+          companyId: 'company-1',
+          ecpmAutoSyncEnabled: true,
+          ecpmAutoSyncIntervalHours: 3,
+          ecpmAutoSyncNextRunAt: nextRunAt,
+          gameAppId: 'ks_game_001',
+          gameSecret: 'secret-1',
+          name: 'Runner',
+        },
+      ],
+    });
+    const service = new AdminResourcesService(prisma, nowProvider);
+
+    const game = await service.updateGame({
+      actor: adminActor,
+      ecpmAutoSyncEnabled: true,
+      gameId: 'game-1',
+    });
+
+    expect(game).toMatchObject({
+      ecpmAutoSyncEnabled: true,
+      ecpmAutoSyncNextRunAt: nextRunAt,
+    });
+    expect(prisma.getGame('game-1')?.ecpmAutoSyncNextRunAt).toBe(nextRunAt);
+    expect(nowProvider).not.toHaveBeenCalled();
+  });
+
+  it('keeps next run when updating only game ECPM auto sync interval', async () => {
+    const nextRunAt = new Date('2026-05-08T06:00:00.000Z');
+    const prisma = createFakePrisma({
+      companies: [
+        {
+          id: 'company-1',
+          balanceLi: 0n,
+          name: 'Acme Studio',
+        },
+      ],
+      games: [
+        {
+          id: 'game-1',
+          companyId: 'company-1',
+          ecpmAutoSyncEnabled: true,
+          ecpmAutoSyncIntervalHours: 3,
+          ecpmAutoSyncNextRunAt: nextRunAt,
+          gameAppId: 'ks_game_001',
+          gameSecret: 'secret-1',
+          name: 'Runner',
+        },
+      ],
+    });
+    const service = new AdminResourcesService(prisma);
+
+    const game = await service.updateGame({
+      actor: adminActor,
+      ecpmAutoSyncIntervalHours: 6,
+      gameId: 'game-1',
+    });
+
+    expect(game).toMatchObject({
+      ecpmAutoSyncEnabled: true,
+      ecpmAutoSyncIntervalHours: 6,
+      ecpmAutoSyncNextRunAt: nextRunAt,
+    });
+    expect(prisma.auditLogs).toEqual([
+      expect.objectContaining({
+        action: 'game.updated',
+        metadata: {
+          changedFields: ['ecpmAutoSyncIntervalHours'],
+        },
+      }),
+    ]);
+  });
+
   it('rejects unsupported ECPM auto sync frequencies', async () => {
     const prisma = createFakePrisma({
       companies: [
