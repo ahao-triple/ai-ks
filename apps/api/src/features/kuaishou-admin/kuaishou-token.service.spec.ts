@@ -232,6 +232,21 @@ describe('KuaishouTokenService', () => {
     expect(oauth.lastRefreshInput).toBeUndefined();
   });
 
+  it('reports expired status when the refresh token has expired', async () => {
+    const { service } = createService({
+      token: activeToken({
+        accessTokenExpiresAt: new Date('2026-05-09T00:00:00.000Z'),
+        refreshTokenExpiresAt: new Date('2026-05-07T00:00:00.000Z'),
+      }),
+    });
+
+    await expect(service.getStatus()).resolves.toMatchObject({
+      configured: true,
+      source: 'database',
+      status: KuaishouTokenStatus.EXPIRED,
+    });
+  });
+
   it('marks existing database tokens as error', async () => {
     const { prisma, service } = createService({
       token: activeToken(),

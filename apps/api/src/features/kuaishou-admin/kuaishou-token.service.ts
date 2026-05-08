@@ -332,13 +332,17 @@ function resolveStatus(token: KuaishouPlatformToken, now: Date) {
   }
 
   if (
-    token.accessTokenExpiresAt &&
-    token.accessTokenExpiresAt.getTime() <= now.getTime()
+    hasExpired(token.accessTokenExpiresAt, now) ||
+    hasExpired(token.refreshTokenExpiresAt, now)
   ) {
     return KuaishouTokenStatus.EXPIRED;
   }
 
   return token.status;
+}
+
+function hasExpired(value: Date | null, now: Date) {
+  return Boolean(value && value.getTime() <= now.getTime());
 }
 
 function isUsableDatabaseToken(token: KuaishouPlatformToken, now: Date) {
