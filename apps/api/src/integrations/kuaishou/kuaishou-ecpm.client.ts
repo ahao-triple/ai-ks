@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { KuaishouTokenService } from '../../features/kuaishou-admin/kuaishou-token.service';
 
 type ConfigReader = Pick<ConfigService, 'get'>;
 
@@ -25,7 +26,10 @@ export type KuaishouEcpmRefreshResult = {
 
 @Injectable()
 export class KuaishouEcpmClient {
-  constructor(@Inject(ConfigService) private readonly configService: ConfigReader) {}
+  constructor(
+    @Inject(ConfigService) private readonly configService: ConfigReader,
+    private readonly tokenService: KuaishouTokenService,
+  ) {}
 
   async refresh(
     input: KuaishouEcpmRefreshInput,
@@ -34,22 +38,13 @@ export class KuaishouEcpmClient {
       return this.createMockRows(input);
     }
 
-    const accessToken = this.configService.get<string>('KUAISHOU_ACCESS_TOKEN');
-    const advertiserId = this.configService.get<string>(
-      'KUAISHOU_ADVERTISER_ID',
-    );
-
-    if (!accessToken || !advertiserId) {
-      throw new Error(
-        'KUAISHOU_ACCESS_TOKEN and KUAISHOU_ADVERTISER_ID are required',
-      );
-    }
+    const credentials = await this.tokenService.resolveReportCredentials();
 
     const response = await fetch(
       'https://ad.e.kuaishou.com/rest/openapi/gw/dsp/v1/report/ecpm_report',
       {
         body: JSON.stringify({
-          advertiser_id: advertiserId,
+          advertiser_id: credentials.advertiserId,
           app_id: input.gameAppId,
           data_hour: input.dataHour,
           open_id: input.openIds,
@@ -57,7 +52,7 @@ export class KuaishouEcpmClient {
           page_size: 500,
         }),
         headers: {
-          'Access-Token': accessToken,
+          'Access-Token': credentials.accessToken,
           'Content-Type': 'application/json',
         },
         method: 'POST',
