@@ -24,6 +24,7 @@ import type {
   EcpmRefreshResult,
   GameSessionResult,
   IntegrationStatus,
+  KuaishouEcpmSyncJobListResult,
   KuaishouTokenStatusResult,
   WithdrawalResult,
 } from '../types/api';
@@ -237,6 +238,15 @@ export const aiKsApi = {
       body: { gameAppId },
       method: 'POST',
     });
+  },
+
+  getKuaishouEcpmJobs(adminAccessToken: string, limit = 20) {
+    return requestJson<KuaishouEcpmSyncJobListResult>(
+      `/admin/kuaishou/ecpm/jobs?limit=${encodeURIComponent(String(limit))}`,
+      {
+        accessToken: adminAccessToken,
+      },
+    );
   },
 
   getKuaishouTokenStatus(adminAccessToken: string) {

@@ -13,6 +13,9 @@ import type {
   AdminSettlementListResult,
   AdminSettlementPreview,
   AdminWithdrawalBatch,
+  EcpmRefreshResult,
+  KuaishouEcpmSyncJob,
+  KuaishouEcpmSyncJobListResult,
   KuaishouTokenStatusResult,
 } from '../types/api';
 
@@ -148,6 +151,12 @@ describe('aiKsApi', () => {
       .returns.resolves.toEqualTypeOf<KuaishouTokenStatusResult>();
     expectTypeOf(aiKsApi.refreshKuaishouToken)
       .returns.resolves.toEqualTypeOf<KuaishouTokenStatusResult>();
+  });
+
+  it('types kuaishou ecpm job methods and refresh responses', () => {
+    expectTypeOf(aiKsApi.getKuaishouEcpmJobs)
+      .returns.resolves.toEqualTypeOf<KuaishouEcpmSyncJobListResult>();
+    expectTypeOf<EcpmRefreshResult['job']>().toEqualTypeOf<KuaishouEcpmSyncJob>();
   });
 
   it('loads admin companies with the admin token', async () => {
@@ -294,6 +303,24 @@ describe('aiKsApi', () => {
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       `${API_BASE_URL}/admin/kuaishou/token`,
+      {
+        body: undefined,
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'GET',
+      },
+    );
+  });
+
+  it('loads kuaishou ecpm sync jobs with the admin token', async () => {
+    mockJsonResponse({ jobs: [] });
+
+    await aiKsApi.getKuaishouEcpmJobs('admin-token', 50);
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/kuaishou/ecpm/jobs?limit=50`,
       {
         body: undefined,
         headers: {

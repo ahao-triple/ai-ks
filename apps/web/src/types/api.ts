@@ -49,7 +49,29 @@ export type EcpmRow = {
   rawCost: MoneyValue;
 };
 
+export type KuaishouEcpmSyncJob = {
+  actorId: string;
+  actorType: string;
+  createdAt: string;
+  dataHour: string;
+  errorMessage: string | null;
+  finishedAt: string | null;
+  gameAppId: string;
+  id: string;
+  requestedOpenIdCount: number;
+  savedCount: number;
+  source: 'mock' | 'kuaishou' | null;
+  startedAt: string;
+  status: 'FAILED' | 'RUNNING' | 'SUCCEEDED';
+  updatedAt: string;
+};
+
+export type KuaishouEcpmSyncJobListResult = {
+  jobs: KuaishouEcpmSyncJob[];
+};
+
 export type EcpmRefreshResult = {
+  job: KuaishouEcpmSyncJob;
   requestedOpenIds: string[];
   rows: EcpmRow[];
   savedCount: number;
