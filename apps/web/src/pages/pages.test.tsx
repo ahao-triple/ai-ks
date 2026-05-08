@@ -10,6 +10,8 @@ import {
 import {
   buildSettlementRange,
   changeSettlementRange,
+  getDefaultAdminCompanyId,
+  getDefaultAdminGameId,
   getAdminEntrySettlementGameRowId,
   getSettlementGameRowId,
   shouldApplySettlementBatchResponse,
@@ -442,5 +444,23 @@ describe('settlement range helpers', () => {
       userId: 'user-1',
     });
     expect(range.gameId).not.toBe('demo_ks_game');
+  });
+});
+
+describe('admin resource helpers', () => {
+  it('keeps a valid selected company id and falls back to the first company', () => {
+    expect(getDefaultAdminCompanyId([adminCompany], 'company-1')).toBe(
+      'company-1',
+    );
+    expect(getDefaultAdminCompanyId([adminCompany], 'missing-company')).toBe(
+      'company-1',
+    );
+    expect(getDefaultAdminCompanyId([], 'company-1')).toBe('');
+  });
+
+  it('keeps a valid selected game id and falls back to the first game', () => {
+    expect(getDefaultAdminGameId([adminGame], 'game-1')).toBe('game-1');
+    expect(getDefaultAdminGameId([adminGame], 'missing-game')).toBe('game-1');
+    expect(getDefaultAdminGameId([], 'game-1')).toBe('');
   });
 });

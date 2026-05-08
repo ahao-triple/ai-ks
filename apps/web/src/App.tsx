@@ -33,6 +33,8 @@ import {
 import type {
   AccountEarningsResult,
   AccountResult,
+  AdminCompany,
+  AdminGame,
   AdminSettlementBatch,
   AdminSettlementPreview,
   AdminSettlementRange,
@@ -108,6 +110,24 @@ export function getAdminEntrySettlementGameRowId(
   return getSettlementGameRowId(games, gameAppId || games[0]?.gameAppId || '');
 }
 
+export function getDefaultAdminCompanyId(
+  companies: AdminCompany[],
+  currentCompanyId: string,
+) {
+  return companies.some((company) => company.id === currentCompanyId)
+    ? currentCompanyId
+    : companies[0]?.id ?? '';
+}
+
+export function getDefaultAdminGameId(
+  games: AdminGame[],
+  currentGameId: string,
+) {
+  return games.some((game) => game.id === currentGameId)
+    ? currentGameId
+    : games[0]?.id ?? '';
+}
+
 export function shouldApplySettlementBatchResponse(
   requestVersion: number,
   currentVersion: number,
@@ -144,6 +164,19 @@ export function App() {
   const [adminUsername, setAdminUsername] = useState('admin');
   const [adminPassword, setAdminPassword] = useState('admin123456');
   const [adminName, setAdminName] = useState('');
+  const [adminCompanies, setAdminCompanies] = useState<AdminCompany[]>([]);
+  const [adminGames, setAdminGames] = useState<AdminGame[]>([]);
+  const [newCompanyName, setNewCompanyName] = useState('');
+  const [balanceCompanyId, setBalanceCompanyId] = useState('');
+  const [balanceAmountYuan, setBalanceAmountYuan] = useState('');
+  const [balanceReason, setBalanceReason] = useState('');
+  const [newGameCompanyId, setNewGameCompanyId] = useState('');
+  const [newGameName, setNewGameName] = useState('');
+  const [newGameAppId, setNewGameAppId] = useState('');
+  const [newGameSecret, setNewGameSecret] = useState('');
+  const [budgetGameId, setBudgetGameId] = useState('');
+  const [budgetAmountYuan, setBudgetAmountYuan] = useState('');
+  const [budgetReason, setBudgetReason] = useState('');
   const [accountEarnings, setAccountEarnings] =
     useState<AccountEarningsResult>();
   const [alipayAccount, setAlipayAccount] = useState('');
@@ -208,6 +241,17 @@ export function App() {
       isCurrentSessionVersion(batchSessionVersion),
     );
   }, [adminAccessToken, appSession.mode, gameAppId, games]);
+
+  useEffect(() => {
+    if (appSession.mode !== 'admin' || !adminAccessToken) {
+      return;
+    }
+
+    const resourceSessionVersion = sessionVersionRef.current;
+    void loadAdminResourcesForToken(adminAccessToken, () =>
+      isCurrentSessionVersion(resourceSessionVersion),
+    );
+  }, [adminAccessToken, appSession.mode]);
 
   function bumpSessionVersion() {
     sessionVersionRef.current += 1;
@@ -381,6 +425,7 @@ export function App() {
     clearStoredToken(ADMIN_AUTH_STORAGE_KEY);
     setAdminAccessToken('');
     setAdminName('');
+    clearAdminResourceState();
     setAdminWithdrawals([]);
     setAuditLogs([]);
     setSelectedWithdrawalDetail(undefined);
@@ -519,6 +564,7 @@ export function App() {
     setAdminPassword('');
     setAccount(undefined);
     setAdminName('');
+    clearAdminResourceState();
     setAppSession(createSignedOutSession());
     setActiveView('query');
     setGameSession(undefined);
@@ -567,6 +613,238 @@ export function App() {
 
       setRefreshResult(result);
       setNotice(`ECPM 刷新成功，写入 ${result.savedCount} 条明细`);
+    }, 'admin');
+  }
+
+  function clearAdminResourceState() {
+    setAdminCompanies([]);
+    setAdminGames([]);
+    setNewCompanyName('');
+    setBalanceCompanyId('');
+    setBalanceAmountYuan('');
+    setBalanceReason('');
+    setNewGameCompanyId('');
+    setNewGameName('');
+    setNewGameAppId('');
+    setNewGameSecret('');
+    setBudgetGameId('');
+    setBudgetAmountYuan('');
+    setBudgetReason('');
+  }
+
+  function applyAdminResources(
+    companies: AdminCompany[],
+    nextAdminGames: AdminGame[],
+  ) {
+    setAdminCompanies(companies);
+    setAdminGames(nextAdminGames);
+    setBalanceCompanyId((current) =>
+      getDefaultAdminCompanyId(companies, current),
+    );
+    setNewGameCompanyId((current) =>
+      getDefaultAdminCompanyId(companies, current),
+    );
+    setBudgetGameId((current) => getDefaultAdminGameId(nextAdminGames, current));
+  }
+
+  async function loadAdminResourcesForToken(
+    token: string,
+    isCurrent = () => true,
+  ) {
+    try {
+      const [companyResult, gameResult] = await Promise.all([
+        aiKsApi.getAdminCompanies(token),
+        aiKsApi.getAdminGames(token),
+      ]);
+      if (!isCurrent()) {
+        return false;
+      }
+
+      applyAdminResources(companyResult.companies, gameResult.games);
+      return true;
+    } catch (nextError) {
+      if (!isCurrent()) {
+        return false;
+      }
+
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        handleUnauthorized('admin');
+        setError(nextError.message);
+        return false;
+      }
+
+      setError(
+        nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+      );
+      return false;
+    }
+  }
+
+  async function loadAdminResources() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+
+    await runAction('admin-resources', async (isCurrent) => {
+      const loaded = await loadAdminResourcesForToken(adminAccessToken, isCurrent);
+      if (!isCurrent() || !loaded) {
+        return;
+      }
+
+      setNotice('预算资源已刷新');
+    }, 'admin');
+  }
+
+  async function reloadDemoContext(isCurrent = () => true) {
+    const context = await aiKsApi.getDemoContext();
+    if (!isCurrent()) {
+      return;
+    }
+
+    setGames(context.games);
+    setSampleJsCodes(context.sampleJsCodes);
+    setGameAppId((current) => current || context.games[0]?.gameAppId || '');
+  }
+
+  async function createAdminCompany() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+
+    const name = newCompanyName.trim();
+    if (!name) {
+      setError('请输入公司名称');
+      return;
+    }
+
+    await runAction('company-create', async (isCurrent) => {
+      await aiKsApi.createAdminCompany(adminAccessToken, { name });
+      if (!isCurrent()) {
+        return;
+      }
+
+      setNewCompanyName('');
+      await loadAdminResourcesForToken(adminAccessToken, isCurrent);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setNotice('公司已创建');
+    }, 'admin');
+  }
+
+  async function adjustCompanyBalance() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+
+    if (!balanceCompanyId || !balanceAmountYuan.trim()) {
+      setError('请选择公司并填写充值金额');
+      return;
+    }
+
+    await runAction('company-balance', async (isCurrent) => {
+      await aiKsApi.adjustCompanyBalance(adminAccessToken, balanceCompanyId, {
+        amountYuan: balanceAmountYuan,
+        reason: balanceReason,
+      });
+      if (!isCurrent()) {
+        return;
+      }
+
+      setBalanceAmountYuan('');
+      await loadAdminResourcesForToken(adminAccessToken, isCurrent);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setNotice('公司余额已更新');
+    }, 'admin');
+  }
+
+  async function createAdminGame() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+
+    const companyId = newGameCompanyId.trim();
+    const name = newGameName.trim();
+    const nextGameAppId = newGameAppId.trim();
+    const gameSecret = newGameSecret.trim();
+    if (!companyId || !name || !nextGameAppId || !gameSecret) {
+      setError('请填写公司、游戏名称、AppID 和密钥');
+      return;
+    }
+
+    await runAction('game-create', async (isCurrent) => {
+      await aiKsApi.createAdminGame(adminAccessToken, {
+        companyId,
+        gameAppId: nextGameAppId,
+        gameSecret,
+        name,
+      });
+      if (!isCurrent()) {
+        return;
+      }
+
+      setNewGameName('');
+      setNewGameAppId('');
+      setNewGameSecret('');
+      await Promise.all([
+        loadAdminResourcesForToken(adminAccessToken, isCurrent),
+        reloadDemoContext(isCurrent),
+      ]);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setNotice('游戏已创建');
+    }, 'admin');
+  }
+
+  async function allocateGameBudget() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+
+    if (!budgetGameId || !budgetAmountYuan.trim()) {
+      setError('请选择游戏并填写分配金额');
+      return;
+    }
+
+    await runAction('game-budget', async (isCurrent) => {
+      await aiKsApi.allocateGameBudget(adminAccessToken, budgetGameId, {
+        amountYuan: budgetAmountYuan,
+        reason: budgetReason,
+      });
+      if (!isCurrent()) {
+        return;
+      }
+
+      setBudgetAmountYuan('');
+      await loadAdminResourcesForToken(adminAccessToken, isCurrent);
+      if (!isCurrent()) {
+        return;
+      }
+
+      const settlementGameId = getSettlementGameId();
+      if (settlementGameId) {
+        await loadSettlementBatchesForGame(
+          adminAccessToken,
+          settlementGameId,
+          isCurrent,
+        );
+      }
+      if (!isCurrent()) {
+        return;
+      }
+
+      setNotice('游戏预算已分配');
     }, 'admin');
   }
 
@@ -1074,23 +1352,52 @@ export function App() {
       ) : null}
       {activeView === 'operations' && appSession.mode === 'admin' ? (
         <OperationsWorkspace
+          adminCompanies={adminCompanies}
+          adminGames={adminGames}
           adminName={adminName}
           adminWithdrawalStatus={adminWithdrawalStatus}
           adminWithdrawals={adminWithdrawals}
           auditLogs={auditLogs}
+          balanceAmountYuan={balanceAmountYuan}
+          balanceCompanyId={balanceCompanyId}
+          balanceReason={balanceReason}
+          budgetAmountYuan={budgetAmountYuan}
+          budgetGameId={budgetGameId}
+          budgetReason={budgetReason}
           busyAction={operationsBusyAction(busyAction)}
           gameAppId={gameAppId}
           games={games}
           jsCode={jsCode}
+          newCompanyName={newCompanyName}
+          newGameAppId={newGameAppId}
+          newGameCompanyId={newGameCompanyId}
+          newGameName={newGameName}
+          newGameSecret={newGameSecret}
+          onAdjustCompanyBalance={adjustCompanyBalance}
+          onAllocateGameBudget={allocateGameBudget}
           onApproveWithdrawal={approveAdminWithdrawal}
+          onBalanceAmountChange={setBalanceAmountYuan}
+          onBalanceCompanyIdChange={setBalanceCompanyId}
+          onBalanceReasonChange={setBalanceReason}
+          onBudgetAmountChange={setBudgetAmountYuan}
+          onBudgetGameIdChange={setBudgetGameId}
+          onBudgetReasonChange={setBudgetReason}
           onCloseWithdrawal={closeAdminWithdrawal}
           onConfirmSettlement={confirmSettlement}
+          onCreateCompany={createAdminCompany}
+          onCreateGame={createAdminGame}
           onCreateSession={createGameSession}
           onGameChange={changeGameAppId}
           onJsCodeChange={setJsCode}
+          onLoadAdminResources={loadAdminResources}
           onLoadAuditLogs={loadAuditLogs}
           onLoadWithdrawalDetail={loadWithdrawalDetail}
           onLoadWithdrawals={loadAdminWithdrawals}
+          onNewCompanyNameChange={setNewCompanyName}
+          onNewGameAppIdChange={setNewGameAppId}
+          onNewGameCompanyIdChange={setNewGameCompanyId}
+          onNewGameNameChange={setNewGameName}
+          onNewGameSecretChange={setNewGameSecret}
           onPayWithdrawal={payAdminWithdrawal}
           onPreviewSettlement={previewSettlement}
           onRefreshEcpm={refreshEcpm}
@@ -1151,7 +1458,12 @@ function isOperationsBusyAction(
 ): action is OperationsWorkspaceBusyAction {
   switch (action) {
     case 'admin-withdrawals':
+    case 'admin-resources':
     case 'audit-logs':
+    case 'company-balance':
+    case 'company-create':
+    case 'game-budget':
+    case 'game-create':
     case 'refresh':
     case 'settlement-confirm':
     case 'settlement-preview':
