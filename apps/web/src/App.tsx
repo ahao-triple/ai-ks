@@ -460,6 +460,8 @@ export function App() {
   }
 
   function clearAdminAuth() {
+    bumpSessionVersion();
+    clearBusyState();
     nextSettlementBatchRequestVersion();
     clearStoredToken(ADMIN_AUTH_STORAGE_KEY);
     setAdminAccessToken('');
@@ -656,8 +658,11 @@ export function App() {
 
       setRefreshResult(result);
       setKuaishouEcpmJobs((current) => [result.job, ...current].slice(0, 20));
-      await loadKuaishouEcpmJobsForToken(adminAccessToken, isCurrent);
-      if (!isCurrent()) {
+      const loaded = await loadKuaishouEcpmJobsForToken(
+        adminAccessToken,
+        isCurrent,
+      );
+      if (!isCurrent() || !loaded) {
         return;
       }
 
