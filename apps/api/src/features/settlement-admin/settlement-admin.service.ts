@@ -66,6 +66,12 @@ export type ConfirmSettlementResult = {
   items: SettlementBatchItem[];
 };
 
+export class BudgetExceededException extends ConflictException {
+  constructor() {
+    super('Game budget is insufficient');
+  }
+}
+
 @Injectable()
 export class SettlementAdminService {
   constructor(
@@ -144,23 +150,31 @@ export class SettlementAdminService {
           );
         }
 
-        const updated = await tx.rawEcpm.updateMany({
-          data: {
-            status: SettlementStatus.SETTLED,
-          },
-          where: {
-            id: {
-              in: boundRows.map((row) => row.id),
+        let updatedCount = 0;
+        for (const row of boundRows) {
+          const updated = await tx.rawEcpm.updateMany({
+            data: {
+              status: SettlementStatus.SETTLED,
             },
-            status: SettlementStatus.PENDING,
-          },
-        });
+            where: {
+              id: row.id,
+              openIdRecord: {
+                is: {
+                  userId: row.openIdRecord?.userId as string,
+                },
+              },
+              openIdRecordId: row.openIdRecordId as string,
+              status: SettlementStatus.PENDING,
+            },
+          });
+          updatedCount += updated.count;
+        }
 
-        if (updated.count !== boundRows.length) {
+        if (updatedCount !== boundRows.length) {
           throw new SettlementConflictError(
             game.id,
             boundRows.length,
-            updated.count,
+            updatedCount,
           );
         }
 
@@ -208,7 +222,7 @@ export class SettlementAdminService {
           });
         }
 
-        await tx.game.update({
+        const updatedGame = await tx.game.updateMany({
           data: {
             budgetLi: {
               decrement: settlementAmountLi,
@@ -216,9 +230,21 @@ export class SettlementAdminService {
             settlementPaused: false,
           },
           where: {
+            budgetLi: {
+              gte: settlementAmountLi,
+            },
             id: game.id,
           },
         });
+        if (updatedGame.count !== 1) {
+          throw new SettlementBudgetInsufficientError(
+            game.id,
+            game.budgetLi,
+            settlementAmountLi,
+            boundRows.length,
+            unboundRows.length,
+          );
+        }
 
         await tx.auditLog.create({
           data: {
@@ -310,7 +336,7 @@ export class SettlementAdminService {
         targetType: 'game',
       },
     });
-    throw new ConflictException('Game budget is insufficient');
+    throw new BudgetExceededException();
   }
 
   listBatches(input: { gameId?: string } = {}) {

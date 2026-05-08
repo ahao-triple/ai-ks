@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  BudgetExceededException,
   SettlementAdminService,
   type SettlementAdminPrisma,
 } from './settlement-admin.service';
@@ -73,7 +74,7 @@ describe('SettlementAdminService', () => {
         operatorType: 'SUPER_ADMIN',
         ...range,
       }),
-    ).rejects.toBeInstanceOf(ConflictException);
+    ).rejects.toBeInstanceOf(BudgetExceededException);
 
     expect(prisma.getGame('game-1')?.budgetLi).toBe(2500n);
     expect(prisma.getGame('game-1')?.settlementPaused).toBe(true);
@@ -98,7 +99,7 @@ describe('SettlementAdminService', () => {
         operatorType: 'SUPER_ADMIN',
         ...range,
       }),
-    ).rejects.toBeInstanceOf(ConflictException);
+    ).rejects.toBeInstanceOf(BudgetExceededException);
 
     expect(prisma.getGame('game-1')?.budgetLi).toBe(2500n);
     expect(prisma.getGame('game-1')?.settlementPaused).toBe(true);
@@ -109,6 +110,59 @@ describe('SettlementAdminService', () => {
     expect(prisma.getAuditActions()).toContain(
       'settlement.budget_insufficient',
     );
+  });
+
+  it('rolls back settlement and persists pause when protected budget update fails', async () => {
+    const prisma = createFakePrisma({
+      initialSettlementPaused: false,
+      protectedBudgetUpdateFails: true,
+    });
+    const service = new SettlementAdminService(prisma);
+
+    await expect(
+      service.confirmSettlement({
+        gameId: 'game-1',
+        operatorId: 'admin',
+        operatorType: 'SUPER_ADMIN',
+        ...range,
+      }),
+    ).rejects.toBeInstanceOf(BudgetExceededException);
+
+    expect(prisma.getGame('game-1')?.settlementPaused).toBe(true);
+    expect(prisma.getUser('user-1')?.availableBalanceLi).toBe(0n);
+    expect(prisma.getUser('user-2')?.availableBalanceLi).toBe(0n);
+    expect(prisma.getRawEcpm('ecpm-1')?.status).toBe('PENDING');
+    expect(prisma.getRawEcpm('ecpm-2')?.status).toBe('PENDING');
+    expect(prisma.getBatchCount()).toBe(0);
+    expect(prisma.getAuditActions()).toContain(
+      'settlement.budget_insufficient',
+    );
+  });
+
+  it('treats stale binding before raw row write as a settlement conflict', async () => {
+    const prisma = createFakePrisma({
+      changeBindingBeforeRawUpdate: {
+        rawEcpmId: 'ecpm-1',
+        userId: 'user-2',
+      },
+    });
+    const service = new SettlementAdminService(prisma);
+
+    await expect(
+      service.confirmSettlement({
+        gameId: 'game-1',
+        operatorId: 'admin',
+        operatorType: 'SUPER_ADMIN',
+        ...range,
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(prisma.getUser('user-1')?.availableBalanceLi).toBe(0n);
+    expect(prisma.getUser('user-2')?.availableBalanceLi).toBe(0n);
+    expect(prisma.getRawEcpm('ecpm-1')?.status).toBe('PENDING');
+    expect(prisma.getRawEcpm('ecpm-2')?.status).toBe('PENDING');
+    expect(prisma.getBatchCount()).toBe(0);
+    expect(prisma.getAuditActions()).toContain('settlement.conflict');
   });
 
   it('rejects confirmation when no bound pending ECPM exists', async () => {
@@ -230,6 +284,11 @@ function createFakePrisma(
     updateManyCountOverride?: number;
     initialSettlementPaused?: boolean;
     transactionGameBudgetLi?: bigint;
+    protectedBudgetUpdateFails?: boolean;
+    changeBindingBeforeRawUpdate?: {
+      rawEcpmId: string;
+      userId: string | null;
+    };
   } = {},
 ) {
   const games = new Map<string, FakeGame>([
@@ -301,6 +360,7 @@ function createFakePrisma(
 
   const batches: any[] = [];
   const auditLogs: any[] = [];
+  let rawUpdateManyRemaining = options.updateManyCountOverride;
 
   const matchesWhere = (row: FakeRawEcpm, where: any): boolean => {
     if (where.OR) {
@@ -363,6 +423,7 @@ function createFakePrisma(
 
   const prisma: SettlementAdminPrisma & {
     getAuditActions(): string[];
+    getBatchCount(): number;
     getGame(id: string): FakeGame | undefined;
     getRawEcpm(id: string): FakeRawEcpm | undefined;
     getUser(id: string): FakeUser | undefined;
@@ -418,18 +479,90 @@ function createFakePrisma(
         games.set(where.id, next);
         return next;
       },
+      updateMany: async ({ data, where }: any) => {
+        const game = games.get(where.id);
+        if (!game) {
+          return {
+            count: 0,
+          };
+        }
+        if (
+          options.protectedBudgetUpdateFails ||
+          game.budgetLi < where.budgetLi.gte
+        ) {
+          return {
+            count: 0,
+          };
+        }
+        const next = {
+          ...game,
+          budgetLi:
+            data.budgetLi?.decrement === undefined
+              ? game.budgetLi
+              : game.budgetLi - data.budgetLi.decrement,
+          settlementPaused: data.settlementPaused ?? game.settlementPaused,
+        };
+        games.set(where.id, next);
+        return {
+          count: 1,
+        };
+      },
     } as any,
     rawEcpm: {
       findMany: async ({ where }: any) => findPendingRows(where),
       updateMany: async ({ data, where }: any) => {
-        const rows = Array.from(rawEcpms.values()).filter(
-          (row) => where.id.in.includes(row.id) && row.status === where.status,
-        );
-        for (const row of rows) {
+        if (options.changeBindingBeforeRawUpdate) {
+          const row = rawEcpms.get(
+            options.changeBindingBeforeRawUpdate.rawEcpmId,
+          );
+          if (row) {
+            row.openIdRecord =
+              row.openIdRecord === null
+                ? null
+                : {
+                    ...row.openIdRecord,
+                    userId: options.changeBindingBeforeRawUpdate.userId,
+                  };
+          }
+          options.changeBindingBeforeRawUpdate = undefined;
+        }
+        const rows = Array.from(rawEcpms.values()).filter((row) => {
+          const idMatches = where.id.in
+            ? where.id.in.includes(row.id)
+            : row.id === where.id;
+          if (!idMatches || row.status !== where.status) {
+            return false;
+          }
+          if (
+            where.openIdRecordId !== undefined &&
+            row.openIdRecordId !== where.openIdRecordId
+          ) {
+            return false;
+          }
+          const relationFilter = where.openIdRecord?.is;
+          if (
+            relationFilter?.userId !== undefined &&
+            row.openIdRecord?.userId !== relationFilter.userId
+          ) {
+            return false;
+          }
+          return true;
+        });
+        const rowsToUpdate =
+          rawUpdateManyRemaining === undefined
+            ? rows
+            : rows.slice(0, rawUpdateManyRemaining);
+        for (const row of rowsToUpdate) {
           row.status = data.status;
         }
+        if (rawUpdateManyRemaining !== undefined) {
+          rawUpdateManyRemaining = Math.max(
+            rawUpdateManyRemaining - rowsToUpdate.length,
+            0,
+          );
+        }
         return {
-          count: options.updateManyCountOverride ?? rows.length,
+          count: rowsToUpdate.length,
         };
       },
     } as any,
@@ -465,6 +598,7 @@ function createFakePrisma(
       },
     } as any,
     getAuditActions: () => auditLogs.map((row) => row.action),
+    getBatchCount: () => batches.length,
     getGame: (id: string) => games.get(id),
     getRawEcpm: (id: string) => rawEcpms.get(id),
     getUser: (id: string) => users.get(id),
