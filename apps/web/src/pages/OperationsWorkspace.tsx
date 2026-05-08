@@ -11,6 +11,8 @@ import type {
   AdminWithdrawalBatch,
   AdminWithdrawalDetailResult,
   AuditLogRow,
+  AdminSettlementBatch,
+  AdminSettlementPreview,
   DemoGame,
   EcpmRefreshResult,
   GameSessionResult,
@@ -21,6 +23,8 @@ export type OperationsWorkspaceBusyAction =
   | 'admin-withdrawals'
   | 'audit-logs'
   | 'refresh'
+  | 'settlement-confirm'
+  | 'settlement-preview'
   | 'session'
   | `approve-${string}`
   | `close-${string}`
@@ -39,6 +43,7 @@ export interface OperationsWorkspaceProps {
   jsCode: string;
   onApproveWithdrawal(batchId: string): void;
   onCloseWithdrawal(batchId: string): void;
+  onConfirmSettlement(): void;
   onCreateSession(): void;
   onGameChange(value: string): void;
   onJsCodeChange(value: string): void;
@@ -46,11 +51,20 @@ export interface OperationsWorkspaceProps {
   onLoadWithdrawalDetail(batchId: string): void;
   onLoadWithdrawals(status?: string): void;
   onPayWithdrawal(batchId: string, result: 'failed' | 'success'): void;
+  onPreviewSettlement(): void;
   onRefreshEcpm(): void;
+  onSettlementEndDateChange(value: string): void;
+  onSettlementStartDateChange(value: string): void;
+  onSettlementUserIdChange(value: string): void;
   refreshResult?: EcpmRefreshResult;
   sampleJsCodes: string[];
   selectedGame?: DemoGame;
   selectedWithdrawalDetail?: AdminWithdrawalDetailResult;
+  settlementBatches: AdminSettlementBatch[];
+  settlementEndDate: string;
+  settlementPreview?: AdminSettlementPreview;
+  settlementStartDate: string;
+  settlementUserId: string;
   session?: GameSessionResult;
 }
 
@@ -77,6 +91,7 @@ export function OperationsWorkspace({
   jsCode,
   onApproveWithdrawal,
   onCloseWithdrawal,
+  onConfirmSettlement,
   onCreateSession,
   onGameChange,
   onJsCodeChange,
@@ -84,11 +99,20 @@ export function OperationsWorkspace({
   onLoadWithdrawalDetail,
   onLoadWithdrawals,
   onPayWithdrawal,
+  onPreviewSettlement,
   onRefreshEcpm,
+  onSettlementEndDateChange,
+  onSettlementStartDateChange,
+  onSettlementUserIdChange,
   refreshResult,
   sampleJsCodes,
   selectedGame,
   selectedWithdrawalDetail,
+  settlementBatches,
+  settlementEndDate,
+  settlementPreview,
+  settlementStartDate,
+  settlementUserId,
   session,
 }: OperationsWorkspaceProps) {
   const workspaceBusy = busyAction !== '';
@@ -190,6 +214,109 @@ export function OperationsWorkspace({
         rows={refreshResult?.rows ?? []}
         title="刷新明细"
       />
+
+      <Panel description="按游戏和日期范围入账" title="结算确认">
+        <div className="query-form">
+          <InputField
+            label="开始日期"
+            onChange={onSettlementStartDateChange}
+            type="date"
+            value={settlementStartDate}
+          />
+          <InputField
+            label="结束日期"
+            onChange={onSettlementEndDateChange}
+            type="date"
+            value={settlementEndDate}
+          />
+          <InputField
+            label="用户 ID"
+            onChange={onSettlementUserIdChange}
+            placeholder="可选"
+            value={settlementUserId}
+          />
+          <div className="button-row">
+            <Button
+              disabled={!gameAppId || workspaceBusy}
+              onClick={onPreviewSettlement}
+              variant="secondary"
+            >
+              {busyAction === 'settlement-preview' ? '预览中' : '预览结算'}
+            </Button>
+            <Button
+              disabled={
+                !gameAppId ||
+                workspaceBusy ||
+                !settlementPreview?.canConfirm ||
+                settlementPreview.settlementCount === 0
+              }
+              onClick={onConfirmSettlement}
+            >
+              {busyAction === 'settlement-confirm' ? '结算中' : '确认结算'}
+            </Button>
+          </div>
+        </div>
+        <ReadoutGrid
+          items={[
+            {
+              label: '待结算金额',
+              value: formatMoney(settlementPreview?.settlementAmount),
+            },
+            {
+              label: '待结算记录',
+              value: `${settlementPreview?.settlementCount ?? 0} 条`,
+            },
+            {
+              label: '涉及用户',
+              value: `${settlementPreview?.userCount ?? 0} 个`,
+            },
+            {
+              label: '未绑定收益',
+              value: `${settlementPreview?.unboundCount ?? 0} 条`,
+            },
+            {
+              label: '当前预算',
+              value: formatMoney(settlementPreview?.budgetBefore),
+            },
+            {
+              label: '结算后预算',
+              value: formatMoney(settlementPreview?.budgetAfter),
+            },
+          ]}
+        />
+        {settlementPreview && !settlementPreview.canConfirm ? (
+          <StatusBadge tone="warning">预算不足或暂无可结算收益</StatusBadge>
+        ) : null}
+        <div className="data-table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>批次</th>
+                <th>状态</th>
+                <th>金额</th>
+                <th>记录</th>
+                <th>预算</th>
+              </tr>
+            </thead>
+            <tbody>
+              {settlementBatches.map((batch) => (
+                <tr key={batch.id}>
+                  <td>{batch.id}</td>
+                  <td>{batch.status}</td>
+                  <td>{formatMoney(batch.settledAmount)}</td>
+                  <td>{batch.settledCount}</td>
+                  <td>{formatMoney(batch.budgetAfter)}</td>
+                </tr>
+              ))}
+              {settlementBatches.length === 0 ? (
+                <tr>
+                  <td colSpan={5}>暂无结算批次</td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </Panel>
 
       <Panel
         actions={

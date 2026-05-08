@@ -146,6 +146,7 @@ describe('OperationsWorkspace', () => {
         jsCode=""
         onApproveWithdrawal={() => undefined}
         onCloseWithdrawal={() => undefined}
+        onConfirmSettlement={() => undefined}
         onCreateSession={() => undefined}
         onGameChange={() => undefined}
         onJsCodeChange={() => undefined}
@@ -153,13 +154,23 @@ describe('OperationsWorkspace', () => {
         onLoadWithdrawalDetail={() => undefined}
         onLoadWithdrawals={() => undefined}
         onPayWithdrawal={() => undefined}
+        onPreviewSettlement={() => undefined}
         onRefreshEcpm={() => undefined}
+        onSettlementEndDateChange={() => undefined}
+        onSettlementStartDateChange={() => undefined}
+        onSettlementUserIdChange={() => undefined}
         sampleJsCodes={[]}
+        settlementBatches={[]}
+        settlementEndDate="2026-05-08"
+        settlementStartDate="2026-05-08"
+        settlementUserId=""
       />,
     );
 
     expect(html).toContain('游戏端登录');
     expect(html).toContain('快手 ECPM');
+    expect(html).toContain('结算确认');
+    expect(html).toContain('预览结算');
     expect(html).toContain('提现审核');
     expect(html).toContain('审计日志');
   });
@@ -184,6 +195,7 @@ describe('OperationsWorkspace', () => {
         jsCode="mock-js-code-001"
         onApproveWithdrawal={() => undefined}
         onCloseWithdrawal={() => undefined}
+        onConfirmSettlement={() => undefined}
         onCreateSession={() => undefined}
         onGameChange={() => undefined}
         onJsCodeChange={() => undefined}
@@ -191,12 +203,20 @@ describe('OperationsWorkspace', () => {
         onLoadWithdrawalDetail={() => undefined}
         onLoadWithdrawals={() => undefined}
         onPayWithdrawal={() => undefined}
+        onPreviewSettlement={() => undefined}
         onRefreshEcpm={() => undefined}
+        onSettlementEndDateChange={() => undefined}
+        onSettlementStartDateChange={() => undefined}
+        onSettlementUserIdChange={() => undefined}
         sampleJsCodes={[]}
+        settlementBatches={[]}
+        settlementEndDate="2026-05-08"
+        settlementStartDate="2026-05-08"
+        settlementUserId=""
       />,
     );
 
-    expect(html.match(/<button\b[^>]*disabled=""/g)).toHaveLength(6);
+    expect(html.match(/<button\b[^>]*disabled=""/g)).toHaveLength(8);
     expect(html).toContain('换取 open_id');
     expect(html).toContain('刷新日志');
   });
