@@ -114,6 +114,7 @@ describe('SettlementAdminService', () => {
 
   it('re-reads pending rows after game lock to avoid false budget failures for consumed rows', async () => {
     const prisma = createFakePrisma({
+      gameBudgetLi: 2500n,
       initialSettlementPaused: false,
       settleBoundRowsBeforeGameLock: true,
     });

@@ -119,25 +119,6 @@ export class SettlementAdminService {
   ): Promise<ConfirmSettlementResult> {
     this.assertValidRange(input);
 
-    const game = await this.findGameOrThrow(input.gameId);
-    const boundRows = await this.findPendingRows(input, true);
-    const unboundRows = await this.findPendingRows(input, false);
-
-    if (boundRows.length === 0) {
-      throw new BadRequestException('No bound pending ECPM rows to settle');
-    }
-
-    const settlementAmountLi = sumDisplayAmount(boundRows);
-    if (game.budgetLi < settlementAmountLi) {
-      await this.persistBudgetInsufficient(input, {
-        budgetLi: game.budgetLi,
-        gameId: game.id,
-        requiredLi: settlementAmountLi,
-        settlementCount: boundRows.length,
-        unboundCount: unboundRows.length,
-      });
-    }
-
     try {
       return await this.prisma.$transaction(async (tx) => {
         const service = new SettlementAdminService(
