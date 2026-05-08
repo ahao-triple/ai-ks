@@ -33,6 +33,8 @@ import {
 import type {
   AccountEarningsResult,
   AccountResult,
+  AdminSettlementBatch,
+  AdminSettlementPreview,
   AdminWithdrawalBatch,
   AdminWithdrawalDetailResult,
   AuditLogRow,
@@ -51,6 +53,10 @@ type AppBusyAction =
   | 'query';
 
 type AuthScope = 'account' | 'admin' | 'none';
+
+function todayDateText() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 export function App() {
   const [activeView, setActiveView] = useState<ViewKey>('query');
@@ -94,6 +100,18 @@ export function App() {
   const [auditLogs, setAuditLogs] = useState<AuditLogRow[]>([]);
   const [selectedWithdrawalDetail, setSelectedWithdrawalDetail] =
     useState<AdminWithdrawalDetailResult>();
+  const [settlementStartDate, setSettlementStartDate] = useState(() =>
+    todayDateText(),
+  );
+  const [settlementEndDate, setSettlementEndDate] = useState(() =>
+    todayDateText(),
+  );
+  const [settlementUserId, setSettlementUserId] = useState('');
+  const [settlementPreview, setSettlementPreview] =
+    useState<AdminSettlementPreview>();
+  const [settlementBatches, setSettlementBatches] = useState<
+    AdminSettlementBatch[]
+  >([]);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busyAction, setBusyAction] = useState<AppBusyAction>('');
@@ -273,6 +291,8 @@ export function App() {
     setAdminWithdrawals([]);
     setAuditLogs([]);
     setSelectedWithdrawalDetail(undefined);
+    setSettlementPreview(undefined);
+    setSettlementBatches([]);
     setAppSession(createSignedOutSession());
     setActiveView('query');
   }
@@ -420,6 +440,8 @@ export function App() {
     setAdminWithdrawals([]);
     setAuditLogs([]);
     setSelectedWithdrawalDetail(undefined);
+    setSettlementPreview(undefined);
+    setSettlementBatches([]);
     setError('');
     setNotice('');
   }
@@ -549,6 +571,56 @@ export function App() {
       setWithdrawal(result);
       setNotice('提现申请已提交，等待审核');
     }, 'account');
+  }
+
+  function getSettlementRange() {
+    return {
+      endDate: settlementEndDate,
+      gameId: gameAppId,
+      startDate: settlementStartDate,
+      ...(settlementUserId.trim() ? { userId: settlementUserId.trim() } : {}),
+    };
+  }
+
+  async function previewSettlement() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+
+    await runAction('settlement-preview', async (isCurrent) => {
+      const result = await aiKsApi.previewSettlement(
+        adminAccessToken,
+        getSettlementRange(),
+      );
+      if (!isCurrent()) {
+        return;
+      }
+
+      setSettlementPreview(result);
+      setNotice(`待结算 ${result.settlementCount} 条`);
+    }, 'admin');
+  }
+
+  async function confirmSettlement() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+
+    await runAction('settlement-confirm', async (isCurrent) => {
+      const result = await aiKsApi.confirmSettlement(
+        adminAccessToken,
+        getSettlementRange(),
+      );
+      if (!isCurrent()) {
+        return;
+      }
+
+      setSettlementPreview(undefined);
+      setSettlementBatches((current) => [result.batch, ...current].slice(0, 20));
+      setNotice(`结算成功，入账 ${result.batch.settledCount} 条`);
+    }, 'admin');
   }
 
   async function loadAdminWithdrawals(statusFilter = adminWithdrawalStatus) {
@@ -776,6 +848,7 @@ export function App() {
           jsCode={jsCode}
           onApproveWithdrawal={approveAdminWithdrawal}
           onCloseWithdrawal={closeAdminWithdrawal}
+          onConfirmSettlement={confirmSettlement}
           onCreateSession={createGameSession}
           onGameChange={setGameAppId}
           onJsCodeChange={setJsCode}
@@ -783,11 +856,20 @@ export function App() {
           onLoadWithdrawalDetail={loadWithdrawalDetail}
           onLoadWithdrawals={loadAdminWithdrawals}
           onPayWithdrawal={payAdminWithdrawal}
+          onPreviewSettlement={previewSettlement}
           onRefreshEcpm={refreshEcpm}
+          onSettlementEndDateChange={setSettlementEndDate}
+          onSettlementStartDateChange={setSettlementStartDate}
+          onSettlementUserIdChange={setSettlementUserId}
           refreshResult={refreshResult}
           sampleJsCodes={sampleJsCodes}
           selectedGame={selectedGame}
           selectedWithdrawalDetail={selectedWithdrawalDetail}
+          settlementBatches={settlementBatches}
+          settlementEndDate={settlementEndDate}
+          settlementPreview={settlementPreview}
+          settlementStartDate={settlementStartDate}
+          settlementUserId={settlementUserId}
           session={gameSession}
         />
       ) : null}
@@ -835,6 +917,8 @@ function isOperationsBusyAction(
     case 'admin-withdrawals':
     case 'audit-logs':
     case 'refresh':
+    case 'settlement-confirm':
+    case 'settlement-preview':
     case 'session':
       return true;
     default:
