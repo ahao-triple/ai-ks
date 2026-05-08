@@ -101,6 +101,13 @@ export function getSettlementGameRowId(games: DemoGame[], gameAppId: string) {
   return games.find((game) => game.gameAppId === gameAppId)?.id ?? '';
 }
 
+export function getAdminEntrySettlementGameRowId(
+  games: DemoGame[],
+  gameAppId: string,
+) {
+  return getSettlementGameRowId(games, gameAppId || games[0]?.gameAppId || '');
+}
+
 export function App() {
   const [activeView, setActiveView] = useState<ViewKey>('query');
   const [loginMode, setLoginMode] = useState<LoginMode>('account');
@@ -410,6 +417,32 @@ export function App() {
       setActiveView('operations');
       setNotice('管理员登录成功');
       clearBusyState();
+
+      const adminVersion = sessionVersionRef.current;
+      const settlementGameId = getAdminEntrySettlementGameRowId(
+        games,
+        gameAppId,
+      );
+      if (!settlementGameId) {
+        setSettlementBatches([]);
+        return;
+      }
+
+      try {
+        await loadSettlementBatches(
+          result.accessToken,
+          settlementGameId,
+          () => isCurrentSessionVersion(adminVersion),
+        );
+      } catch (nextError) {
+        if (!isCurrentSessionVersion(adminVersion)) {
+          return;
+        }
+
+        setError(
+          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+        );
+      }
     }, 'admin');
   }
 

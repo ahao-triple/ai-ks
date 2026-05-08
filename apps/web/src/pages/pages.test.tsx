@@ -10,6 +10,7 @@ import {
 import {
   buildSettlementRange,
   changeSettlementRange,
+  getAdminEntrySettlementGameRowId,
   getSettlementGameRowId,
 } from '../App';
 import type {
@@ -317,6 +318,22 @@ describe('settlement range helpers', () => {
 
     expect(gameId).toBe('demo-game-001');
     expect(gameId).not.toBe('demo_ks_game');
+  });
+
+  it('falls back to the first game row id for admin entry batch loading', () => {
+    const gameId = getAdminEntrySettlementGameRowId(
+      [
+        {
+          companyName: 'Demo Studio',
+          gameAppId: 'demo_ks_game',
+          id: 'demo-game-001',
+          name: 'Demo Game',
+        },
+      ],
+      '',
+    );
+
+    expect(gameId).toBe('demo-game-001');
   });
 
   it('builds settlement API ranges with the backend game row id', () => {
