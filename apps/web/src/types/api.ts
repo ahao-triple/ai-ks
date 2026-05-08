@@ -167,6 +167,7 @@ export type AdminSettlementBatch = {
   budgetAfter: MoneyValue;
   budgetBefore: MoneyValue;
   companyId: string;
+  configSnapshot: unknown;
   createdAt: string;
   endedAt: string;
   gameId: string;

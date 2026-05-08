@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { aiKsApi } from './aiKsApi';
 import { API_BASE_URL } from './api';
-import type { AdminWithdrawalBatch } from '../types/api';
+import type {
+  AdminSettlementBatch,
+  AdminSettlementConfirmResult,
+  AdminSettlementDetailResult,
+  AdminSettlementListResult,
+  AdminSettlementPreview,
+  AdminWithdrawalBatch,
+} from '../types/api';
 
 const originalFetch = globalThis.fetch;
 
@@ -99,6 +106,18 @@ describe('aiKsApi', () => {
       .returns.resolves.toEqualTypeOf<AdminWithdrawalBatch>();
     expectTypeOf(aiKsApi.closeWithdrawal)
       .returns.resolves.toEqualTypeOf<AdminWithdrawalBatch>();
+  });
+
+  it('types settlement methods as admin settlement responses', () => {
+    expectTypeOf(aiKsApi.previewSettlement)
+      .returns.resolves.toEqualTypeOf<AdminSettlementPreview>();
+    expectTypeOf(aiKsApi.confirmSettlement)
+      .returns.resolves.toEqualTypeOf<AdminSettlementConfirmResult>();
+    expectTypeOf(aiKsApi.getSettlementBatches)
+      .returns.resolves.toEqualTypeOf<AdminSettlementListResult>();
+    expectTypeOf(aiKsApi.getSettlementDetail)
+      .returns.resolves.toEqualTypeOf<AdminSettlementDetailResult>();
+    expectTypeOf<AdminSettlementBatch['configSnapshot']>().toEqualTypeOf<unknown>();
   });
 
   it('previews admin settlement with encoded query parameters', async () => {
