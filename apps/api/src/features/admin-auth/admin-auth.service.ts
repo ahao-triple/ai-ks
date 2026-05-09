@@ -1,5 +1,6 @@
 import {
   ForbiddenException,
+  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -55,6 +56,7 @@ export class AdminAuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    @Inject(PrismaService)
     private readonly prisma: AdminAuthPrisma,
   ) {}
 

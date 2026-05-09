@@ -1,7 +1,9 @@
 import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { Test } from '@nestjs/testing';
 import { hash } from 'bcryptjs';
+import { PrismaService } from '../../common/prisma/prisma.service';
 import { AdminAuthService } from './admin-auth.service';
 
 describe('AdminAuthService', () => {
@@ -19,6 +21,27 @@ describe('AdminAuthService', () => {
       username: 'admin',
     });
     expect(principal).toEqual(login.admin);
+  });
+
+  it('resolves with Nest dependency injection', async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        AdminAuthService,
+        JwtService,
+        {
+          provide: ConfigService,
+          useValue: createConfigService(),
+        },
+        {
+          provide: PrismaService,
+          useValue: createCompanyAdminPrisma(),
+        },
+      ],
+    }).compile();
+
+    expect(moduleRef.get(AdminAuthService)).toBeInstanceOf(AdminAuthService);
+
+    await moduleRef.close();
   });
 
   it('rejects invalid admin credentials and tokens', async () => {
@@ -185,18 +208,22 @@ function createCompanyAdminPrisma(admins: FakeCompanyAdmin[] = []) {
 function createService(prisma = createCompanyAdminPrisma()) {
   return new AdminAuthService(
     new JwtService(),
-    {
-      get: (key: string) => {
-        const values: Record<string, string> = {
-          ADMIN_JWT_EXPIRES_IN: '1h',
-          ADMIN_JWT_SECRET: 'admin-secret',
-          ADMIN_PASSWORD: 'admin123456',
-          ADMIN_USERNAME: 'admin',
-        };
-
-        return values[key];
-      },
-    } as ConfigService,
+    createConfigService(),
     prisma as never,
   );
+}
+
+function createConfigService() {
+  return {
+    get: (key: string) => {
+      const values: Record<string, string> = {
+        ADMIN_JWT_EXPIRES_IN: '1h',
+        ADMIN_JWT_SECRET: 'admin-secret',
+        ADMIN_PASSWORD: 'admin123456',
+        ADMIN_USERNAME: 'admin',
+      };
+
+      return values[key];
+    },
+  } as ConfigService;
 }
