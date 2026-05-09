@@ -104,6 +104,31 @@ describe('requestJson', () => {
     });
   });
 
+  it('serializes PUT bodies with bearer authorization', async () => {
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
+    vi.stubGlobal('fetch', fetch);
+
+    await expect(
+      requestJson('/admin/company-admins/admin-1/scopes', {
+        accessToken: 'token-1',
+        body: { scopes: [] },
+        method: 'PUT',
+      }),
+    ).resolves.toEqual({ ok: true });
+
+    expect(fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/company-admins/admin-1/scopes`,
+      {
+        body: JSON.stringify({ scopes: [] }),
+        headers: {
+          Authorization: 'Bearer token-1',
+          'Content-Type': 'application/json',
+        },
+        method: 'PUT',
+      },
+    );
+  });
+
   it('omits GET bodies even when body is provided', async () => {
     const fetch = vi.fn().mockResolvedValue(jsonResponse({ ok: true }));
     vi.stubGlobal('fetch', fetch);

@@ -3,6 +3,9 @@ import { aiKsApi } from './aiKsApi';
 import { API_BASE_URL } from './api';
 import type {
   AdminCompany,
+  AdminCompanyAdmin,
+  AdminCompanyAdminListResult,
+  AdminCompanyAdminResult,
   AdminCompanyListResult,
   AdminGame,
   AdminGameListResult,
@@ -13,6 +16,7 @@ import type {
   AdminSettlementListResult,
   AdminSettlementPreview,
   AdminWithdrawalBatch,
+  CurrentAdminResult,
   EcpmRefreshResult,
   KuaishouEcpmSyncJob,
   KuaishouEcpmSyncJobListResult,
@@ -130,10 +134,25 @@ describe('aiKsApi', () => {
   });
 
   it('types admin resource methods as company and game responses', () => {
+    expectTypeOf<AdminCompanyAdmin>().toMatchTypeOf<{
+      createdAt: string;
+      deletedAt: string | null;
+      updatedAt: string;
+    }>();
+    expectTypeOf(aiKsApi.getCurrentAdmin)
+      .returns.resolves.toEqualTypeOf<CurrentAdminResult>();
     expectTypeOf(aiKsApi.getAdminCompanies)
       .returns.resolves.toEqualTypeOf<AdminCompanyListResult>();
     expectTypeOf(aiKsApi.createAdminCompany)
       .returns.resolves.toEqualTypeOf<{ company: AdminCompany }>();
+    expectTypeOf(aiKsApi.getCompanyAdmins)
+      .returns.resolves.toEqualTypeOf<AdminCompanyAdminListResult>();
+    expectTypeOf(aiKsApi.createCompanyAdmin)
+      .returns.resolves.toEqualTypeOf<AdminCompanyAdminResult>();
+    expectTypeOf(aiKsApi.updateCompanyAdmin)
+      .returns.resolves.toEqualTypeOf<AdminCompanyAdminResult>();
+    expectTypeOf(aiKsApi.updateCompanyAdminScopes)
+      .returns.resolves.toEqualTypeOf<AdminCompanyAdminResult>();
     expectTypeOf(aiKsApi.getAdminGames)
       .returns.resolves.toEqualTypeOf<AdminGameListResult>();
     expectTypeOf(aiKsApi.createAdminGame)
@@ -173,6 +192,86 @@ describe('aiKsApi', () => {
           'Content-Type': 'application/json',
         },
         method: 'GET',
+      },
+    );
+  });
+
+  it('loads current admin principal with the admin token', async () => {
+    mockJsonResponse({
+      admin: {
+        adminId: 'company-admin-1',
+        displayName: '上海运营',
+        role: 'COMPANY_ADMIN',
+        username: 'company_admin',
+      },
+    });
+
+    await aiKsApi.getCurrentAdmin('admin-token');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/auth/me`,
+      {
+        body: undefined,
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'GET',
+      },
+    );
+  });
+
+  it('manages company admins through super admin endpoints', async () => {
+    mockJsonResponse({ admins: [] });
+    await aiKsApi.getCompanyAdmins('admin-token');
+    expect(globalThis.fetch).toHaveBeenLastCalledWith(
+      `${API_BASE_URL}/admin/company-admins`,
+      expect.objectContaining({ method: 'GET' }),
+    );
+
+    mockJsonResponse({ admin: { id: 'company-admin-1' } });
+    await aiKsApi.createCompanyAdmin('admin-token', {
+      displayName: '上海运营',
+      password: 'companypass',
+      username: 'company_admin',
+    });
+    expect(globalThis.fetch).toHaveBeenLastCalledWith(
+      `${API_BASE_URL}/admin/company-admins`,
+      expect.objectContaining({ method: 'POST' }),
+    );
+
+    mockJsonResponse({ admin: { id: 'company-admin-1' } });
+    await aiKsApi.updateCompanyAdminScopes('admin-token', 'company-admin-1', {
+      scopes: [{ companyId: 'company-1', gameIds: ['game-1'] }],
+    });
+    expect(globalThis.fetch).toHaveBeenLastCalledWith(
+      `${API_BASE_URL}/admin/company-admins/company-admin-1/scopes`,
+      expect.objectContaining({ method: 'PUT' }),
+    );
+  });
+
+  it('updates company admins with encoded ids and allowed fields', async () => {
+    mockJsonResponse({ admin: { id: 'company admin/1' } });
+
+    await aiKsApi.updateCompanyAdmin('admin-token', 'company admin/1', {
+      displayName: '上海运营',
+      enabled: false,
+      password: 'newpass123',
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/company-admins/company%20admin%2F1`,
+      {
+        body: JSON.stringify({
+          displayName: '上海运营',
+          enabled: false,
+          password: 'newpass123',
+        }),
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'PATCH',
       },
     );
   });

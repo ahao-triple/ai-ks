@@ -104,12 +104,27 @@ export type AuthResult = {
   account: AccountResult;
 };
 
+export type SuperAdminPrincipal = {
+  role: 'SUPER_ADMIN';
+  username: string;
+};
+
+export type CompanyAdminPrincipal = {
+  adminId: string;
+  displayName: string;
+  role: 'COMPANY_ADMIN';
+  username: string;
+};
+
+export type AdminPrincipal = CompanyAdminPrincipal | SuperAdminPrincipal;
+
 export type AdminAuthResult = {
   accessToken: string;
-  admin: {
-    role: 'SUPER_ADMIN';
-    username: string;
-  };
+  admin: AdminPrincipal;
+};
+
+export type CurrentAdminResult = {
+  admin: AdminPrincipal;
 };
 
 export type AdminCompany = {
@@ -148,6 +163,31 @@ export type AdminGameListResult = {
 export type AdminGameBudgetAllocationResult = {
   company: AdminCompany;
   game: AdminGame;
+};
+
+export type AdminCompanyAdminScope = {
+  companyId: string;
+  gameIds: string[];
+  operationCodes: string[];
+};
+
+export type AdminCompanyAdmin = {
+  createdAt: string;
+  deletedAt: string | null;
+  displayName: string;
+  enabled: boolean;
+  id: string;
+  scopes: AdminCompanyAdminScope[];
+  updatedAt: string;
+  username: string;
+};
+
+export type AdminCompanyAdminListResult = {
+  admins: AdminCompanyAdmin[];
+};
+
+export type AdminCompanyAdminResult = {
+  admin: AdminCompanyAdmin;
 };
 
 export type AccountEarningsResult = {

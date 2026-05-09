@@ -4,6 +4,8 @@ import type {
   AccountResult,
   AdminAuthResult,
   AdminCompany,
+  AdminCompanyAdminListResult,
+  AdminCompanyAdminResult,
   AdminCompanyListResult,
   AdminGame,
   AdminGameBudgetAllocationResult,
@@ -19,6 +21,7 @@ import type {
   AlipayProfile,
   AuditLogListResult,
   AuthResult,
+  CurrentAdminResult,
   DemoGame,
   EarningsResult,
   EcpmLookbackHours,
@@ -36,6 +39,10 @@ function withdrawalPath(batchId: string, suffix = '') {
 
 function companyPath(companyId: string, suffix = '') {
   return `/admin/companies/${encodeURIComponent(companyId)}${suffix}`;
+}
+
+function companyAdminPath(adminId: string, suffix = '') {
+  return `/admin/company-admins/${encodeURIComponent(adminId)}${suffix}`;
 }
 
 function gamePath(gameId: string, suffix = '') {
@@ -143,10 +150,74 @@ export const aiKsApi = {
     });
   },
 
+  getCurrentAdmin(adminAccessToken: string) {
+    return requestJson<CurrentAdminResult>('/admin/auth/me', {
+      accessToken: adminAccessToken,
+    });
+  },
+
   getAdminCompanies(adminAccessToken: string) {
     return requestJson<AdminCompanyListResult>('/admin/companies', {
       accessToken: adminAccessToken,
     });
+  },
+
+  getCompanyAdmins(adminAccessToken: string) {
+    return requestJson<AdminCompanyAdminListResult>('/admin/company-admins', {
+      accessToken: adminAccessToken,
+    });
+  },
+
+  createCompanyAdmin(
+    adminAccessToken: string,
+    payload: {
+      displayName: string;
+      enabled?: boolean;
+      password: string;
+      username: string;
+    },
+  ) {
+    return requestJson<AdminCompanyAdminResult>('/admin/company-admins', {
+      accessToken: adminAccessToken,
+      body: payload,
+      method: 'POST',
+    });
+  },
+
+  updateCompanyAdmin(
+    adminAccessToken: string,
+    adminId: string,
+    payload: {
+      displayName?: string;
+      enabled?: boolean;
+      password?: string;
+    },
+  ) {
+    return requestJson<AdminCompanyAdminResult>(companyAdminPath(adminId), {
+      accessToken: adminAccessToken,
+      body: payload,
+      method: 'PATCH',
+    });
+  },
+
+  updateCompanyAdminScopes(
+    adminAccessToken: string,
+    adminId: string,
+    payload: {
+      scopes: Array<{
+        companyId: string;
+        gameIds: string[];
+      }>;
+    },
+  ) {
+    return requestJson<AdminCompanyAdminResult>(
+      companyAdminPath(adminId, '/scopes'),
+      {
+        accessToken: adminAccessToken,
+        body: payload,
+        method: 'PUT',
+      },
+    );
   },
 
   createAdminCompany(adminAccessToken: string, payload: { name: string }) {

@@ -10,7 +10,7 @@ export class ApiError extends Error {
   }
 }
 
-export type RequestMethod = 'GET' | 'PATCH' | 'POST';
+export type RequestMethod = 'GET' | 'PATCH' | 'POST' | 'PUT';
 
 export function createHeaders(accessToken?: string): Record<string, string> {
   const headers: Record<string, string> = {
