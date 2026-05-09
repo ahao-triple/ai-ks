@@ -10,6 +10,9 @@
     "dev": "pnpm --recursive --parallel --stream --filter api --filter web dev",
     "dev:api": "pnpm --filter api dev",
     "dev:web": "pnpm --filter web dev",
+    "pm2:start": "pm2 start ecosystem.config.cjs",
+    "pm2:restart": "pm2 restart ecosystem.config.cjs",
+    "pm2:stop": "pm2 stop ecosystem.config.cjs",
     "db:push": "pnpm --filter api prisma:push",
     "prisma:generate": "pnpm --filter api prisma:generate",
     "prisma:validate": "pnpm --filter api prisma:validate"

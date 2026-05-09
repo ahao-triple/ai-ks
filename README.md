@@ -103,6 +103,35 @@ pnpm --filter web dev -- --host 0.0.0.0
 
 生产式静态部署时，先执行 `pnpm --filter web build`，再把 `apps/web/dist` 交给 Nginx 等静态服务，并把 `/api` 反向代理到 API 服务。
 
+### PM2 一步启动
+
+仓库已提供 `ecosystem.config.cjs`。构建完成后，在服务器执行：
+
+```bash
+pnpm pm2:start
+pm2 save
+```
+
+它会启动两个进程：
+
+- `ai-ks-api`：运行 `apps/api/dist/main.js`。
+- `ai-ks-web`：托管 `apps/web/dist`，并把 `/api` 代理到 `API_PROXY_ORIGIN`；未配置时默认跟随 `API_PORT`，即 `http://127.0.0.1:<API_PORT>`。
+
+更新代码后重新构建并重启：
+
+```bash
+pnpm install --frozen-lockfile
+pnpm prisma:generate
+pnpm build
+pnpm pm2:restart
+```
+
+如果服务器没装 PM2，先执行：
+
+```bash
+npm install -g pm2
+```
+
 ## 目录说明
 
 - `apps/api`：NestJS API 服务、Prisma schema、后端测试。

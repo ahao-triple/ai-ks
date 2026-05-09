@@ -91,3 +91,24 @@ pnpm --filter web dev -- --host 0.0.0.0
 
 For a static web deployment, serve `apps/web/dist` with Nginx or another static
 server and proxy `/api` to the API process.
+
+## PM2
+
+The repository includes `ecosystem.config.cjs` for remote testing without
+Nginx. After building, run:
+
+```bash
+pnpm pm2:start
+pm2 save
+```
+
+PM2 starts `ai-ks-api` from `apps/api/dist/main.js` and `ai-ks-web` from
+`scripts/serve-web-dist.mjs`. The web process serves `apps/web/dist` and proxies
+`/api` to `API_PROXY_ORIGIN`, which defaults to `http://127.0.0.1:<API_PORT>`.
+
+Relevant environment variables:
+
+- `WEB_HOST`: web bind address, default `0.0.0.0`.
+- `WEB_PORT`: web port.
+- `API_PORT`: API process port.
+- `API_PROXY_ORIGIN`: internal API origin used by the PM2 web proxy.
