@@ -1,6 +1,17 @@
+import { Logger } from '@nestjs/common';
 import { BusinessClosureService } from './business-closure.service';
 
 describe('BusinessClosureService', () => {
+  let logSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+  });
+
+  afterEach(() => {
+    logSpy.mockRestore();
+  });
+
   it('reports blocked checks before the business flow has enough data', async () => {
     const service = new BusinessClosureService(createFakePrisma());
 
@@ -63,6 +74,35 @@ describe('BusinessClosureService', () => {
       expect.objectContaining({ key: 'withdrawal', status: 'READY' }),
     ]);
     expect(report.summary.blocked).toBe(0);
+  });
+
+  it('writes Chinese logs for each real data closure check', async () => {
+    const service = new BusinessClosureService(
+      createFakePrisma({
+        activeAgentCount: 1,
+        boundOpenIdCount: 1,
+        boundUserCount: 1,
+        companyCount: 1,
+        gameBudgetLi: 10000n,
+        gameCount: 1,
+        openIdCount: 1,
+        pendingEcpmCount: 1,
+        rawEcpmCount: 1,
+        userCount: 1,
+      }),
+    );
+
+    await service.getReport();
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining('真实数据闭环核对汇总'),
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining('检查项：公司 / 游戏 / 预算'),
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining('检查项：ECPM 收益明细'),
+    );
   });
 });
 
