@@ -104,7 +104,13 @@ function SessionBadge({ session }: { session: AppSession }) {
   }
 
   if (session.mode === 'admin') {
-    return <StatusBadge tone="muted">{session.adminName}</StatusBadge>;
+    return (
+      <StatusBadge tone="muted">
+        {session.admin.role === 'COMPANY_ADMIN'
+          ? session.admin.displayName
+          : session.admin.username}
+      </StatusBadge>
+    );
   }
 
   if (session.mode === 'guest') {

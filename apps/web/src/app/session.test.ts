@@ -35,7 +35,25 @@ describe('session model', () => {
     expect(
       getVisibleNavItems({
         accessToken: 'admin-token',
-        adminName: 'admin',
+        admin: {
+          role: 'SUPER_ADMIN',
+          username: 'admin',
+        },
+        mode: 'admin',
+      }).map((item) => item.key),
+    ).toEqual(['query', 'operations']);
+  });
+
+  it('keeps operations visible for company admin sessions', () => {
+    expect(
+      getVisibleNavItems({
+        accessToken: 'admin-token',
+        admin: {
+          adminId: 'company-admin-1',
+          displayName: '上海运营',
+          role: 'COMPANY_ADMIN',
+          username: 'company_admin',
+        },
         mode: 'admin',
       }).map((item) => item.key),
     ).toEqual(['query', 'operations']);

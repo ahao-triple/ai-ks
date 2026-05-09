@@ -10,11 +10,13 @@ import {
 import {
   buildSettlementRange,
   changeSettlementRange,
+  getAdminDisplayName,
   getDefaultAdminCompanyId,
   getDefaultAdminGameId,
   getDefaultKuaishouAppId,
   getAdminEntrySettlementGameRowId,
   getSettlementGameRowId,
+  isSuperAdmin,
   shouldApplySettlementBatchResponse,
 } from '../App';
 import type {
@@ -209,6 +211,32 @@ function operationsWorkspaceProps(
 }
 
 describe('LoginPage', () => {
+  it('derives admin display names and super admin flags from principals', () => {
+    expect(
+      getAdminDisplayName({
+        role: 'SUPER_ADMIN',
+        username: 'admin',
+      }),
+    ).toBe('admin');
+    expect(
+      getAdminDisplayName({
+        adminId: 'company-admin-1',
+        displayName: '上海运营',
+        role: 'COMPANY_ADMIN',
+        username: 'company_admin',
+      }),
+    ).toBe('上海运营');
+    expect(isSuperAdmin({ role: 'SUPER_ADMIN', username: 'admin' })).toBe(true);
+    expect(
+      isSuperAdmin({
+        adminId: 'company-admin-1',
+        displayName: '上海运营',
+        role: 'COMPANY_ADMIN',
+        username: 'company_admin',
+      }),
+    ).toBe(false);
+  });
+
   it('renders a clean login page with guest entry', () => {
     const html = renderToStaticMarkup(
       <LoginPage

@@ -34,7 +34,9 @@ import type {
   AccountEarningsResult,
   AccountResult,
   AdminCompany,
+  AdminCompanyAdmin,
   AdminGame,
+  AdminPrincipal,
   AdminSettlementBatch,
   AdminSettlementPreview,
   AdminSettlementRange,
@@ -59,6 +61,10 @@ type AppBusyAction =
   | 'query';
 
 type AuthScope = 'account' | 'admin' | 'none';
+
+type LoadOptions = {
+  reportError?: boolean;
+};
 
 type SettlementRangeState = {
   gameAppId: string;
@@ -166,6 +172,14 @@ export function shouldApplySettlementBatchResponse(
   return isCurrentSession && requestVersion === currentVersion;
 }
 
+export function getAdminDisplayName(admin: AdminPrincipal) {
+  return admin.role === 'COMPANY_ADMIN' ? admin.displayName : admin.username;
+}
+
+export function isSuperAdmin(admin?: AdminPrincipal) {
+  return admin?.role === 'SUPER_ADMIN';
+}
+
 export function App() {
   const [activeView, setActiveView] = useState<ViewKey>('query');
   const [loginMode, setLoginMode] = useState<LoginMode>('account');
@@ -204,8 +218,10 @@ export function App() {
   );
   const [adminUsername, setAdminUsername] = useState('admin');
   const [adminPassword, setAdminPassword] = useState('admin123456');
+  const [currentAdmin, setCurrentAdmin] = useState<AdminPrincipal>();
   const [adminName, setAdminName] = useState('');
   const [adminCompanies, setAdminCompanies] = useState<AdminCompany[]>([]);
+  const [, setCompanyAdmins] = useState<AdminCompanyAdmin[]>([]);
   const [adminGames, setAdminGames] = useState<AdminGame[]>([]);
   const [newCompanyName, setNewCompanyName] = useState('');
   const [balanceCompanyId, setBalanceCompanyId] = useState('');
@@ -281,7 +297,7 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (appSession.mode !== 'admin' || !adminAccessToken) {
+    if (appSession.mode !== 'admin' || !adminAccessToken || !currentAdmin) {
       return;
     }
 
@@ -295,40 +311,7 @@ export function App() {
     void loadSettlementBatchesForGame(adminAccessToken, settlementGameId, () =>
       isCurrentSessionVersion(batchSessionVersion),
     );
-  }, [adminAccessToken, appSession.mode, gameAppId, games]);
-
-  useEffect(() => {
-    if (appSession.mode !== 'admin' || !adminAccessToken) {
-      return;
-    }
-
-    const resourceSessionVersion = sessionVersionRef.current;
-    void loadAdminResourcesForToken(adminAccessToken, () =>
-      isCurrentSessionVersion(resourceSessionVersion),
-    );
-  }, [adminAccessToken, appSession.mode]);
-
-  useEffect(() => {
-    if (appSession.mode !== 'admin' || !adminAccessToken) {
-      return;
-    }
-
-    const tokenSessionVersion = sessionVersionRef.current;
-    void loadKuaishouTokenStatusForToken(adminAccessToken, () =>
-      isCurrentSessionVersion(tokenSessionVersion),
-    );
-  }, [adminAccessToken, appSession.mode]);
-
-  useEffect(() => {
-    if (appSession.mode !== 'admin' || !adminAccessToken) {
-      return;
-    }
-
-    const jobSessionVersion = sessionVersionRef.current;
-    void loadKuaishouEcpmJobsForToken(adminAccessToken, () =>
-      isCurrentSessionVersion(jobSessionVersion),
-    );
-  }, [adminAccessToken, appSession.mode]);
+  }, [adminAccessToken, appSession.mode, currentAdmin, gameAppId, games]);
 
   useEffect(() => {
     if (!selectedConfigGameId) {
@@ -431,14 +414,9 @@ export function App() {
           return;
         }
 
-        const restoredAdminName = adminUsername || 'admin';
-        setAdminName(restoredAdminName);
-        setAppSession({
-          accessToken: adminAccessToken,
-          adminName: restoredAdminName,
-          mode: 'admin',
-        });
-        setActiveView('operations');
+        await restoreAdminSession(adminAccessToken, () =>
+          isCurrentSessionVersion(restoreVersion),
+        );
       }
     } catch (nextError) {
       setError(
@@ -446,6 +424,37 @@ export function App() {
           ? nextError.message
           : '无法连接 API，请确认后端服务已启动',
       );
+    }
+  }
+
+  async function restoreAdminSession(token: string, isCurrent = () => true) {
+    try {
+      const result = await aiKsApi.getCurrentAdmin(token);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setCurrentAdmin(result.admin);
+      setAdminName(getAdminDisplayName(result.admin));
+      setAppSession({
+        accessToken: token,
+        admin: result.admin,
+        mode: 'admin',
+      });
+      setActiveView('operations');
+      await loadAdminResourcesForToken(token, isCurrent, result.admin);
+    } catch (nextError) {
+      if (!isCurrent()) {
+        return;
+      }
+
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        clearAdminAuth();
+      } else {
+        setError(
+          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+        );
+      }
     }
   }
 
@@ -496,6 +505,15 @@ export function App() {
     }
   }
 
+  function ensureSuperAdmin() {
+    if (!isSuperAdmin(currentAdmin)) {
+      setError('无权限访问该操作');
+      return false;
+    }
+
+    return true;
+  }
+
   function clearAccountAuth() {
     clearStoredToken(ACCOUNT_AUTH_STORAGE_KEY);
     setAccessToken('');
@@ -514,6 +532,7 @@ export function App() {
     nextSettlementBatchRequestVersion();
     clearStoredToken(ADMIN_AUTH_STORAGE_KEY);
     setAdminAccessToken('');
+    setCurrentAdmin(undefined);
     setAdminName('');
     clearAdminResourceState();
     clearKuaishouTokenState();
@@ -586,15 +605,28 @@ export function App() {
       }
 
       bumpSessionVersion();
+      const adminSessionVersion = sessionVersionRef.current;
+      const isCurrentAdminSession = () =>
+        isCurrentSessionVersion(adminSessionVersion);
       writeStoredToken(ADMIN_AUTH_STORAGE_KEY, result.accessToken);
       setAdminAccessToken(result.accessToken);
-      setAdminName(result.admin.username);
+      setCurrentAdmin(result.admin);
+      setAdminName(getAdminDisplayName(result.admin));
       setAppSession({
         accessToken: result.accessToken,
-        adminName: result.admin.username,
+        admin: result.admin,
         mode: 'admin',
       });
       setActiveView('operations');
+      await loadAdminResourcesForToken(
+        result.accessToken,
+        isCurrentAdminSession,
+        result.admin,
+      );
+      if (!isCurrentAdminSession()) {
+        return;
+      }
+
       setNotice('管理员登录成功');
       clearBusyState();
     }, 'admin');
@@ -650,6 +682,7 @@ export function App() {
     clearStoredToken(ADMIN_AUTH_STORAGE_KEY);
     setAccessToken('');
     setAdminAccessToken('');
+    setCurrentAdmin(undefined);
     setUsername('');
     setPassword('');
     setAdminUsername('');
@@ -698,6 +731,9 @@ export function App() {
       setError('请先登录管理员账号');
       return;
     }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
 
     await runAction('refresh', async (isCurrent) => {
       const result = await aiKsApi.refreshEcpm(adminAccessToken, gameAppId);
@@ -720,6 +756,7 @@ export function App() {
 
   function clearAdminResourceState() {
     setAdminCompanies([]);
+    setCompanyAdmins([]);
     setAdminGames([]);
     setNewCompanyName('');
     setBalanceCompanyId('');
@@ -778,6 +815,7 @@ export function App() {
   async function loadAdminResourcesForToken(
     token: string,
     isCurrent = () => true,
+    admin = currentAdmin,
   ) {
     try {
       const [companyResult, gameResult] = await Promise.all([
@@ -789,6 +827,27 @@ export function App() {
       }
 
       applyAdminResources(companyResult.companies, gameResult.games);
+      if (isSuperAdmin(admin)) {
+        await Promise.allSettled([
+          loadKuaishouTokenStatusForToken(token, isCurrent),
+          loadCompanyAdminsForToken(token, isCurrent),
+        ]);
+      } else {
+        clearKuaishouTokenState();
+        setCompanyAdmins([]);
+      }
+      const settlementGameId = getAdminEntrySettlementGameRowId(
+        games,
+        gameAppId,
+      );
+      await Promise.allSettled([
+        loadKuaishouEcpmJobsForToken(token, isCurrent),
+        settlementGameId
+          ? loadSettlementBatchesForGame(token, settlementGameId, isCurrent)
+          : Promise.resolve(false),
+        loadAdminWithdrawalsForToken(token, adminWithdrawalStatus, isCurrent),
+        loadAuditLogsForToken(token, isCurrent),
+      ]);
       return true;
     } catch (nextError) {
       if (!isCurrent()) {
@@ -804,6 +863,39 @@ export function App() {
       setError(
         nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
       );
+      return false;
+    }
+  }
+
+  async function loadCompanyAdminsForToken(
+    token: string,
+    isCurrent = () => true,
+    options: LoadOptions = {},
+  ) {
+    try {
+      const result = await aiKsApi.getCompanyAdmins(token);
+      if (!isCurrent()) {
+        return false;
+      }
+
+      setCompanyAdmins(result.admins);
+      return true;
+    } catch (nextError) {
+      if (!isCurrent()) {
+        return false;
+      }
+
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        handleUnauthorized('admin');
+        setError(nextError.message);
+        return false;
+      }
+
+      if (options.reportError ?? true) {
+        setError(
+          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+        );
+      }
       return false;
     }
   }
@@ -834,6 +926,7 @@ export function App() {
   async function loadKuaishouTokenStatusForToken(
     token: string,
     isCurrent = () => true,
+    options: LoadOptions = {},
   ) {
     try {
       const result = await aiKsApi.getKuaishouTokenStatus(token);
@@ -854,9 +947,11 @@ export function App() {
         return false;
       }
 
-      setError(
-        nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
-      );
+      if (options.reportError ?? true) {
+        setError(
+          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+        );
+      }
       return false;
     }
   }
@@ -864,6 +959,9 @@ export function App() {
   async function loadKuaishouTokenStatus() {
     if (!adminAccessToken) {
       setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
       return;
     }
 
@@ -883,7 +981,7 @@ export function App() {
   async function loadKuaishouEcpmJobsForToken(
     token: string,
     isCurrent = () => true,
-    options: { reportError?: boolean } = {},
+    options: LoadOptions = {},
   ) {
     try {
       const result = await aiKsApi.getKuaishouEcpmJobs(token, 20);
@@ -983,6 +1081,9 @@ export function App() {
       setError('请先登录管理员账号');
       return;
     }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
 
     const appId = kuaishouAppId.trim();
     const secret = kuaishouSecret.trim();
@@ -1014,6 +1115,9 @@ export function App() {
       setError('请先登录管理员账号');
       return;
     }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
 
     await runAction('kuaishou-refresh-token', async (isCurrent) => {
       const result = await aiKsApi.refreshKuaishouToken(adminAccessToken);
@@ -1040,6 +1144,9 @@ export function App() {
   async function createAdminCompany() {
     if (!adminAccessToken) {
       setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
       return;
     }
 
@@ -1070,6 +1177,9 @@ export function App() {
       setError('请先登录管理员账号');
       return;
     }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
 
     if (!balanceCompanyId || !balanceAmountYuan.trim()) {
       setError('请选择公司并填写充值金额');
@@ -1098,6 +1208,9 @@ export function App() {
   async function createAdminGame() {
     if (!adminAccessToken) {
       setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
       return;
     }
 
@@ -1139,6 +1252,9 @@ export function App() {
   async function allocateGameBudget() {
     if (!adminAccessToken) {
       setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
       return;
     }
 
@@ -1222,6 +1338,9 @@ export function App() {
       setError('请先登录管理员账号');
       return;
     }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
 
     const game = selectedConfigGame;
     const draft = configGameDraft;
@@ -1267,6 +1386,9 @@ export function App() {
       setError('请先登录管理员账号');
       return;
     }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
 
     const game = selectedConfigGame;
     if (!game || !configBudgetAmountYuan.trim()) {
@@ -1296,6 +1418,9 @@ export function App() {
   async function refreshConfigGameEcpm() {
     if (!adminAccessToken) {
       setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
       return;
     }
 
@@ -1514,6 +1639,7 @@ export function App() {
     token: string,
     targetGameId: string,
     isCurrentSession = () => true,
+    options: LoadOptions = {},
   ) {
     const requestVersion = nextSettlementBatchRequestVersion();
     const canApply = () =>
@@ -1537,9 +1663,11 @@ export function App() {
         return false;
       }
 
-      setError(
-        nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
-      );
+      if (options.reportError ?? true) {
+        setError(
+          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+        );
+      }
       return false;
     }
   }
@@ -1547,6 +1675,9 @@ export function App() {
   async function previewSettlement() {
     if (!adminAccessToken) {
       setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
       return;
     }
 
@@ -1583,6 +1714,9 @@ export function App() {
   async function confirmSettlement() {
     if (!adminAccessToken) {
       setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
       return;
     }
 
@@ -1628,23 +1762,60 @@ export function App() {
     }
 
     await runAction('admin-withdrawals', async (isCurrent) => {
-      const result = await aiKsApi.getAdminWithdrawals(
+      const loadedCount = await loadAdminWithdrawalsForToken(
         adminAccessToken,
         statusFilter,
+        isCurrent,
       );
-      if (!isCurrent()) {
+      if (!isCurrent() || loadedCount === undefined) {
         return;
+      }
+
+      setNotice(`提现批次 ${loadedCount} 笔`);
+    }, 'admin');
+  }
+
+  async function loadAdminWithdrawalsForToken(
+    token: string,
+    statusFilter = adminWithdrawalStatus,
+    isCurrent = () => true,
+    options: LoadOptions = {},
+  ) {
+    try {
+      const result = await aiKsApi.getAdminWithdrawals(token, statusFilter);
+      if (!isCurrent()) {
+        return undefined;
       }
 
       setAdminWithdrawals(result.batches);
       setAdminWithdrawalStatus(statusFilter);
-      setNotice(`提现批次 ${result.batches.length} 笔`);
-    }, 'admin');
+      return result.batches.length;
+    } catch (nextError) {
+      if (!isCurrent()) {
+        return undefined;
+      }
+
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        handleUnauthorized('admin');
+        setError(nextError.message);
+        return undefined;
+      }
+
+      if (options.reportError ?? true) {
+        setError(
+          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+        );
+      }
+      return undefined;
+    }
   }
 
   async function approveAdminWithdrawal(batchId: string) {
     if (!adminAccessToken) {
       setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
       return;
     }
 
@@ -1673,6 +1844,9 @@ export function App() {
       setError('请先登录管理员账号');
       return;
     }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
 
     await runAction(`pay-${mockResult}-${batchId}`, async (isCurrent) => {
       const result = await aiKsApi.payWithdrawal(
@@ -1699,6 +1873,9 @@ export function App() {
   async function closeAdminWithdrawal(batchId: string) {
     if (!adminAccessToken) {
       setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
       return;
     }
 
@@ -1743,14 +1920,49 @@ export function App() {
     }
 
     await runAction('audit-logs', async (isCurrent) => {
-      const result = await aiKsApi.getAuditLogs(adminAccessToken);
-      if (!isCurrent()) {
+      const loadedCount = await loadAuditLogsForToken(
+        adminAccessToken,
+        isCurrent,
+      );
+      if (!isCurrent() || loadedCount === undefined) {
         return;
       }
 
-      setAuditLogs(result.logs);
-      setNotice(`审计日志 ${result.logs.length} 条`);
+      setNotice(`审计日志 ${loadedCount} 条`);
     }, 'admin');
+  }
+
+  async function loadAuditLogsForToken(
+    token: string,
+    isCurrent = () => true,
+    options: LoadOptions = {},
+  ) {
+    try {
+      const result = await aiKsApi.getAuditLogs(token);
+      if (!isCurrent()) {
+        return undefined;
+      }
+
+      setAuditLogs(result.logs);
+      return result.logs.length;
+    } catch (nextError) {
+      if (!isCurrent()) {
+        return undefined;
+      }
+
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        handleUnauthorized('admin');
+        setError(nextError.message);
+        return undefined;
+      }
+
+      if (options.reportError ?? true) {
+        setError(
+          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+        );
+      }
+      return undefined;
+    }
   }
 
   function clearSelectedWithdrawalDetail(batchId: string) {

@@ -4,7 +4,7 @@ import {
   ShieldCheck,
   type LucideIcon,
 } from 'lucide-react';
-import type { AccountResult } from '../types/api';
+import type { AccountResult, AdminPrincipal } from '../types/api';
 
 export type ViewKey = 'account' | 'operations' | 'query';
 
@@ -20,7 +20,7 @@ export type AppSession =
   | { mode: 'signed-out' }
   | { mode: 'guest' }
   | { accessToken: string; account: AccountResult; mode: 'account' }
-  | { accessToken: string; adminName: string; mode: 'admin' };
+  | { accessToken: string; admin: AdminPrincipal; mode: 'admin' };
 
 export const navItems: Record<ViewKey, NavItem> = {
   query: {
