@@ -1,8 +1,17 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { KuaishouTokenStatus } from '@prisma/client';
+import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
+import { SuperAdminGuard } from '../admin-auth/super-admin.guard';
 import { KuaishouTokenController } from './kuaishou-token.controller';
 
 describe('KuaishouTokenController', () => {
+  it('requires admin jwt and super admin guards at the controller level', () => {
+    expect(
+      Reflect.getMetadata(GUARDS_METADATA, KuaishouTokenController),
+    ).toEqual([AdminJwtGuard, SuperAdminGuard]);
+  });
+
   it('presents token status without secret or token values', async () => {
     const service = createService();
     const auditLogService = createAuditLogService();

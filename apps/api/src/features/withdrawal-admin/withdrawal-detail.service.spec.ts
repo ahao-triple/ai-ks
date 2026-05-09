@@ -1,4 +1,4 @@
-import { NotFoundException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { WithdrawalDetailService } from './withdrawal-detail.service';
 
 describe('WithdrawalDetailService', () => {
@@ -8,6 +8,7 @@ describe('WithdrawalDetailService', () => {
 
     const result = await service.getBatchDetail({
       batchId: 'batch-1',
+      readScope: superAdminReadScope,
     });
 
     expect(result.batch).toMatchObject({
@@ -35,10 +36,40 @@ describe('WithdrawalDetailService', () => {
     await expect(
       service.getBatchDetail({
         batchId: 'missing',
+        readScope: superAdminReadScope,
       }),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
+
+  it('rejects company admins without querying withdrawal batches or audit logs', async () => {
+    const prisma = createFakePrisma();
+    const service = new WithdrawalDetailService(prisma);
+
+    await expect(
+      service.getBatchDetail({
+        batchId: 'batch-1',
+        readScope: companyAdminReadScope,
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(prisma.withdrawalBatch.findUnique).not.toHaveBeenCalled();
+    expect(prisma.auditLog.findMany).not.toHaveBeenCalled();
+  });
 });
+
+const superAdminReadScope = {
+  companyIds: undefined,
+  gameAppIds: undefined,
+  gameIds: undefined,
+  isSuperAdmin: true,
+};
+
+const companyAdminReadScope = {
+  companyIds: ['company-1'],
+  gameAppIds: ['game-app-1'],
+  gameIds: ['game-1'],
+  isSuperAdmin: false,
+};
 
 function createFakePrisma() {
   const batch = {
@@ -87,16 +118,18 @@ function createFakePrisma() {
 
   return {
     auditLog: {
-      findMany: async ({ where }: any) =>
+      findMany: jest.fn(async ({ where }: any) =>
         auditLogs.filter(
           (row) =>
             row.targetId === where.targetId &&
             row.targetType === where.targetType,
         ),
+      ),
     },
     withdrawalBatch: {
-      findUnique: async ({ where }: any) =>
+      findUnique: jest.fn(async ({ where }: any) =>
         where.id === batch.id ? batch : null,
+      ),
     },
   } as any;
 }

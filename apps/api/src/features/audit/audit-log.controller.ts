@@ -1,5 +1,7 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { type AdminPrincipal } from '../admin-auth/admin-auth.service';
 import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
+import { CurrentAdmin } from '../admin-auth/current-admin.decorator';
 import { AuditLogService } from './audit-log.service';
 
 @Controller('admin/audit-logs')
@@ -8,8 +10,12 @@ export class AuditLogController {
   constructor(private readonly auditLogService: AuditLogService) {}
 
   @Get()
-  async list(@Query('limit') limit?: string) {
+  async list(
+    @CurrentAdmin() admin: AdminPrincipal,
+    @Query('limit') limit?: string,
+  ) {
     const rows = await this.auditLogService.list({
+      admin,
       limit: limit ? Number(limit) : undefined,
     });
 

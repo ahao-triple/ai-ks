@@ -72,10 +72,11 @@ describe('KuaishouRefreshController', () => {
     const dependencies = createDependencies();
     const controller = createController(dependencies);
 
-    const result = await controller.jobs('20', 'game-1');
+    const result = await controller.jobs(admin, '20', 'game-1');
 
     expect(dependencies.syncJobService.listJobs).toHaveBeenCalledWith({
       gameAppId: 'game-1',
+      gameAppIds: undefined,
       limit: 20,
     });
     expect(result).toEqual({
@@ -92,10 +93,11 @@ describe('KuaishouRefreshController', () => {
     const dependencies = createDependencies();
     const controller = createController(dependencies);
 
-    const result = await controller.jobs('200');
+    const result = await controller.jobs(admin, '200');
 
     expect(dependencies.syncJobService.listJobs).toHaveBeenCalledWith({
       gameAppId: undefined,
+      gameAppIds: undefined,
       limit: 100,
     });
     expect(result).toEqual({
@@ -105,6 +107,28 @@ describe('KuaishouRefreshController', () => {
           status: 'SUCCEEDED',
         }),
       ],
+    });
+  });
+
+  it('lists only scoped ECPM sync jobs for company admins', async () => {
+    const dependencies = createDependencies();
+    dependencies.accessControlService.resolveReadScope.mockResolvedValue({
+      companyIds: ['company-1'],
+      gameAppIds: ['game-1'],
+      gameIds: ['game-id-1'],
+      isSuperAdmin: false,
+    });
+    const controller = createController(dependencies);
+
+    await controller.jobs(companyAdmin, '20');
+
+    expect(
+      dependencies.accessControlService.resolveReadScope,
+    ).toHaveBeenCalledWith(companyAdmin);
+    expect(dependencies.syncJobService.listJobs).toHaveBeenCalledWith({
+      gameAppId: undefined,
+      gameAppIds: ['game-1'],
+      limit: 20,
     });
   });
 });
@@ -134,6 +158,7 @@ function createController(dependencies: ReturnType<typeof createDependencies>) {
   return new (KuaishouRefreshController as any)(
     dependencies.rangeSyncService,
     dependencies.syncJobService,
+    dependencies.accessControlService,
   ) as KuaishouRefreshController;
 }
 
@@ -164,6 +189,14 @@ function createDependencies() {
     },
     syncJobService: {
       listJobs: jest.fn(async () => [syncJob]),
+    },
+    accessControlService: {
+      resolveReadScope: jest.fn(async (): Promise<any> => ({
+        companyIds: undefined,
+        gameAppIds: undefined,
+        gameIds: undefined,
+        isSuperAdmin: true,
+      })),
     },
   };
 }

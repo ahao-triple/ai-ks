@@ -8,6 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { z } from 'zod';
+import { AdminAccessControlService } from '../admin-auth/admin-access-control.service';
 import {
   type AdminPrincipal,
   type SuperAdminPrincipal,
@@ -15,6 +16,7 @@ import {
 } from '../admin-auth/admin-auth.service';
 import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 import { CurrentAdmin } from '../admin-auth/current-admin.decorator';
+import { SuperAdminGuard } from '../admin-auth/super-admin.guard';
 import { AuditLogService } from '../audit/audit-log.service';
 import { presentMoneyLi } from '../demo/money-presenter';
 import {
@@ -35,6 +37,7 @@ const payWithdrawalSchema = z.object({
 @UseGuards(AdminJwtGuard)
 export class WithdrawalReviewController {
   constructor(
+    private readonly adminAccessControlService: AdminAccessControlService,
     private readonly auditLogService: AuditLogService,
     private readonly withdrawalDetailService: WithdrawalDetailService,
     private readonly withdrawalPaymentService: WithdrawalPaymentService,
@@ -42,8 +45,10 @@ export class WithdrawalReviewController {
   ) {}
 
   @Get()
-  async list(@Query('status') status?: string) {
+  async list(@CurrentAdmin() admin: AdminPrincipal, @Query('status') status?: string) {
+    const readScope = await this.adminAccessControlService.resolveReadScope(admin);
     const batches = await this.withdrawalReviewService.listBatches({
+      readScope,
       status: status?.trim() || undefined,
     });
 
@@ -53,15 +58,21 @@ export class WithdrawalReviewController {
   }
 
   @Get(':batchId')
-  async detail(@Param('batchId') batchId: string) {
+  async detail(
+    @CurrentAdmin() admin: AdminPrincipal,
+    @Param('batchId') batchId: string,
+  ) {
+    const readScope = await this.adminAccessControlService.resolveReadScope(admin);
     const detail = await this.withdrawalDetailService.getBatchDetail({
       batchId,
+      readScope,
     });
 
     return presentWithdrawalDetail(detail);
   }
 
   @Post(':batchId/approve')
+  @UseGuards(SuperAdminGuard)
   async approve(
     @CurrentAdmin() admin: AdminPrincipal,
     @Param('batchId') batchId: string,
@@ -79,6 +90,7 @@ export class WithdrawalReviewController {
   }
 
   @Post(':batchId/pay')
+  @UseGuards(SuperAdminGuard)
   async pay(
     @CurrentAdmin() admin: AdminPrincipal,
     @Param('batchId') batchId: string,
@@ -102,6 +114,7 @@ export class WithdrawalReviewController {
   }
 
   @Post(':batchId/close')
+  @UseGuards(SuperAdminGuard)
   async close(
     @CurrentAdmin() admin: AdminPrincipal,
     @Param('batchId') batchId: string,

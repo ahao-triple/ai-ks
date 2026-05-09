@@ -3,12 +3,91 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
+import { type AdminPrincipal } from '../admin-auth/admin-auth.service';
 import { AdminResourcesService } from './admin-resources.service';
 
 describe('AdminResourcesService', () => {
+  it('keeps super admin company and game list filters unchanged', async () => {
+    const prisma = createFakePrisma();
+    const service = new AdminResourcesService(prisma, createAccessControl());
+
+    await service.listCompanies({
+      admin: adminActor,
+    });
+    await service.listGames({
+      admin: adminActor,
+      companyId: 'company-1',
+    });
+
+    expect(prisma.lastCompanyFindManyArgs).toEqual({
+      orderBy: {
+        createdAt: 'asc',
+      },
+      where: {
+        deletedAt: null,
+      },
+    });
+    expect(prisma.lastGameFindManyArgs).toMatchObject({
+      where: {
+        companyId: 'company-1',
+        deletedAt: null,
+      },
+    });
+  });
+
+  it('filters company admin companies and games by resolved read scope', async () => {
+    const prisma = createFakePrisma();
+    const accessControl = createAccessControl({
+      companyIds: ['company-1', 'company-2'],
+      gameAppIds: ['ks_game_001'],
+      gameIds: ['game-1'],
+      isSuperAdmin: false,
+    });
+    const service = new AdminResourcesService(prisma, accessControl);
+    const companyAdmin = createCompanyAdmin();
+
+    await service.listCompanies({
+      admin: companyAdmin,
+    });
+    await service.listGames({
+      admin: companyAdmin,
+      companyId: 'company-1',
+    });
+
+    expect(accessControl.resolveReadScope).toHaveBeenCalledWith(companyAdmin);
+    expect(prisma.lastCompanyFindManyArgs).toEqual({
+      orderBy: {
+        createdAt: 'asc',
+      },
+      where: {
+        deletedAt: null,
+        games: {
+          some: {
+            deletedAt: null,
+            id: {
+              in: ['game-1'],
+            },
+          },
+        },
+        id: {
+          in: ['company-1', 'company-2'],
+        },
+      },
+    });
+    expect(prisma.lastGameFindManyArgs).toMatchObject({
+      where: {
+        companyId: 'company-1',
+        deletedAt: null,
+        id: {
+          in: ['game-1'],
+        },
+      },
+    });
+  });
+
   it('creates a company with zero balance and writes an audit log', async () => {
     const prisma = createFakePrisma();
-    const service = new AdminResourcesService(prisma);
+    const service = new AdminResourcesService(prisma, createAccessControl());
 
     const company = await service.createCompany({
       actor: adminActor,
@@ -41,7 +120,7 @@ describe('AdminResourcesService', () => {
         },
       ],
     });
-    const service = new AdminResourcesService(prisma);
+    const service = new AdminResourcesService(prisma, createAccessControl());
 
     const company = await service.adjustCompanyBalance({
       actor: adminActor,
@@ -66,7 +145,10 @@ describe('AdminResourcesService', () => {
   });
 
   it('rejects non-positive company balance adjustments', async () => {
-    const service = new AdminResourcesService(createFakePrisma());
+    const service = new AdminResourcesService(
+      createFakePrisma(),
+      createAccessControl(),
+    );
 
     await expect(
       service.adjustCompanyBalance({
@@ -87,7 +169,7 @@ describe('AdminResourcesService', () => {
         },
       ],
     });
-    const service = new AdminResourcesService(prisma);
+    const service = new AdminResourcesService(prisma, createAccessControl());
 
     const game = await service.createGame({
       actor: adminActor,
@@ -140,7 +222,7 @@ describe('AdminResourcesService', () => {
         },
       ],
     });
-    const service = new AdminResourcesService(prisma);
+    const service = new AdminResourcesService(prisma, createAccessControl());
 
     await expect(
       service.createGame({
@@ -174,7 +256,7 @@ describe('AdminResourcesService', () => {
         },
       ],
     });
-    const service = new AdminResourcesService(prisma);
+    const service = new AdminResourcesService(prisma, createAccessControl());
 
     const game = await service.updateGame({
       actor: adminActor,
@@ -224,7 +306,11 @@ describe('AdminResourcesService', () => {
         },
       ],
     });
-    const service = new AdminResourcesService(prisma, () => now);
+    const service = new AdminResourcesService(
+      prisma,
+      createAccessControl(),
+      () => now,
+    );
 
     const game = await service.updateGame({
       actor: adminActor,
@@ -277,7 +363,11 @@ describe('AdminResourcesService', () => {
         },
       ],
     });
-    const service = new AdminResourcesService(prisma, nowProvider);
+    const service = new AdminResourcesService(
+      prisma,
+      createAccessControl(),
+      nowProvider,
+    );
 
     const game = await service.updateGame({
       actor: adminActor,
@@ -316,7 +406,7 @@ describe('AdminResourcesService', () => {
         },
       ],
     });
-    const service = new AdminResourcesService(prisma);
+    const service = new AdminResourcesService(prisma, createAccessControl());
 
     const game = await service.updateGame({
       actor: adminActor,
@@ -358,7 +448,7 @@ describe('AdminResourcesService', () => {
         },
       ],
     });
-    const service = new AdminResourcesService(prisma);
+    const service = new AdminResourcesService(prisma, createAccessControl());
 
     await expect(
       service.updateGame({
@@ -392,7 +482,7 @@ describe('AdminResourcesService', () => {
         },
       ],
     });
-    const service = new AdminResourcesService(prisma);
+    const service = new AdminResourcesService(prisma, createAccessControl());
 
     const game = await service.updateGame({
       actor: adminActor,
@@ -428,7 +518,7 @@ describe('AdminResourcesService', () => {
         },
       ],
     });
-    const service = new AdminResourcesService(prisma);
+    const service = new AdminResourcesService(prisma, createAccessControl());
 
     const result = await service.allocateGameBudget({
       actor: adminActor,
@@ -480,7 +570,7 @@ describe('AdminResourcesService', () => {
         },
       ],
     });
-    const service = new AdminResourcesService(prisma);
+    const service = new AdminResourcesService(prisma, createAccessControl());
 
     await expect(
       service.allocateGameBudget({
@@ -495,7 +585,10 @@ describe('AdminResourcesService', () => {
   });
 
   it('rejects missing companies and games', async () => {
-    const service = new AdminResourcesService(createFakePrisma());
+    const service = new AdminResourcesService(
+      createFakePrisma(),
+      createAccessControl(),
+    );
 
     await expect(
       service.createGame({
@@ -520,6 +613,28 @@ const adminActor = {
   role: 'SUPER_ADMIN' as const,
   username: 'admin',
 };
+
+function createCompanyAdmin(): AdminPrincipal {
+  return {
+    adminId: 'company-admin-1',
+    displayName: 'Company Admin',
+    role: 'COMPANY_ADMIN',
+    username: 'company_admin',
+  };
+}
+
+function createAccessControl(
+  scope = {
+    companyIds: undefined,
+    gameAppIds: undefined,
+    gameIds: undefined,
+    isSuperAdmin: true,
+  } as any,
+): any {
+  return {
+    resolveReadScope: jest.fn(async () => scope),
+  } as any;
+}
 
 type FakeCompany = {
   id: string;
@@ -561,6 +676,8 @@ function createFakePrisma(seed: FakePrismaSeed = {}) {
   const auditLogs: unknown[] = [];
   let companySequence = 1;
   let gameSequence = 1;
+  let lastCompanyFindManyArgs: unknown;
+  let lastGameFindManyArgs: unknown;
 
   for (const company of seed.companies ?? []) {
     companies.set(company.id, {
@@ -596,6 +713,12 @@ function createFakePrisma(seed: FakePrismaSeed = {}) {
 
   const prisma = {
     auditLogs,
+    get lastCompanyFindManyArgs() {
+      return lastCompanyFindManyArgs;
+    },
+    get lastGameFindManyArgs() {
+      return lastGameFindManyArgs;
+    },
     getCompany: (id: string) => companies.get(id),
     getGame: (id: string) => games.get(id),
     auditLog: {
@@ -622,7 +745,10 @@ function createFakePrisma(seed: FakePrismaSeed = {}) {
         companies.set(company.id, company);
         return company;
       },
-      findMany: async () => Array.from(companies.values()),
+      findMany: async (args: any = {}) => {
+        lastCompanyFindManyArgs = args;
+        return Array.from(companies.values());
+      },
       findUnique: async ({ where }: any) => {
         if ('id' in where) {
           const company = companies.get(where.id);
@@ -705,14 +831,18 @@ function createFakePrisma(seed: FakePrismaSeed = {}) {
         games.set(game.id, game);
         return game;
       },
-      findMany: async ({ where }: any = {}) =>
-        Array.from(games.values())
+      findMany: async (args: any = {}) => {
+        lastGameFindManyArgs = args;
+        const where = args.where;
+        return Array.from(games.values())
           .filter((game) => game.deletedAt === (where?.deletedAt ?? null))
           .filter((game) => !where?.companyId || game.companyId === where.companyId)
+          .filter((game) => !where?.id?.in || where.id.in.includes(game.id))
           .map((game) => ({
             ...game,
             company: companies.get(game.companyId) ?? null,
-          })),
+          }));
+      },
       findUnique: async ({ include, where }: any) => {
         const game = games.get(where.id);
         if (!game || game.deletedAt !== (where.deletedAt ?? null)) {

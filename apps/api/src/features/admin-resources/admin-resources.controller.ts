@@ -17,6 +17,7 @@ import {
 } from '../admin-auth/admin-auth.service';
 import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 import { CurrentAdmin } from '../admin-auth/current-admin.decorator';
+import { SuperAdminGuard } from '../admin-auth/super-admin.guard';
 import { presentMoneyLi } from '../demo/money-presenter';
 import {
   AdminResourcesService,
@@ -74,8 +75,10 @@ export class AdminResourcesController {
   constructor(private readonly adminResourcesService: AdminResourcesService) {}
 
   @Get('admin/companies')
-  async listCompanies() {
-    const companies = await this.adminResourcesService.listCompanies();
+  async listCompanies(@CurrentAdmin() admin: AdminPrincipal) {
+    const companies = await this.adminResourcesService.listCompanies({
+      admin,
+    });
 
     return {
       companies: companies.map(presentCompany),
@@ -83,6 +86,7 @@ export class AdminResourcesController {
   }
 
   @Post('admin/companies')
+  @UseGuards(SuperAdminGuard)
   async createCompany(
     @CurrentAdmin() admin: AdminPrincipal,
     @Body() body: unknown,
@@ -99,6 +103,7 @@ export class AdminResourcesController {
   }
 
   @Post('admin/companies/:companyId/balance-adjustments')
+  @UseGuards(SuperAdminGuard)
   async adjustCompanyBalance(
     @CurrentAdmin() admin: AdminPrincipal,
     @Param('companyId') companyId: string,
@@ -122,13 +127,14 @@ export class AdminResourcesController {
   }
 
   @Get('admin/games')
-  async listGames(@Query() query: unknown) {
+  async listGames(@CurrentAdmin() admin: AdminPrincipal, @Query() query: unknown) {
     const input = parseBody(
       gameListQuerySchema,
       query ?? {},
       'Game list query is invalid',
     );
     const games = await this.adminResourcesService.listGames({
+      admin,
       companyId: input.companyId,
     });
 
@@ -138,6 +144,7 @@ export class AdminResourcesController {
   }
 
   @Post('admin/games')
+  @UseGuards(SuperAdminGuard)
   async createGame(
     @CurrentAdmin() admin: AdminPrincipal,
     @Body() body: unknown,
@@ -157,6 +164,7 @@ export class AdminResourcesController {
   }
 
   @Patch('admin/games/:gameId')
+  @UseGuards(SuperAdminGuard)
   async updateGame(
     @CurrentAdmin() admin: AdminPrincipal,
     @Param('gameId') gameId: string,
@@ -189,6 +197,7 @@ export class AdminResourcesController {
   }
 
   @Post('admin/games/:gameId/budget-allocations')
+  @UseGuards(SuperAdminGuard)
   async allocateGameBudget(
     @CurrentAdmin() admin: AdminPrincipal,
     @Param('gameId') gameId: string,

@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
+import { type AdminPrincipal } from '../admin-auth/admin-auth.service';
 import {
   BudgetExceededException,
   SettlementAdminService,
@@ -17,7 +19,7 @@ describe('SettlementAdminService', () => {
 
   it('previews bound pending ECPM against game budget while counting unbound rows', async () => {
     const prisma = createFakePrisma();
-    const service = new SettlementAdminService(prisma);
+    const service = new SettlementAdminService(prisma, createAccessControl());
 
     const result = await service.previewSettlement({
       gameId: 'game-1',
@@ -38,7 +40,7 @@ describe('SettlementAdminService', () => {
 
   it('confirms settlement by creating a batch, crediting users, and deducting budget', async () => {
     const prisma = createFakePrisma();
-    const service = new SettlementAdminService(prisma);
+    const service = new SettlementAdminService(prisma, createAccessControl());
 
     const result = await service.confirmSettlement({
       gameId: 'game-1',
@@ -65,7 +67,7 @@ describe('SettlementAdminService', () => {
       gameBudgetLi: 2500n,
       initialSettlementPaused: false,
     });
-    const service = new SettlementAdminService(prisma);
+    const service = new SettlementAdminService(prisma, createAccessControl());
 
     await expect(
       service.confirmSettlement({
@@ -90,7 +92,7 @@ describe('SettlementAdminService', () => {
       initialSettlementPaused: false,
       transactionGameBudgetLi: 2500n,
     });
-    const service = new SettlementAdminService(prisma);
+    const service = new SettlementAdminService(prisma, createAccessControl());
 
     await expect(
       service.confirmSettlement({
@@ -118,7 +120,7 @@ describe('SettlementAdminService', () => {
       initialSettlementPaused: false,
       settleBoundRowsBeforeGameLock: true,
     });
-    const service = new SettlementAdminService(prisma);
+    const service = new SettlementAdminService(prisma, createAccessControl());
 
     await expect(
       service.confirmSettlement({
@@ -143,7 +145,7 @@ describe('SettlementAdminService', () => {
       initialSettlementPaused: false,
       protectedBudgetUpdateFails: true,
     });
-    const service = new SettlementAdminService(prisma);
+    const service = new SettlementAdminService(prisma, createAccessControl());
 
     await expect(
       service.confirmSettlement({
@@ -172,7 +174,7 @@ describe('SettlementAdminService', () => {
         userId: 'user-2',
       },
     });
-    const service = new SettlementAdminService(prisma);
+    const service = new SettlementAdminService(prisma, createAccessControl());
 
     await expect(
       service.confirmSettlement({
@@ -198,7 +200,7 @@ describe('SettlementAdminService', () => {
         userId: 'user-2',
       },
     });
-    const service = new SettlementAdminService(prisma);
+    const service = new SettlementAdminService(prisma, createAccessControl());
 
     await expect(
       service.confirmSettlement({
@@ -224,7 +226,7 @@ describe('SettlementAdminService', () => {
         userId: 'user-2',
       },
     });
-    const service = new SettlementAdminService(prisma);
+    const service = new SettlementAdminService(prisma, createAccessControl());
 
     const result = await service.confirmSettlement({
       gameId: 'game-1',
@@ -258,7 +260,7 @@ describe('SettlementAdminService', () => {
       gameBudgetLi: 10000n,
       gameBudgetBeforeLockLi: 5000n,
     });
-    const service = new SettlementAdminService(prisma);
+    const service = new SettlementAdminService(prisma, createAccessControl());
 
     const result = await service.confirmSettlement({
       gameId: 'game-1',
@@ -276,7 +278,7 @@ describe('SettlementAdminService', () => {
     const prisma = createFakePrisma({
       includeBoundRows: false,
     });
-    const service = new SettlementAdminService(prisma);
+    const service = new SettlementAdminService(prisma, createAccessControl());
 
     await expect(
       service.confirmSettlement({
@@ -290,7 +292,7 @@ describe('SettlementAdminService', () => {
 
   it('rejects missing games', async () => {
     const prisma = createFakePrisma();
-    const service = new SettlementAdminService(prisma);
+    const service = new SettlementAdminService(prisma, createAccessControl());
 
     await expect(
       service.previewSettlement({
@@ -302,7 +304,7 @@ describe('SettlementAdminService', () => {
 
   it('rejects invalid date ranges', async () => {
     const prisma = createFakePrisma();
-    const service = new SettlementAdminService(prisma);
+    const service = new SettlementAdminService(prisma, createAccessControl());
 
     await expect(
       service.previewSettlement({
@@ -317,7 +319,7 @@ describe('SettlementAdminService', () => {
     const prisma = createFakePrisma({
       updateManyCountOverride: 1,
     });
-    const service = new SettlementAdminService(prisma);
+    const service = new SettlementAdminService(prisma, createAccessControl());
 
     await expect(
       service.confirmSettlement({
@@ -334,7 +336,7 @@ describe('SettlementAdminService', () => {
 
   it('lists and gets settlement batches with items', async () => {
     const prisma = createFakePrisma();
-    const service = new SettlementAdminService(prisma);
+    const service = new SettlementAdminService(prisma, createAccessControl());
 
     const confirmed = await service.confirmSettlement({
       gameId: 'game-1',
@@ -343,17 +345,112 @@ describe('SettlementAdminService', () => {
       ...range,
     });
 
-    await expect(service.listBatches({ gameId: 'game-1' })).resolves.toEqual([
-      confirmed.batch,
-    ]);
-    await expect(service.getBatch('batch-1')).resolves.toEqual(
-      confirmed.batch,
+    await expect(
+      service.listBatches({ admin: superAdmin, gameId: 'game-1' }),
+    ).resolves.toEqual([confirmed.batch]);
+    await expect(
+      service.getBatch({ admin: superAdmin, batchId: 'batch-1' }),
+    ).resolves.toEqual(confirmed.batch);
+    await expect(
+      service.getBatch({ admin: superAdmin, batchId: 'missing' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('filters company admin settlement lists by scope and explicit game id', async () => {
+    const prisma = createFakePrisma();
+    const accessControl = createAccessControl({
+      companyIds: ['company-1'],
+      gameAppIds: ['ks_game_001'],
+      gameIds: ['game-1'],
+      isSuperAdmin: false,
+    });
+    const service = new SettlementAdminService(prisma, accessControl);
+    await service.confirmSettlement({
+      gameId: 'game-1',
+      operatorId: 'admin',
+      operatorType: 'SUPER_ADMIN',
+      ...range,
+    });
+
+    await expect(
+      service.listBatches({ admin: companyAdmin, gameId: 'game-1' }),
+    ).resolves.toHaveLength(1);
+    expect(prisma.lastSettlementBatchFindManyArgs?.where).toEqual({
+      gameId: {
+        in: ['game-1'],
+      },
+    });
+
+    await expect(
+      service.listBatches({ admin: companyAdmin, gameId: 'game-2' }),
+    ).resolves.toEqual([]);
+    expect(prisma.lastSettlementBatchFindManyArgs?.where).toEqual({
+      gameId: {
+        in: [],
+      },
+    });
+    expect(accessControl.resolveReadScope).toHaveBeenCalledWith(companyAdmin);
+  });
+
+  it('allows company admins to get scoped settlement batches and denies out-of-scope details', async () => {
+    const prisma = createFakePrisma();
+    const service = new SettlementAdminService(
+      prisma,
+      createAccessControl({
+        companyIds: ['company-1'],
+        gameAppIds: ['ks_game_001'],
+        gameIds: ['game-1'],
+        isSuperAdmin: false,
+      }),
     );
-    await expect(service.getBatch('missing')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    const confirmed = await service.confirmSettlement({
+      gameId: 'game-1',
+      operatorId: 'admin',
+      operatorType: 'SUPER_ADMIN',
+      ...range,
+    });
+    prisma.addBatch({
+      ...confirmed.batch,
+      gameId: 'game-2',
+      id: 'batch-2',
+    });
+
+    await expect(
+      service.getBatch({ admin: companyAdmin, batchId: 'batch-1' }),
+    ).resolves.toEqual(confirmed.batch);
+    await expect(
+      service.getBatch({ admin: companyAdmin, batchId: 'batch-2' }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      service.getBatch({ admin: companyAdmin, batchId: 'missing' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
+
+const superAdmin = {
+  role: 'SUPER_ADMIN' as const,
+  username: 'admin',
+};
+
+const companyAdmin: AdminPrincipal = {
+  adminId: 'company-admin-1',
+  displayName: 'Company Admin',
+  role: 'COMPANY_ADMIN',
+  username: 'company_admin',
+};
+
+function createAccessControl(
+  scope = {
+    companyIds: undefined,
+    gameAppIds: undefined,
+    gameIds: undefined,
+    isSuperAdmin: true,
+  } as any,
+): any {
+  return {
+    resolveReadScope: jest.fn(async () => scope),
+  } as any;
+}
 
 type FakeGame = {
   id: string;
@@ -550,6 +647,8 @@ function createFakePrisma(
     getOpenId(id: string): FakeOpenId | undefined;
     getRawEcpm(id: string): FakeRawEcpm | undefined;
     getUser(id: string): FakeUser | undefined;
+    addBatch(batch: any): void;
+    lastSettlementBatchFindManyArgs?: any;
   } = {
     $queryRaw: (async (query: any) => {
       const queryText = String(query?.strings?.join('') ?? query);
@@ -795,10 +894,19 @@ function createFakePrisma(
         batches.unshift(batch);
         return batch;
       },
-      findMany: async ({ where }: any = {}) =>
-        where?.gameId
-          ? batches.filter((batch) => batch.gameId === where.gameId)
-          : batches,
+      findMany: async (args: any = {}) => {
+        prisma.lastSettlementBatchFindManyArgs = args;
+        const gameIdWhere = args.where?.gameId;
+        if (typeof gameIdWhere === 'string') {
+          return batches.filter((batch) => batch.gameId === gameIdWhere);
+        }
+        if (Array.isArray(gameIdWhere?.in)) {
+          return batches.filter((batch) =>
+            gameIdWhere.in.includes(batch.gameId),
+          );
+        }
+        return batches;
+      },
       findUnique: async ({ where }: any) =>
         batches.find((batch) => batch.id === where.id) ?? null,
     } as any,
@@ -812,6 +920,7 @@ function createFakePrisma(
       },
     } as any,
     getAuditActions: () => auditLogs.map((row) => row.action),
+    addBatch: (batch: any) => batches.unshift(batch),
     getBatchCount: () => batches.length,
     getEventNames: () => events,
     getGame: (id: string) => games.get(id),

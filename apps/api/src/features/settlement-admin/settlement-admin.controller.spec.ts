@@ -176,7 +176,7 @@ describe('SettlementAdminController', () => {
   it('presents batch lists with money and ISO dates', async () => {
     const service = createService();
     const controller = new SettlementAdminController(service);
-    const result = await controller.list({
+    const result = await controller.list(admin, {
       gameId: ' game-1 ',
     });
 
@@ -198,6 +198,7 @@ describe('SettlementAdminController', () => {
     });
     expect(result.batches[0]).not.toHaveProperty('items');
     expect(service.lastListInput).toEqual({
+      admin,
       gameId: 'game-1',
     });
   });
@@ -206,12 +207,12 @@ describe('SettlementAdminController', () => {
     const controller = new SettlementAdminController(createService());
 
     await expect(
-      controller.list({
+      controller.list(admin, {
         gameId: ['game-1', 'game-2'],
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
-      controller.list({
+      controller.list(admin, {
         gameId: '   ',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -220,7 +221,7 @@ describe('SettlementAdminController', () => {
   it('presents batch details with item money and ISO dates', async () => {
     const service = createService();
     const controller = new SettlementAdminController(service);
-    const result = await controller.detail('batch-1');
+    const result = await controller.detail(admin, 'batch-1');
 
     expect(result).toEqual({
       batch: expect.objectContaining({
@@ -244,9 +245,17 @@ describe('SettlementAdminController', () => {
       ],
     });
     expect(result.batch).not.toHaveProperty('items');
-    expect(service.lastGetBatchId).toBe('batch-1');
+    expect(service.lastGetBatchInput).toEqual({
+      admin,
+      batchId: 'batch-1',
+    });
   });
 });
+
+const admin = {
+  role: 'SUPER_ADMIN' as const,
+  username: 'admin',
+};
 
 function createService() {
   const service = {
@@ -263,15 +272,15 @@ function createService() {
         items: batch.items,
       };
     }),
-    getBatch: async (batchId: string) => {
-      service.lastGetBatchId = batchId;
+    getBatch: async (input: any) => {
+      service.lastGetBatchInput = input;
       return createBatch();
     },
     lastConfirmInput: undefined as any,
-    lastGetBatchId: '',
+    lastGetBatchInput: undefined as any,
     lastListInput: undefined as any,
     lastPreviewInput: undefined as any,
-    listBatches: async (input: { gameId?: string }) => {
+    listBatches: async (input: { admin: unknown; gameId?: string }) => {
       service.lastListInput = input;
       return [createBatch()];
     },

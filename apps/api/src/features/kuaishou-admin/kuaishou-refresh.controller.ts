@@ -12,8 +12,10 @@ import {
   type AdminPrincipal,
   requireSuperAdminPrincipal,
 } from '../admin-auth/admin-auth.service';
+import { AdminAccessControlService } from '../admin-auth/admin-access-control.service';
 import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 import { CurrentAdmin } from '../admin-auth/current-admin.decorator';
+import { SuperAdminGuard } from '../admin-auth/super-admin.guard';
 import {
   KuaishouEcpmSyncJobService,
   presentKuaishouEcpmSyncJob,
@@ -42,9 +44,11 @@ export class KuaishouRefreshController {
   constructor(
     private readonly rangeSyncService: KuaishouEcpmRangeSyncService,
     private readonly syncJobService: KuaishouEcpmSyncJobService,
+    private readonly accessControlService: AdminAccessControlService,
   ) {}
 
   @Post('ecpm/refresh')
+  @UseGuards(SuperAdminGuard)
   async refresh(@CurrentAdmin() admin: AdminPrincipal, @Body() body: unknown) {
     const parsed = refreshEcpmSchema.safeParse(body);
     if (!parsed.success) {
@@ -65,11 +69,14 @@ export class KuaishouRefreshController {
 
   @Get('ecpm/jobs')
   async jobs(
+    @CurrentAdmin() admin: AdminPrincipal,
     @Query('limit') limit?: string,
     @Query('gameAppId') gameAppId?: string,
   ) {
+    const scope = await this.accessControlService.resolveReadScope(admin);
     const jobs = await this.syncJobService.listJobs({
       gameAppId,
+      gameAppIds: scope.isSuperAdmin ? undefined : (scope.gameAppIds ?? []),
       limit: parseLimit(limit),
     });
 

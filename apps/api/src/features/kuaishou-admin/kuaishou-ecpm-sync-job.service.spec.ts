@@ -73,11 +73,22 @@ describe('KuaishouEcpmSyncJobService', () => {
     await service.startJob({ ...baseStartInput(), gameAppId: 'game-1' });
     await service.startJob({ ...baseStartInput(), gameAppId: 'game-2' });
 
-    const result = await service.listJobs({ limit: 200 });
+    const result = await service.listJobs({
+      gameAppIds: undefined,
+      limit: 200,
+    });
 
     expect(result).toHaveLength(2);
     expect(result[0].gameAppId).toBe('game-2');
     expect(prisma.lastFindManyArgs).toMatchObject({ take: 100 });
+  });
+
+  it('requires an explicit game app id scope when listing jobs', async () => {
+    const { service } = createService();
+
+    expect(() => service.listJobs({ limit: 20 } as never)).toThrow(
+      'Kuaishou ECPM sync job scope is required',
+    );
   });
 
   it('filters jobs by game app id when listing recent sync jobs', async () => {
@@ -85,13 +96,61 @@ describe('KuaishouEcpmSyncJobService', () => {
     await service.startJob({ ...baseStartInput(), gameAppId: 'game-1' });
     await service.startJob({ ...baseStartInput(), gameAppId: 'game-2' });
 
-    const result = await service.listJobs({ gameAppId: 'game-1', limit: 20 });
+    const result = await service.listJobs({
+      gameAppId: 'game-1',
+      gameAppIds: undefined,
+      limit: 20,
+    });
 
     expect(result).toHaveLength(1);
     expect(result[0].gameAppId).toBe('game-1');
     expect(prisma.lastFindManyArgs).toMatchObject({
       where: { gameAppId: 'game-1' },
     });
+  });
+
+  it('scopes listed jobs to authorized game app ids', async () => {
+    const { prisma, service } = createService();
+    await service.startJob({ ...baseStartInput(), gameAppId: 'game-1' });
+    await service.startJob({ ...baseStartInput(), gameAppId: 'game-2' });
+    await service.startJob({ ...baseStartInput(), gameAppId: 'game-3' });
+
+    const result = await service.listJobs({
+      gameAppIds: ['game-1', 'game-3'],
+      limit: 20,
+    });
+
+    expect(result.map((job) => job.gameAppId)).toEqual(['game-3', 'game-1']);
+    expect(prisma.lastFindManyArgs).toMatchObject({
+      where: { gameAppId: { in: ['game-1', 'game-3'] } },
+    });
+  });
+
+  it('returns no jobs without querying when a scoped admin has no game app ids', async () => {
+    const { prisma, service } = createService();
+    await service.startJob({ ...baseStartInput(), gameAppId: 'game-1' });
+
+    const result = await service.listJobs({
+      gameAppIds: [],
+      limit: 20,
+    });
+
+    expect(result).toEqual([]);
+    expect(prisma.findManyCallCount).toBe(0);
+  });
+
+  it('returns no jobs when explicit game app id is outside scope', async () => {
+    const { prisma, service } = createService();
+    await service.startJob({ ...baseStartInput(), gameAppId: 'game-1' });
+
+    const result = await service.listJobs({
+      gameAppId: 'game-2',
+      gameAppIds: ['game-1'],
+      limit: 20,
+    });
+
+    expect(result).toEqual([]);
+    expect(prisma.findManyCallCount).toBe(0);
   });
 
   it('detects running sync jobs for one game', async () => {
@@ -149,8 +208,12 @@ function createService() {
 function createFakePrisma() {
   const rows: any[] = [];
   let lastFindManyArgs: any;
+  let findManyCallCount = 0;
 
   return {
+    get findManyCallCount() {
+      return findManyCallCount;
+    },
     get lastFindManyArgs() {
       return lastFindManyArgs;
     },
@@ -179,14 +242,20 @@ function createFakePrisma() {
         return rows[index];
       },
       findMany: async (args: any) => {
+        findManyCallCount += 1;
         lastFindManyArgs = args;
         return rows
           .slice()
-          .filter((row) =>
-            args.where?.gameAppId
-              ? row.gameAppId === args.where.gameAppId
-              : true,
-          )
+          .filter((row) => {
+            const gameAppId = args.where?.gameAppId;
+            if (!gameAppId) {
+              return true;
+            }
+            if (typeof gameAppId === 'string') {
+              return row.gameAppId === gameAppId;
+            }
+            return gameAppId.in.includes(row.gameAppId);
+          })
           .sort((a, b) =>
             args.orderBy?.createdAt === 'desc'
               ? b.createdAt.getTime() - a.createdAt.getTime()

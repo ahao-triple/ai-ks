@@ -15,6 +15,7 @@ import {
 } from '../admin-auth/admin-auth.service';
 import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 import { CurrentAdmin } from '../admin-auth/current-admin.decorator';
+import { SuperAdminGuard } from '../admin-auth/super-admin.guard';
 import { presentMoneyLi } from '../demo/money-presenter';
 import {
   SettlementAdminService,
@@ -42,6 +43,7 @@ export class SettlementAdminController {
   constructor(private readonly settlementAdminService: SettlementAdminService) {}
 
   @Get('preview')
+  @UseGuards(SuperAdminGuard)
   async preview(@Query() query: unknown) {
     const input = parseSettlementRange(query);
     const result = await this.settlementAdminService.previewSettlement(input);
@@ -60,6 +62,7 @@ export class SettlementAdminController {
   }
 
   @Post('confirm')
+  @UseGuards(SuperAdminGuard)
   async confirm(@CurrentAdmin() admin: AdminPrincipal, @Body() body: unknown) {
     const input = parseSettlementRange(body);
     const actor = requireSuperAdminPrincipal(admin);
@@ -76,9 +79,10 @@ export class SettlementAdminController {
   }
 
   @Get()
-  async list(@Query() query: unknown) {
+  async list(@CurrentAdmin() admin: AdminPrincipal, @Query() query: unknown) {
     const input = parseSettlementListQuery(query);
     const batches = await this.settlementAdminService.listBatches({
+      admin,
       gameId: input.gameId,
     });
 
@@ -88,8 +92,14 @@ export class SettlementAdminController {
   }
 
   @Get(':batchId')
-  async detail(@Param('batchId') batchId: string) {
-    const batch = await this.settlementAdminService.getBatch(batchId);
+  async detail(
+    @CurrentAdmin() admin: AdminPrincipal,
+    @Param('batchId') batchId: string,
+  ) {
+    const batch = await this.settlementAdminService.getBatch({
+      admin,
+      batchId,
+    });
 
     return {
       batch: presentSettlementBatch(batch),

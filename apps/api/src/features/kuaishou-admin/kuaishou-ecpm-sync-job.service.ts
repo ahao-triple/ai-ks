@@ -35,6 +35,7 @@ export type FailKuaishouEcpmSyncJobInput = {
 
 export type ListKuaishouEcpmSyncJobsInput = {
   gameAppId?: string;
+  gameAppIds: string[] | undefined;
   limit?: number;
 };
 
@@ -93,13 +94,18 @@ export class KuaishouEcpmSyncJobService {
     });
   }
 
-  listJobs(input: ListKuaishouEcpmSyncJobsInput = {}) {
+  listJobs(input: ListKuaishouEcpmSyncJobsInput) {
+    const where = resolveListJobsWhere(input);
+    if (where === false) {
+      return Promise.resolve([]);
+    }
+
     return this.prisma.kuaishouEcpmSyncJob.findMany({
       orderBy: {
         createdAt: 'desc',
       },
       take: clampLimit(input.limit),
-      ...(input.gameAppId ? { where: { gameAppId: input.gameAppId } } : {}),
+      ...(where ? { where } : {}),
     });
   }
 
@@ -147,4 +153,30 @@ function clampLimit(limit?: number) {
   }
 
   return Math.min(Math.max(Math.trunc(limit!), 1), 100);
+}
+
+function resolveListJobsWhere(input: ListKuaishouEcpmSyncJobsInput) {
+  if (!input || !Object.prototype.hasOwnProperty.call(input, 'gameAppIds')) {
+    throw new Error('Kuaishou ECPM sync job scope is required');
+  }
+
+  if (input.gameAppIds === undefined) {
+    return input.gameAppId ? { gameAppId: input.gameAppId } : undefined;
+  }
+
+  if (input.gameAppIds.length === 0) {
+    return false;
+  }
+
+  if (input.gameAppId) {
+    return input.gameAppIds.includes(input.gameAppId)
+      ? { gameAppId: input.gameAppId }
+      : false;
+  }
+
+  return {
+    gameAppId: {
+      in: input.gameAppIds,
+    },
+  };
 }

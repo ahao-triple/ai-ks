@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { AdminResourcesController } from './admin-resources.controller';
 
 describe('AdminResourcesController', () => {
@@ -6,7 +6,7 @@ describe('AdminResourcesController', () => {
     const service = createService();
     const controller = new AdminResourcesController(service);
 
-    await expect(controller.listCompanies()).resolves.toEqual({
+    await expect(controller.listCompanies(admin)).resolves.toEqual({
       companies: [
         {
           balance: {
@@ -19,6 +19,9 @@ describe('AdminResourcesController', () => {
           updatedAt: '2026-05-08T01:30:00.000Z',
         },
       ],
+    });
+    expect(service.lastListCompaniesInput).toEqual({
+      admin,
     });
   });
 
@@ -58,7 +61,7 @@ describe('AdminResourcesController', () => {
     const service = createService();
     const controller = new AdminResourcesController(service);
 
-    const result = await controller.listGames({
+    const result = await controller.listGames(admin, {
       companyId: ' company-1 ',
     });
 
@@ -86,6 +89,7 @@ describe('AdminResourcesController', () => {
       ],
     });
     expect(service.lastListGamesInput).toEqual({
+      admin,
       companyId: 'company-1',
     });
   });
@@ -100,7 +104,7 @@ describe('AdminResourcesController', () => {
     });
     const controller = new AdminResourcesController(service);
 
-    const result = await controller.listGames({});
+    const result = await controller.listGames(admin, {});
 
     expect(result.games[0]).toMatchObject({
       ecpmAutoSyncEnabled: true,
@@ -226,6 +230,52 @@ describe('AdminResourcesController', () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it('direct write method calls still reject company admins', async () => {
+    const service = createService();
+    const controller = new AdminResourcesController(service);
+    const companyAdmin = {
+      adminId: 'company-admin-1',
+      displayName: 'Company Admin',
+      role: 'COMPANY_ADMIN' as const,
+      username: 'company_admin',
+    };
+
+    await expect(
+      controller.createCompany(companyAdmin, {
+        name: 'New Studio',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      controller.createGame(companyAdmin, {
+        companyId: 'company-1',
+        gameAppId: 'ks_game_002',
+        gameSecret: 'secret-2',
+        name: 'Runner 2',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      controller.updateGame(companyAdmin, 'game-1', {
+        name: 'Runner Pro',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      controller.allocateGameBudget(companyAdmin, 'game-1', {
+        amountYuan: '1.00',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      controller.adjustCompanyBalance(companyAdmin, 'company-1', {
+        amountYuan: '1.00',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(service.lastCreateCompanyInput).toBeUndefined();
+    expect(service.lastCreateGameInput).toBeUndefined();
+    expect(service.lastUpdateGameInput).toBeUndefined();
+    expect(service.lastAllocateGameBudgetInput).toBeUndefined();
+    expect(service.lastAdjustCompanyBalanceInput).toBeUndefined();
+  });
 });
 
 const admin = {
@@ -266,9 +316,13 @@ function createService(options: { game?: Record<string, unknown> } = {}) {
     lastAllocateGameBudgetInput: undefined as unknown,
     lastCreateCompanyInput: undefined as unknown,
     lastCreateGameInput: undefined as unknown,
+    lastListCompaniesInput: undefined as unknown,
     lastListGamesInput: undefined as unknown,
     lastUpdateGameInput: undefined as unknown,
-    listCompanies: async () => [company],
+    listCompanies: async function (input: unknown) {
+      this.lastListCompaniesInput = input;
+      return [company];
+    },
     createCompany: async function (input: unknown) {
       this.lastCreateCompanyInput = input;
       return {

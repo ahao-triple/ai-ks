@@ -7,6 +7,7 @@ describe('WithdrawalReviewService', () => {
     const service = new WithdrawalReviewService(prisma);
 
     const result = await service.listBatches({
+      readScope: superAdminReadScope,
       status: 'PENDING_REVIEW',
     });
 
@@ -18,6 +19,19 @@ describe('WithdrawalReviewService', () => {
       userId: 'user-1',
     });
     expect(result[0].details).toHaveLength(1);
+  });
+
+  it('returns no withdrawal batches for company admins without querying batches', async () => {
+    const prisma = createFakePrisma();
+    const service = new WithdrawalReviewService(prisma);
+
+    const result = await service.listBatches({
+      readScope: companyAdminReadScope,
+      status: 'PENDING_REVIEW',
+    });
+
+    expect(result).toEqual([]);
+    expect(prisma.withdrawalBatch.findMany).not.toHaveBeenCalled();
   });
 
   it('approves a pending withdrawal batch and its pending details', async () => {
@@ -58,6 +72,20 @@ describe('WithdrawalReviewService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
+
+const superAdminReadScope = {
+  companyIds: undefined,
+  gameAppIds: undefined,
+  gameIds: undefined,
+  isSuperAdmin: true,
+};
+
+const companyAdminReadScope = {
+  companyIds: ['company-1'],
+  gameAppIds: ['game-app-1'],
+  gameIds: ['game-1'],
+  isSuperAdmin: false,
+};
 
 type FakeDetail = {
   id: string;
@@ -120,7 +148,7 @@ function createFakePrisma() {
   const prisma = {
     getBatch: (id: string) => batches.get(id),
     withdrawalBatch: {
-      findMany: async ({ orderBy, where }: any) =>
+      findMany: jest.fn(async ({ orderBy, where }: any) =>
         Array.from(batches.values())
           .filter((batch) => !where?.status || batch.status === where.status)
           .sort((a, b) =>
@@ -128,6 +156,7 @@ function createFakePrisma() {
               ? b.createdAt.getTime() - a.createdAt.getTime()
               : a.createdAt.getTime() - b.createdAt.getTime(),
           ),
+      ),
       findUnique: async ({ where }: any) => batches.get(where.id) ?? null,
       update: async ({ data, where }: any) => {
         const batch = batches.get(where.id);

@@ -14,6 +14,7 @@ import {
 } from '../admin-auth/admin-auth.service';
 import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 import { CurrentAdmin } from '../admin-auth/current-admin.decorator';
+import { SuperAdminGuard } from '../admin-auth/super-admin.guard';
 import { AuditLogService } from '../audit/audit-log.service';
 import {
   KuaishouTokenService,
@@ -27,7 +28,7 @@ const authorizeSchema = z.object({
 });
 
 @Controller('admin/kuaishou/token')
-@UseGuards(AdminJwtGuard)
+@UseGuards(AdminJwtGuard, SuperAdminGuard)
 export class KuaishouTokenController {
   constructor(
     private readonly tokenService: KuaishouTokenService,

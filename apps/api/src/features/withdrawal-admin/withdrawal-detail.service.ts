@@ -1,10 +1,16 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import {
   type AuditLog,
   type WithdrawalBatch,
   type WithdrawalDetail,
 } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { type AdminReadScope } from '../admin-auth/admin-access-control.service';
 
 type WithdrawalDetailPrisma = Pick<
   PrismaService,
@@ -17,6 +23,7 @@ export type WithdrawalBatchDetail = WithdrawalBatch & {
 
 export type GetWithdrawalBatchDetailInput = {
   batchId: string;
+  readScope: AdminReadScope;
 };
 
 export type WithdrawalBatchDetailResult = {
@@ -33,6 +40,10 @@ export class WithdrawalDetailService {
   async getBatchDetail(
     input: GetWithdrawalBatchDetailInput,
   ): Promise<WithdrawalBatchDetailResult> {
+    if (!input.readScope.isSuperAdmin) {
+      throw new ForbiddenException('无权限访问该操作');
+    }
+
     const batch = await this.prisma.withdrawalBatch.findUnique({
       include: {
         details: true,

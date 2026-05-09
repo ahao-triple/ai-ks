@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -15,6 +16,8 @@ import {
   type SettlementBatchItem,
 } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AdminAccessControlService } from '../admin-auth/admin-access-control.service';
+import { type AdminPrincipal } from '../admin-auth/admin-auth.service';
 
 export type SettlementAdminPrisma = Pick<
   PrismaService,
@@ -78,6 +81,16 @@ export type ConfirmSettlementResult = {
   items: SettlementBatchItem[];
 };
 
+export type ListSettlementBatchesInput = {
+  admin: AdminPrincipal;
+  gameId?: string;
+};
+
+export type GetSettlementBatchInput = {
+  admin: AdminPrincipal;
+  batchId: string;
+};
+
 export class BudgetExceededException extends ConflictException {
   constructor() {
     super('Game budget is insufficient');
@@ -88,6 +101,7 @@ export class BudgetExceededException extends ConflictException {
 export class SettlementAdminService {
   constructor(
     @Inject(PrismaService) private readonly prisma: SettlementAdminPrisma,
+    private readonly accessControlService: AdminAccessControlService,
   ) {}
 
   async previewSettlement(
@@ -123,6 +137,7 @@ export class SettlementAdminService {
       return await this.prisma.$transaction(async (tx) => {
         const service = new SettlementAdminService(
           tx as unknown as SettlementAdminPrisma,
+          this.accessControlService,
         );
         const lockedGame = await tx.$queryRaw<LockedSettlementGame[]>(
           Prisma.sql`
@@ -369,7 +384,26 @@ export class SettlementAdminService {
     throw new BudgetExceededException();
   }
 
-  listBatches(input: { gameId?: string } = {}) {
+  async listBatches(input: ListSettlementBatchesInput) {
+    const scope = await this.accessControlService.resolveReadScope(input.admin);
+    const scopedGameIds = scope.gameIds ?? [];
+    const allowedGameIds = input.gameId
+      ? scopedGameIds.includes(input.gameId)
+        ? [input.gameId]
+        : []
+      : scopedGameIds;
+    const where = scope.isSuperAdmin
+      ? input.gameId
+        ? {
+            gameId: input.gameId,
+          }
+        : undefined
+      : {
+          gameId: {
+            in: allowedGameIds,
+          },
+        };
+
     return this.prisma.settlementBatch.findMany({
       include: {
         items: true,
@@ -378,26 +412,29 @@ export class SettlementAdminService {
         createdAt: 'desc',
       },
       take: 20,
-      where: input.gameId
-        ? {
-            gameId: input.gameId,
-          }
-        : undefined,
+      where,
     }) as Promise<SettlementBatchWithItems[]>;
   }
 
-  async getBatch(batchId: string) {
+  async getBatch(input: GetSettlementBatchInput) {
+    const scope = await this.accessControlService.resolveReadScope(input.admin);
     const batch = await this.prisma.settlementBatch.findUnique({
       include: {
         items: true,
       },
       where: {
-        id: batchId,
+        id: input.batchId,
       },
     });
 
     if (!batch) {
-      throw new NotFoundException(`Settlement batch ${batchId} is not found`);
+      throw new NotFoundException(
+        `Settlement batch ${input.batchId} is not found`,
+      );
+    }
+
+    if (!scope.isSuperAdmin && !(scope.gameIds ?? []).includes(batch.gameId)) {
+      throw new ForbiddenException('无权限访问该操作');
     }
 
     return batch as SettlementBatchWithItems;

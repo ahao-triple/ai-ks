@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import { type Company, type Game, Prisma } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { AdminAccessControlService } from '../admin-auth/admin-access-control.service';
+import { type AdminPrincipal } from '../admin-auth/admin-auth.service';
 
 type AdminResourcesPrisma = Pick<
   PrismaService,
@@ -32,7 +34,12 @@ export type AdjustCompanyBalanceInput = {
 };
 
 export type ListGamesInput = {
+  admin: AdminPrincipal;
   companyId?: string;
+};
+
+export type ListCompaniesInput = {
+  admin: AdminPrincipal;
 };
 
 export type CreateGameInput = {
@@ -77,19 +84,38 @@ const ALLOWED_ECPM_SYNC_INTERVAL_HOURS = new Set([1, 3, 6, 12, 24]);
 export class AdminResourcesService {
   constructor(
     @Inject(PrismaService) private readonly prisma: AdminResourcesPrisma,
+    private readonly accessControlService: AdminAccessControlService,
     @Optional()
     @Inject(ADMIN_RESOURCES_NOW)
     private readonly nowProvider: () => Date = () => new Date(),
   ) {}
 
-  listCompanies() {
+  async listCompanies(input: ListCompaniesInput) {
+    const scope = await this.accessControlService.resolveReadScope(input.admin);
+    const where = scope.isSuperAdmin
+      ? {
+          deletedAt: null,
+        }
+      : {
+          deletedAt: null,
+          games: {
+            some: {
+              deletedAt: null,
+              id: {
+                in: scope.gameIds ?? [],
+              },
+            },
+          },
+          id: {
+            in: scope.companyIds ?? [],
+          },
+        };
+
     return this.prisma.company.findMany({
       orderBy: {
         createdAt: 'asc',
       },
-      where: {
-        deletedAt: null,
-      },
+      where,
     });
   }
 
@@ -147,7 +173,21 @@ export class AdminResourcesService {
     });
   }
 
-  listGames(input: ListGamesInput = {}) {
+  async listGames(input: ListGamesInput) {
+    const scope = await this.accessControlService.resolveReadScope(input.admin);
+    const where = scope.isSuperAdmin
+      ? {
+          ...(input.companyId ? { companyId: input.companyId } : {}),
+          deletedAt: null,
+        }
+      : {
+          ...(input.companyId ? { companyId: input.companyId } : {}),
+          deletedAt: null,
+          id: {
+            in: scope.gameIds ?? [],
+          },
+        };
+
     return this.prisma.game.findMany({
       include: {
         company: true,
@@ -155,10 +195,7 @@ export class AdminResourcesService {
       orderBy: {
         createdAt: 'asc',
       },
-      where: {
-        ...(input.companyId ? { companyId: input.companyId } : {}),
-        deletedAt: null,
-      },
+      where,
     });
   }
 

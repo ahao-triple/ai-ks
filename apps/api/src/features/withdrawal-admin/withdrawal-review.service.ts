@@ -10,6 +10,7 @@ import {
   WithdrawalDetailStatus,
 } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import { type AdminReadScope } from '../admin-auth/admin-access-control.service';
 
 type WithdrawalReviewPrisma = Pick<
   PrismaService,
@@ -21,6 +22,7 @@ export type WithdrawalBatchWithDetails = WithdrawalBatch & {
 };
 
 export type ListWithdrawalBatchesInput = {
+  readScope: AdminReadScope;
   status?: string;
 };
 
@@ -35,8 +37,12 @@ export class WithdrawalReviewService {
   ) {}
 
   async listBatches(
-    input: ListWithdrawalBatchesInput = {},
+    input: ListWithdrawalBatchesInput,
   ): Promise<WithdrawalBatchWithDetails[]> {
+    if (!input.readScope.isSuperAdmin) {
+      return [];
+    }
+
     const batches = await this.prisma.withdrawalBatch.findMany({
       include: {
         details: true,
