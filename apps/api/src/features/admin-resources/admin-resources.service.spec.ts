@@ -85,6 +85,21 @@ describe('AdminResourcesService', () => {
     });
   });
 
+  it('resets test data with a single truncate statement', async () => {
+    const prisma = createFakePrisma();
+    const service = new AdminResourcesService(prisma, createAccessControl());
+
+    await service.resetTestData({
+      actor: adminActor,
+    });
+
+    expect(prisma.executedSql).toHaveLength(1);
+    expect(prisma.executedSql[0]).toContain('TRUNCATE TABLE');
+    expect(prisma.executedSql[0]).toContain('company_admin_accounts');
+    expect(prisma.executedSql[0]).toContain('platform_configs');
+    expect(prisma.executedSql[0]).toContain('RESTART IDENTITY CASCADE');
+  });
+
   it('creates a company with zero balance and writes an audit log', async () => {
     const prisma = createFakePrisma();
     const service = new AdminResourcesService(prisma, createAccessControl());
@@ -108,6 +123,98 @@ describe('AdminResourcesService', () => {
         targetType: 'company',
       }),
     ]);
+  });
+
+  it('creates and lists agents with balance fields', async () => {
+    const prisma = createFakePrisma();
+    const service = new AdminResourcesService(prisma, createAccessControl());
+
+    const agent = await service.createAgent({
+      actor: adminActor,
+      invitationCode: 'DEFAULT_AGENT',
+      password: 'agent-pass-123',
+      username: 'default_agent',
+    });
+
+    await expect(service.listAgents()).resolves.toEqual([agent]);
+    expect(agent).toMatchObject({
+      availableBalanceLi: 0n,
+      frozenBalanceLi: 0n,
+      invitationCode: 'DEFAULT_AGENT',
+      username: 'default_agent',
+    });
+    expect(agent.passwordHash).not.toBe('agent-pass-123');
+    expect(prisma.auditLogs).toEqual([
+      expect.objectContaining({
+        action: 'agent.created',
+        targetId: agent.id,
+        targetType: 'agent',
+      }),
+    ]);
+  });
+
+  it('updates agent alipay profile and requests an agent withdrawal', async () => {
+    const prisma = createFakePrisma({
+      agents: [
+        {
+          availableBalanceLi: 5000n,
+          id: 'agent-1',
+          invitationCode: 'AGENT1',
+          passwordHash: 'hash',
+          username: 'agent_1',
+        },
+      ],
+    });
+    const service = new AdminResourcesService(
+      prisma,
+      createAccessControl(),
+      undefined,
+      {
+        getConfig: jest.fn(async () => ({
+          defaultAgentId: null,
+          defaultAgentRatioPercent: 0,
+          directAgentRatioPercent: 0,
+          displayRatioPercent: 50,
+          feeRatioPercent: 0,
+          minWithdrawalLi: 1000n,
+          parentAgentRatioPercent: 0,
+          userSettlementRatioPercent: 100,
+        })),
+      } as any,
+    );
+
+    await service.updateAgentAlipayProfile({
+      actor: adminActor,
+      agentId: 'agent-1',
+      alipayAccount: 'agent@example.com',
+      alipayRealName: 'Agent One',
+    });
+    const withdrawal = await service.requestAgentWithdrawal({
+      actor: adminActor,
+      agentId: 'agent-1',
+      amountLi: 3000n,
+    });
+
+    expect(prisma.getAgent('agent-1')).toMatchObject({
+      alipayAccount: 'agent@example.com',
+      alipayRealName: 'Agent One',
+      availableBalanceLi: 2000n,
+      frozenBalanceLi: 3000n,
+    });
+    expect(withdrawal).toMatchObject({
+      ownerId: 'agent-1',
+      ownerType: 'AGENT',
+      status: 'PENDING_REVIEW',
+      totalAmountLi: 3000n,
+      userId: null,
+    });
+    expect(withdrawal.details[0]).toMatchObject({
+      amountLi: 3000n,
+      recipientAlipay: 'agent@example.com',
+      recipientName: 'Agent One',
+      status: 'PENDING_REVIEW',
+      type: 'AGENT',
+    });
   });
 
   it('adds positive company balance and records before and after amounts', async () => {
@@ -662,7 +769,49 @@ type FakeGame = {
   updatedAt: Date;
 };
 
+type FakeAgent = {
+  id: string;
+  alipayAccount: string | null;
+  alipayRealName: string | null;
+  availableBalanceLi: bigint;
+  createdAt: Date;
+  deletedAt: Date | null;
+  enabled: boolean;
+  frozenBalanceLi: bigint;
+  invitationCode: string;
+  parentAgentId: string | null;
+  passwordHash: string;
+  updatedAt: Date;
+  username: string;
+};
+
+type FakeWithdrawalDetail = {
+  id: string;
+  amountLi: bigint;
+  batchId: string;
+  recipientAlipay: string;
+  recipientName: string;
+  status: string;
+  type: string;
+};
+
+type FakeWithdrawalBatch = {
+  id: string;
+  createdAt: Date;
+  details: FakeWithdrawalDetail[];
+  ownerId: string | null;
+  ownerType: string;
+  status: string;
+  totalAmountLi: bigint;
+  updatedAt: Date;
+  userId: string | null;
+};
+
 type FakePrismaSeed = {
+  agents?: Array<
+    Partial<FakeAgent> &
+      Pick<FakeAgent, 'id' | 'invitationCode' | 'passwordHash' | 'username'>
+  >;
   companies?: Array<Partial<FakeCompany> & Pick<FakeCompany, 'id' | 'name'>>;
   games?: Array<
     Partial<FakeGame> &
@@ -671,13 +820,37 @@ type FakePrismaSeed = {
 };
 
 function createFakePrisma(seed: FakePrismaSeed = {}) {
+  const agents = new Map<string, FakeAgent>();
+  const batches = new Map<string, FakeWithdrawalBatch>();
   const companies = new Map<string, FakeCompany>();
   const games = new Map<string, FakeGame>();
   const auditLogs: unknown[] = [];
+  const executedSql: string[] = [];
   let companySequence = 1;
+  let agentSequence = 1;
+  let batchSequence = 1;
   let gameSequence = 1;
   let lastCompanyFindManyArgs: unknown;
   let lastGameFindManyArgs: unknown;
+
+  for (const agent of seed.agents ?? []) {
+    agents.set(agent.id, {
+      alipayAccount: agent.alipayAccount ?? null,
+      alipayRealName: agent.alipayRealName ?? null,
+      availableBalanceLi: agent.availableBalanceLi ?? 0n,
+      createdAt: agent.createdAt ?? new Date('2026-05-08T00:30:00.000Z'),
+      deletedAt: agent.deletedAt ?? null,
+      enabled: agent.enabled ?? true,
+      frozenBalanceLi: agent.frozenBalanceLi ?? 0n,
+      id: agent.id,
+      invitationCode: agent.invitationCode,
+      parentAgentId: agent.parentAgentId ?? null,
+      passwordHash: agent.passwordHash,
+      updatedAt: agent.updatedAt ?? new Date('2026-05-08T00:30:00.000Z'),
+      username: agent.username,
+    });
+    agentSequence += 1;
+  }
 
   for (const company of seed.companies ?? []) {
     companies.set(company.id, {
@@ -711,8 +884,16 @@ function createFakePrisma(seed: FakePrismaSeed = {}) {
     gameSequence += 1;
   }
 
+  const withParentAgent = (agent: FakeAgent) => ({
+    ...agent,
+    parentAgent: agent.parentAgentId
+      ? (agents.get(agent.parentAgentId) ?? null)
+      : null,
+  });
+
   const prisma = {
     auditLogs,
+    executedSql,
     get lastCompanyFindManyArgs() {
       return lastCompanyFindManyArgs;
     },
@@ -721,6 +902,7 @@ function createFakePrisma(seed: FakePrismaSeed = {}) {
     },
     getCompany: (id: string) => companies.get(id),
     getGame: (id: string) => games.get(id),
+    getAgent: (id: string) => agents.get(id),
     auditLog: {
       create: async ({ data }: any) => {
         const row = {
@@ -732,7 +914,105 @@ function createFakePrisma(seed: FakePrismaSeed = {}) {
         return row;
       },
     },
-    company: {
+    agent: {
+      create: async ({ data, include }: any) => {
+        if (
+          Array.from(agents.values()).some(
+            (agent) =>
+              agent.username === data.username ||
+              agent.invitationCode === data.invitationCode,
+          )
+        ) {
+          const error = new Error('Unique constraint failed');
+          Object.assign(error, {
+            code: 'P2002',
+          });
+          throw error;
+        }
+
+        const agent: FakeAgent = {
+          alipayAccount: null,
+          alipayRealName: null,
+          availableBalanceLi: 0n,
+          createdAt: new Date('2026-05-08T00:30:00.000Z'),
+          deletedAt: null,
+          enabled: true,
+          frozenBalanceLi: 0n,
+          id: data.id ?? `agent-${agentSequence++}`,
+          invitationCode: data.invitationCode,
+          parentAgentId: data.parentAgentId ?? null,
+          passwordHash: data.passwordHash,
+          updatedAt: new Date('2026-05-08T00:30:00.000Z'),
+          username: data.username,
+        };
+        agents.set(agent.id, agent);
+        return include?.parentAgent ? withParentAgent(agent) : agent;
+      },
+	      findMany: async ({ include }: any = {}) =>
+	        Array.from(agents.values())
+	          .filter((agent) => agent.deletedAt === null)
+	          .map((agent) => (include?.parentAgent ? withParentAgent(agent) : agent)),
+	      findUnique: async ({ where }: any) => agents.get(where.id) ?? null,
+	      update: async ({ data, where }: any) => {
+	        const agent = agents.get(where.id);
+	        if (!agent) {
+	          throw new Error('agent not found');
+	        }
+	        const next = {
+	          ...agent,
+	          ...data,
+	          updatedAt: new Date('2026-05-08T04:00:00.000Z'),
+	        };
+	        agents.set(next.id, next);
+	        return next;
+	      },
+	      updateMany: async ({ data, where }: any) => {
+	        const agent = agents.get(where.id);
+	        if (
+	          !agent ||
+	          agent.deletedAt !== where.deletedAt ||
+	          agent.enabled !== where.enabled ||
+	          agent.availableBalanceLi < where.availableBalanceLi.gte
+	        ) {
+	          return {
+	            count: 0,
+	          };
+	        }
+	        agents.set(agent.id, {
+	          ...agent,
+	          availableBalanceLi:
+	            agent.availableBalanceLi - data.availableBalanceLi.decrement,
+	          frozenBalanceLi:
+	            agent.frozenBalanceLi + data.frozenBalanceLi.increment,
+	          updatedAt: new Date('2026-05-08T04:00:00.000Z'),
+	        });
+	        return {
+	          count: 1,
+	        };
+	      },
+	    },
+	    withdrawalBatch: {
+	      create: async ({ data }: any) => {
+	        const batch: FakeWithdrawalBatch = {
+	          createdAt: new Date('2026-05-08T05:00:00.000Z'),
+	          details: data.details.create.map((detail: any, index: number) => ({
+	            ...detail,
+	            batchId: `withdrawal-${batchSequence}`,
+	            id: `withdrawal-detail-${index + 1}`,
+	          })),
+	          id: `withdrawal-${batchSequence++}`,
+	          ownerId: data.ownerId ?? null,
+	          ownerType: data.ownerType,
+	          status: data.status,
+	          totalAmountLi: data.totalAmountLi,
+	          updatedAt: new Date('2026-05-08T05:00:00.000Z'),
+	          userId: data.userId ?? null,
+	        };
+	        batches.set(batch.id, batch);
+	        return batch;
+	      },
+	    },
+	    company: {
       create: async ({ data }: any) => {
         const company = {
           id: data.id ?? `company-${companySequence++}`,
@@ -879,6 +1159,10 @@ function createFakePrisma(seed: FakePrismaSeed = {}) {
             }
           : next;
       },
+    },
+    $executeRawUnsafe: async (sql: string) => {
+      executedSql.push(sql);
+      return 0;
     },
     $transaction: async (callback: any) => callback(prisma),
   } as any;

@@ -9,9 +9,11 @@ import { Alert } from './components/ui';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { ApiError } from './lib/api';
 import { aiKsApi } from './lib/aiKsApi';
+import { buildOperationsOverview } from './lib/operationsOverview';
 import {
   ACCOUNT_AUTH_STORAGE_KEY,
   ADMIN_AUTH_STORAGE_KEY,
+  AGENT_AUTH_STORAGE_KEY,
   clearStoredToken,
   readStoredToken,
   writeStoredToken,
@@ -20,6 +22,10 @@ import {
   AccountWorkspace,
   type AccountWorkspaceBusyAction,
 } from './pages/AccountWorkspace';
+import {
+  AgentWorkspace,
+  type AgentWorkspaceBusyAction,
+} from './pages/AgentWorkspace';
 import { GuestQueryPage } from './pages/GuestQueryPage';
 import {
   LoginPage,
@@ -28,21 +34,30 @@ import {
 } from './pages/LoginPage';
 import {
   OperationsWorkspace,
+  type PlatformConfigDraft,
   type OperationsWorkspaceBusyAction,
 } from './pages/OperationsWorkspace';
 import type {
   AccountEarningsResult,
+  AccountAgentBindingResult,
   AccountResult,
   AdminCompany,
   AdminCompanyAdmin,
   AdminGame,
   AdminPrincipal,
   AdminSettlementBatch,
+  AdminSettlementDetailResult,
   AdminSettlementPreview,
   AdminSettlementRange,
   AdminWithdrawalBatch,
   AdminWithdrawalDetailResult,
+  AdminAgent,
+  AgentEarningsResult,
+  AgentPrincipal,
+  AgentProfile,
+  AgentUsersResult,
   AuditLogRow,
+  BusinessClosureReport,
   DemoGame,
   EarningsResult,
   EcpmLookbackHours,
@@ -51,16 +66,19 @@ import type {
   IntegrationStatus,
   KuaishouEcpmSyncJob,
   KuaishouTokenStatusResult,
+  PlatformConfig,
+  PlatformConfigUpdateInput,
   WithdrawalResult,
 } from './types/api';
 
 type AppBusyAction =
   | LoginBusyAction
   | AccountWorkspaceBusyAction
+  | AgentWorkspaceBusyAction
   | OperationsWorkspaceBusyAction
   | 'query';
 
-type AuthScope = 'account' | 'admin' | 'none';
+type AuthScope = 'account' | 'admin' | 'agent' | 'none';
 
 type LoadOptions = {
   reportError?: boolean;
@@ -154,6 +172,22 @@ export function getDefaultKuaishouAppId(
   return currentAppId.trim() || status?.appId || '';
 }
 
+export function readKuaishouOAuthCallback(search: string) {
+  const params = new URLSearchParams(
+    search.startsWith('?') ? search.slice(1) : search,
+  );
+  const authCode =
+    params.get('auth_code')?.trim() || params.get('code')?.trim() || '';
+  if (!authCode) {
+    return undefined;
+  }
+
+  return {
+    appId: params.get('app_id')?.trim() || params.get('appId')?.trim() || '',
+    authCode,
+  };
+}
+
 function buildGameConfigDraft(game: AdminGame): GameConfigDraft {
   return {
     ecpmAutoSyncEnabled: game.ecpmAutoSyncEnabled,
@@ -161,6 +195,32 @@ function buildGameConfigDraft(game: AdminGame): GameConfigDraft {
     gameSecret: game.gameSecret,
     name: game.name,
     settlementPaused: game.settlementPaused,
+  };
+}
+
+function defaultPlatformConfig(): PlatformConfig {
+  return {
+    defaultAgentId: null,
+    defaultAgentRatioPercent: 0,
+    directAgentRatioPercent: 0,
+    displayRatioPercent: 50,
+    feeRatioPercent: 0,
+    minWithdrawal: { li: '10000', yuan: '10.00' },
+    parentAgentRatioPercent: 0,
+    userSettlementRatioPercent: 100,
+  };
+}
+
+function buildPlatformConfigDraft(config: PlatformConfig): PlatformConfigDraft {
+  return {
+    defaultAgentId: config.defaultAgentId ?? '',
+    defaultAgentRatioPercent: String(config.defaultAgentRatioPercent),
+    directAgentRatioPercent: String(config.directAgentRatioPercent),
+    displayRatioPercent: String(config.displayRatioPercent),
+    feeRatioPercent: String(config.feeRatioPercent),
+    minWithdrawalYuan: config.minWithdrawal.yuan,
+    parentAgentRatioPercent: String(config.parentAgentRatioPercent),
+    userSettlementRatioPercent: String(config.userSettlementRatioPercent),
   };
 }
 
@@ -209,20 +269,51 @@ export function App() {
   const [earnings, setEarnings] = useState<EarningsResult>();
   const [username, setUsername] = useState('demo_user');
   const [password, setPassword] = useState('demo123456');
+  const [invitationCode, setInvitationCode] = useState('');
   const [account, setAccount] = useState<AccountResult>();
+  const [accountAgentBinding, setAccountAgentBinding] =
+    useState<AccountAgentBindingResult>();
+  const [accountAgentInvitationCode, setAccountAgentInvitationCode] =
+    useState('');
   const [accessToken, setAccessToken] = useState(() =>
     readStoredToken(ACCOUNT_AUTH_STORAGE_KEY),
   );
   const [adminAccessToken, setAdminAccessToken] = useState(() =>
     readStoredToken(ADMIN_AUTH_STORAGE_KEY),
   );
+  const [agentAccessToken, setAgentAccessToken] = useState(() =>
+    readStoredToken(AGENT_AUTH_STORAGE_KEY),
+  );
   const [adminUsername, setAdminUsername] = useState('admin');
   const [adminPassword, setAdminPassword] = useState('admin123456');
+  const [agentUsername, setAgentUsername] = useState('demo_default_agent');
+  const [agentPassword, setAgentPassword] = useState('demo-agent-pass');
+  const [currentAgent, setCurrentAgent] = useState<AgentPrincipal>();
+  const [agentProfile, setAgentProfile] = useState<AgentProfile>();
+  const [agentEarnings, setAgentEarnings] = useState<AgentEarningsResult>();
+  const [agentUsers, setAgentUsers] = useState<AgentUsersResult>();
+  const [agentWithdrawals, setAgentWithdrawals] = useState<
+    AdminWithdrawalBatch[]
+  >([]);
+  const [ownAgentAlipayAccount, setOwnAgentAlipayAccount] = useState('');
+  const [ownAgentAlipayRealName, setOwnAgentAlipayRealName] = useState('');
+  const [ownAgentWithdrawalAmountYuan, setOwnAgentWithdrawalAmountYuan] =
+    useState('10.00');
   const [currentAdmin, setCurrentAdmin] = useState<AdminPrincipal>();
   const [adminName, setAdminName] = useState('');
   const [adminCompanies, setAdminCompanies] = useState<AdminCompany[]>([]);
-  const [, setCompanyAdmins] = useState<AdminCompanyAdmin[]>([]);
+  const [adminAgents, setAdminAgents] = useState<AdminAgent[]>([]);
+  const [companyAdmins, setCompanyAdmins] = useState<AdminCompanyAdmin[]>([]);
   const [adminGames, setAdminGames] = useState<AdminGame[]>([]);
+  const [businessClosure, setBusinessClosure] =
+    useState<BusinessClosureReport>();
+  const [platformConfig, setPlatformConfig] = useState<PlatformConfig>(() =>
+    defaultPlatformConfig(),
+  );
+  const [platformConfigDraft, setPlatformConfigDraft] =
+    useState<PlatformConfigDraft>(() =>
+      buildPlatformConfigDraft(defaultPlatformConfig()),
+    );
   const [newCompanyName, setNewCompanyName] = useState('');
   const [balanceCompanyId, setBalanceCompanyId] = useState('');
   const [balanceAmountYuan, setBalanceAmountYuan] = useState('');
@@ -231,6 +322,14 @@ export function App() {
   const [newGameName, setNewGameName] = useState('');
   const [newGameAppId, setNewGameAppId] = useState('');
   const [newGameSecret, setNewGameSecret] = useState('');
+  const [newAgentUsername, setNewAgentUsername] = useState('');
+  const [newAgentPassword, setNewAgentPassword] = useState('');
+  const [newAgentInvitationCode, setNewAgentInvitationCode] = useState('');
+  const [newAgentParentId, setNewAgentParentId] = useState('');
+  const [agentActionAgentId, setAgentActionAgentId] = useState('');
+  const [agentAlipayAccount, setAgentAlipayAccount] = useState('');
+  const [agentAlipayRealName, setAgentAlipayRealName] = useState('');
+  const [agentWithdrawalAmountYuan, setAgentWithdrawalAmountYuan] = useState('');
   const [budgetGameId, setBudgetGameId] = useState('');
   const [budgetAmountYuan, setBudgetAmountYuan] = useState('');
   const [budgetReason, setBudgetReason] = useState('');
@@ -268,6 +367,8 @@ export function App() {
   const [settlementBatches, setSettlementBatches] = useState<
     AdminSettlementBatch[]
   >([]);
+  const [selectedSettlementDetail, setSelectedSettlementDetail] =
+    useState<AdminSettlementDetailResult>();
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busyAction, setBusyAction] = useState<AppBusyAction>('');
@@ -285,6 +386,23 @@ export function App() {
     () => adminGames.find((game) => game.id === selectedConfigGameId),
     [adminGames, selectedConfigGameId],
   );
+  const operationsOverview = useMemo(
+    () =>
+      buildOperationsOverview({
+        adminGames,
+        configKuaishouEcpmJobs,
+        kuaishouEcpmJobs,
+        settlementBatches,
+        settlementPreview,
+      }),
+    [
+      adminGames,
+      configKuaishouEcpmJobs,
+      kuaishouEcpmJobs,
+      settlementBatches,
+      settlementPreview,
+    ],
+  );
   const modeText =
     status?.kuaishouApiMode === 'mock'
       ? '快手 Mock'
@@ -293,6 +411,7 @@ export function App() {
         : '接口状态未知';
 
   useEffect(() => {
+    applyKuaishouOAuthCallbackFromLocation();
     void initializeApp();
   }, []);
 
@@ -389,9 +508,14 @@ export function App() {
         }
 
         try {
-          await loadAlipayProfile(accessToken, () =>
-            isCurrentSessionVersion(restoreVersion),
-          );
+          await Promise.all([
+            loadAlipayProfile(accessToken, () =>
+              isCurrentSessionVersion(restoreVersion),
+            ),
+            loadAccountAgentBinding(accessToken, () =>
+              isCurrentSessionVersion(restoreVersion),
+            ),
+          ]);
         } catch (nextError) {
           if (!isCurrentSessionVersion(restoreVersion)) {
             return;
@@ -415,6 +539,16 @@ export function App() {
         }
 
         await restoreAdminSession(adminAccessToken, () =>
+          isCurrentSessionVersion(restoreVersion),
+        );
+      }
+
+      if (!accessToken && !adminAccessToken && agentAccessToken) {
+        if (!isCurrentSessionVersion(restoreVersion)) {
+          return;
+        }
+
+        await restoreAgentSession(agentAccessToken, () =>
           isCurrentSessionVersion(restoreVersion),
         );
       }
@@ -450,6 +584,36 @@ export function App() {
 
       if (nextError instanceof ApiError && nextError.status === 401) {
         clearAdminAuth();
+      } else {
+        setError(
+          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+        );
+      }
+    }
+  }
+
+  async function restoreAgentSession(token: string, isCurrent = () => true) {
+    try {
+      const profile = await aiKsApi.getCurrentAgent(token);
+      if (!isCurrent()) {
+        return;
+      }
+
+      applyAgentProfile(profile);
+      setAppSession({
+        accessToken: token,
+        agent: pickAgentPrincipal(profile),
+        mode: 'agent',
+      });
+      setActiveView('agent');
+      await loadAgentPortalForToken(token, isCurrent);
+    } catch (nextError) {
+      if (!isCurrent()) {
+        return;
+      }
+
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        clearAgentAuth();
       } else {
         setError(
           nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
@@ -503,6 +667,10 @@ export function App() {
     if (authScope === 'admin') {
       clearAdminAuth();
     }
+
+    if (authScope === 'agent') {
+      clearAgentAuth();
+    }
   }
 
   function ensureSuperAdmin() {
@@ -518,6 +686,8 @@ export function App() {
     clearStoredToken(ACCOUNT_AUTH_STORAGE_KEY);
     setAccessToken('');
     setAccount(undefined);
+    setAccountAgentBinding(undefined);
+    setAccountAgentInvitationCode('');
     setAccountEarnings(undefined);
     setAlipayAccount('');
     setAlipayRealName('');
@@ -542,6 +712,23 @@ export function App() {
     setSelectedWithdrawalDetail(undefined);
     setSettlementPreview(undefined);
     setSettlementBatches([]);
+    setSelectedSettlementDetail(undefined);
+    setAppSession(createSignedOutSession());
+    setActiveView('query');
+  }
+
+  function clearAgentAuth() {
+    bumpSessionVersion();
+    clearBusyState();
+    clearStoredToken(AGENT_AUTH_STORAGE_KEY);
+    setAgentAccessToken('');
+    setCurrentAgent(undefined);
+    setAgentProfile(undefined);
+    setAgentEarnings(undefined);
+    setAgentUsers(undefined);
+    setAgentWithdrawals([]);
+    setOwnAgentAlipayAccount('');
+    setOwnAgentAlipayRealName('');
     setAppSession(createSignedOutSession());
     setActiveView('query');
   }
@@ -566,7 +753,11 @@ export function App() {
 
   async function registerAccount() {
     await runAction('register', async (isCurrent) => {
-      const result = await aiKsApi.registerAccount({ password, username });
+      const result = await aiKsApi.registerAccount({
+        invitationCode: invitationCode.trim() || null,
+        password,
+        username,
+      });
       if (!isCurrent()) {
         return;
       }
@@ -632,6 +823,24 @@ export function App() {
     }, 'admin');
   }
 
+  async function loginAgent() {
+    await runAction('agent-login', async (isCurrent) => {
+      const result = await aiKsApi.loginAgent({
+        password: agentPassword,
+        username: agentUsername,
+      });
+      if (!isCurrent()) {
+        return;
+      }
+
+      await persistAgentAuth(
+        result.accessToken,
+        result.agent,
+        '代理登录成功',
+      );
+    }, 'agent');
+  }
+
   async function persistAccountAuth(
     token: string,
     nextAccount: AccountResult,
@@ -650,7 +859,10 @@ export function App() {
     clearBusyState();
 
     try {
-      await loadAlipayProfile(token, isCurrent);
+      await Promise.all([
+        loadAlipayProfile(token, isCurrent),
+        loadAccountAgentBinding(token, isCurrent),
+      ]);
     } catch (nextError) {
       if (!isCurrent()) {
         return;
@@ -658,6 +870,40 @@ export function App() {
 
       if (nextError instanceof ApiError && nextError.status === 401) {
         clearAccountAuth();
+      }
+
+      setError(
+        nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+      );
+    }
+  }
+
+  async function persistAgentAuth(
+    token: string,
+    nextAgent: AgentPrincipal,
+    successNotice: string,
+  ) {
+    bumpSessionVersion();
+    const agentVersion = sessionVersionRef.current;
+    const isCurrent = () => isCurrentSessionVersion(agentVersion);
+
+    writeStoredToken(AGENT_AUTH_STORAGE_KEY, token);
+    setAgentAccessToken(token);
+    setCurrentAgent(nextAgent);
+    setAppSession({ accessToken: token, agent: nextAgent, mode: 'agent' });
+    setActiveView('agent');
+    setNotice(successNotice);
+    clearBusyState();
+
+    try {
+      await loadAgentPortalForToken(token, isCurrent);
+    } catch (nextError) {
+      if (!isCurrent()) {
+        return;
+      }
+
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        clearAgentAuth();
       }
 
       setError(
@@ -680,14 +926,29 @@ export function App() {
     clearBusyState();
     clearStoredToken(ACCOUNT_AUTH_STORAGE_KEY);
     clearStoredToken(ADMIN_AUTH_STORAGE_KEY);
+    clearStoredToken(AGENT_AUTH_STORAGE_KEY);
     setAccessToken('');
     setAdminAccessToken('');
+    setAgentAccessToken('');
     setCurrentAdmin(undefined);
+    setCurrentAgent(undefined);
     setUsername('');
     setPassword('');
+    setInvitationCode('');
     setAdminUsername('');
     setAdminPassword('');
+    setAgentUsername('');
+    setAgentPassword('');
     setAccount(undefined);
+    setAccountAgentBinding(undefined);
+    setAccountAgentInvitationCode('');
+    setAgentProfile(undefined);
+    setAgentEarnings(undefined);
+    setAgentUsers(undefined);
+    setAgentWithdrawals([]);
+    setOwnAgentAlipayAccount('');
+    setOwnAgentAlipayRealName('');
+    setOwnAgentWithdrawalAmountYuan('10.00');
     setAdminName('');
     clearAdminResourceState();
     clearKuaishouTokenState();
@@ -708,6 +969,7 @@ export function App() {
     setSelectedWithdrawalDetail(undefined);
     setSettlementPreview(undefined);
     setSettlementBatches([]);
+    setSelectedSettlementDetail(undefined);
     setError('');
     setNotice('');
   }
@@ -754,10 +1016,57 @@ export function App() {
     }, 'admin');
   }
 
+  async function retryKuaishouEcpmJob(jobId: string) {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
+
+    await runAction(`retry-ecpm-${jobId}`, async (isCurrent) => {
+      const result = await aiKsApi.retryKuaishouEcpmJob(
+        adminAccessToken,
+        jobId,
+      );
+      if (!isCurrent()) {
+        return;
+      }
+
+      setRefreshResult(result);
+      await loadKuaishouEcpmJobsForToken(adminAccessToken, isCurrent, {
+        reportError: false,
+      });
+      if (!isCurrent()) {
+        return;
+      }
+
+      const configGame = selectedConfigGame;
+      if (configGame && configGame.gameAppId === result.job.gameAppId) {
+        await loadConfigKuaishouEcpmJobsForGame(
+          adminAccessToken,
+          configGame,
+          isCurrent,
+          {
+            reportError: false,
+          },
+        );
+      }
+      if (!isCurrent()) {
+        return;
+      }
+
+      setNotice(`失败任务已重试，写入 ${result.savedCount} 条明细`);
+    }, 'admin');
+  }
+
   function clearAdminResourceState() {
     setAdminCompanies([]);
+    setAdminAgents([]);
     setCompanyAdmins([]);
     setAdminGames([]);
+    setBusinessClosure(undefined);
     setNewCompanyName('');
     setBalanceCompanyId('');
     setBalanceAmountYuan('');
@@ -766,10 +1075,25 @@ export function App() {
     setNewGameName('');
     setNewGameAppId('');
     setNewGameSecret('');
+    setNewAgentUsername('');
+    setNewAgentPassword('');
+    setNewAgentInvitationCode('');
+    setNewAgentParentId('');
+    setAgentActionAgentId('');
+    setAgentAlipayAccount('');
+    setAgentAlipayRealName('');
+    setAgentWithdrawalAmountYuan('');
     setBudgetGameId('');
     setBudgetAmountYuan('');
     setBudgetReason('');
+    resetPlatformConfigState();
     clearGameConfigState();
+  }
+
+  function resetPlatformConfigState() {
+    const defaultConfig = defaultPlatformConfig();
+    setPlatformConfig(defaultConfig);
+    setPlatformConfigDraft(buildPlatformConfigDraft(defaultConfig));
   }
 
   function clearGameConfigState() {
@@ -830,11 +1154,17 @@ export function App() {
       if (isSuperAdmin(admin)) {
         await Promise.allSettled([
           loadKuaishouTokenStatusForToken(token, isCurrent),
+          loadAdminAgentsForToken(token, isCurrent),
+          loadBusinessClosureForToken(token, isCurrent),
           loadCompanyAdminsForToken(token, isCurrent),
+          loadPlatformConfigForToken(token, isCurrent),
         ]);
       } else {
         clearKuaishouTokenState();
+        setAdminAgents([]);
+        setBusinessClosure(undefined);
         setCompanyAdmins([]);
+        resetPlatformConfigState();
       }
       const settlementGameId = getAdminEntrySettlementGameRowId(
         games,
@@ -900,6 +1230,493 @@ export function App() {
     }
   }
 
+  async function loadAdminAgentsForToken(
+    token: string,
+    isCurrent = () => true,
+    options: LoadOptions = {},
+  ) {
+    try {
+      const result = await aiKsApi.getAdminAgents(token);
+      if (!isCurrent()) {
+        return false;
+      }
+
+      setAdminAgents(result.agents);
+      return true;
+    } catch (nextError) {
+      if (!isCurrent()) {
+        return false;
+      }
+
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        handleUnauthorized('admin');
+        setError(nextError.message);
+        return false;
+      }
+
+      if (options.reportError ?? true) {
+        setError(
+          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+        );
+      }
+      return false;
+    }
+  }
+
+  async function loadBusinessClosureForToken(
+    token: string,
+    isCurrent = () => true,
+    options: LoadOptions = {},
+  ) {
+    try {
+      const result = await aiKsApi.getBusinessClosure(token);
+      if (!isCurrent()) {
+        return false;
+      }
+
+      setBusinessClosure(result);
+      return true;
+    } catch (nextError) {
+      if (!isCurrent()) {
+        return false;
+      }
+
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        handleUnauthorized('admin');
+        setError(nextError.message);
+        return false;
+      }
+
+      if (options.reportError ?? true) {
+        setError(
+          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+        );
+      }
+      return false;
+    }
+  }
+
+  async function loadBusinessClosure() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
+
+    await runAction('business-closure', async (isCurrent) => {
+      const loaded = await loadBusinessClosureForToken(
+        adminAccessToken,
+        isCurrent,
+      );
+      if (!isCurrent() || !loaded) {
+        return;
+      }
+
+      setNotice('真实数据闭环核对已刷新');
+    }, 'admin');
+  }
+
+  async function loadCompanyAdmins() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
+
+    await runAction('company-admins', async (isCurrent) => {
+      const loaded = await loadCompanyAdminsForToken(adminAccessToken, isCurrent);
+      if (!isCurrent() || !loaded) {
+        return;
+      }
+
+      setNotice('公司管理员账号已刷新');
+    }, 'admin');
+  }
+
+  async function loadAdminAgents() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
+
+    await runAction('agents', async (isCurrent) => {
+      const loaded = await loadAdminAgentsForToken(adminAccessToken, isCurrent);
+      if (!isCurrent() || !loaded) {
+        return;
+      }
+
+      setNotice('代理列表已刷新');
+    }, 'admin');
+  }
+
+  function applyPlatformConfig(nextConfig: PlatformConfig) {
+    setPlatformConfig(nextConfig);
+    setPlatformConfigDraft(buildPlatformConfigDraft(nextConfig));
+  }
+
+  async function loadPlatformConfigForToken(
+    token: string,
+    isCurrent = () => true,
+    options: LoadOptions = {},
+  ) {
+    try {
+      const result = await aiKsApi.getPlatformConfig(token);
+      if (!isCurrent()) {
+        return false;
+      }
+
+      applyPlatformConfig(result);
+      return true;
+    } catch (nextError) {
+      if (!isCurrent()) {
+        return false;
+      }
+
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        handleUnauthorized('admin');
+        setError(nextError.message);
+        return false;
+      }
+
+      if (options.reportError ?? true) {
+        setError(
+          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+        );
+      }
+      return false;
+    }
+  }
+
+  async function loadPlatformConfig() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
+
+    await runAction('platform-config', async (isCurrent) => {
+      const loaded = await loadPlatformConfigForToken(
+        adminAccessToken,
+        isCurrent,
+      );
+      if (!isCurrent() || !loaded) {
+        return;
+      }
+
+      setNotice('平台配置已刷新');
+    }, 'admin');
+  }
+
+  function changePlatformConfigDraft(patch: Partial<PlatformConfigDraft>) {
+    setPlatformConfigDraft((current) => ({
+      ...current,
+      ...patch,
+    }));
+  }
+
+  function changeAgentActionAgentId(agentId: string) {
+    setAgentActionAgentId(agentId);
+    const agent = adminAgents.find((row) => row.id === agentId);
+    setAgentAlipayAccount(agent?.alipayAccount ?? '');
+    setAgentAlipayRealName(agent?.alipayRealName ?? '');
+  }
+
+  function parsePlatformConfigDraft(): PlatformConfigUpdateInput | undefined {
+    const defaultAgentRatioPercent = parseIntegerPercent(
+      platformConfigDraft.defaultAgentRatioPercent,
+    );
+    const directAgentRatioPercent = parseIntegerPercent(
+      platformConfigDraft.directAgentRatioPercent,
+    );
+    const displayRatioPercent = parseIntegerPercent(
+      platformConfigDraft.displayRatioPercent,
+    );
+    const feeRatioPercent = parseIntegerPercent(
+      platformConfigDraft.feeRatioPercent,
+    );
+    const parentAgentRatioPercent = parseIntegerPercent(
+      platformConfigDraft.parentAgentRatioPercent,
+    );
+    const userSettlementRatioPercent = parseIntegerPercent(
+      platformConfigDraft.userSettlementRatioPercent,
+    );
+    if (
+      defaultAgentRatioPercent === undefined ||
+      directAgentRatioPercent === undefined ||
+      displayRatioPercent === undefined ||
+      feeRatioPercent === undefined ||
+      parentAgentRatioPercent === undefined ||
+      userSettlementRatioPercent === undefined
+    ) {
+      setError('比例必须填写 0 到 100 的整数');
+      return undefined;
+    }
+    const settlementTotal =
+      userSettlementRatioPercent +
+      directAgentRatioPercent +
+      parentAgentRatioPercent +
+      defaultAgentRatioPercent +
+      feeRatioPercent;
+    if (settlementTotal !== 100) {
+      setError(`分账比例合计必须为 100%，当前为 ${settlementTotal}%`);
+      return undefined;
+    }
+    const minWithdrawalYuan = platformConfigDraft.minWithdrawalYuan.trim();
+    if (!minWithdrawalYuan) {
+      setError('请填写最低提现金额');
+      return undefined;
+    }
+
+    return {
+      defaultAgentId: platformConfigDraft.defaultAgentId.trim() || null,
+      defaultAgentRatioPercent,
+      directAgentRatioPercent,
+      displayRatioPercent,
+      feeRatioPercent,
+      minWithdrawalYuan,
+      parentAgentRatioPercent,
+      userSettlementRatioPercent,
+    };
+  }
+
+  async function savePlatformConfig() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
+
+    const input = parsePlatformConfigDraft();
+    if (!input) {
+      return;
+    }
+
+    await runAction('platform-config', async (isCurrent) => {
+      const result = await aiKsApi.updatePlatformConfig(
+        adminAccessToken,
+        input,
+      );
+      if (!isCurrent()) {
+        return;
+      }
+
+      applyPlatformConfig(result);
+      setNotice('平台配置已保存，后续新增同步和结算会按新配置执行');
+    }, 'admin');
+  }
+
+  async function createCompanyAdmin(payload: {
+    displayName: string;
+    enabled: boolean;
+    password: string;
+    username: string;
+  }) {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
+
+    await runAction('company-admin-create', async (isCurrent) => {
+      const result = await aiKsApi.createCompanyAdmin(adminAccessToken, payload);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setCompanyAdmins((current) => [result.admin, ...current]);
+      setNotice('公司管理员账号已创建');
+    }, 'admin');
+  }
+
+  async function createAdminAgent() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
+
+    const username = newAgentUsername.trim();
+    const password = newAgentPassword;
+    const invitationCode = newAgentInvitationCode.trim();
+    const parentAgentId = newAgentParentId.trim() || null;
+    if (!username || !invitationCode || password.length < 8) {
+      setError('请填写代理用户名、至少 8 位密码和邀请码');
+      return;
+    }
+
+    await runAction('agent-create', async (isCurrent) => {
+      const result = await aiKsApi.createAdminAgent(adminAccessToken, {
+        invitationCode,
+        parentAgentId,
+        password,
+        username,
+      });
+      if (!isCurrent()) {
+        return;
+      }
+
+      setAdminAgents((current) => [result.agent, ...current]);
+      setNewAgentUsername('');
+      setNewAgentPassword('');
+      setNewAgentInvitationCode('');
+      setNewAgentParentId('');
+      setNotice('代理账号已创建，可复制代理 ID 到平台配置的默认代理 ID');
+    }, 'admin');
+  }
+
+  async function updateAdminAgentAlipay() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
+    if (
+      !agentActionAgentId ||
+      !agentAlipayAccount.trim() ||
+      !agentAlipayRealName.trim()
+    ) {
+      setError('请选择代理并填写支付宝账号和真实姓名');
+      return;
+    }
+
+    await runAction('agent-alipay', async (isCurrent) => {
+      const result = await aiKsApi.updateAdminAgentAlipay(
+        adminAccessToken,
+        agentActionAgentId,
+        {
+          alipayAccount: agentAlipayAccount.trim(),
+          alipayRealName: agentAlipayRealName.trim(),
+        },
+      );
+      if (!isCurrent()) {
+        return;
+      }
+
+      setAdminAgents((current) =>
+        current.map((agent) => (agent.id === result.agent.id ? result.agent : agent)),
+      );
+      setNotice('代理支付宝资料已保存');
+    }, 'admin');
+  }
+
+  async function requestAdminAgentWithdrawal() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
+    if (!agentActionAgentId || !agentWithdrawalAmountYuan.trim()) {
+      setError('请选择代理并填写提现金额');
+      return;
+    }
+
+    await runAction('agent-withdrawal', async (isCurrent) => {
+      await aiKsApi.requestAdminAgentWithdrawal(
+        adminAccessToken,
+        agentActionAgentId,
+        {
+          amountYuan: agentWithdrawalAmountYuan.trim(),
+        },
+      );
+      if (!isCurrent()) {
+        return;
+      }
+
+      setAgentWithdrawalAmountYuan('');
+      await Promise.allSettled([
+        loadAdminAgentsForToken(adminAccessToken, isCurrent),
+        loadAdminWithdrawalsForToken(
+          adminAccessToken,
+          'PENDING_REVIEW',
+          isCurrent,
+        ),
+      ]);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setAdminWithdrawalStatus('PENDING_REVIEW');
+      setNotice('代理提现已提交，请到提现页审核');
+    }, 'admin');
+  }
+
+  async function updateCompanyAdmin(
+    adminId: string,
+    payload: { displayName: string; enabled: boolean; password?: string },
+  ) {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
+
+    await runAction('company-admin-update', async (isCurrent) => {
+      const result = await aiKsApi.updateCompanyAdmin(
+        adminAccessToken,
+        adminId,
+        payload,
+      );
+      if (!isCurrent()) {
+        return;
+      }
+
+      setCompanyAdmins((current) =>
+        current.map((admin) => (admin.id === result.admin.id ? result.admin : admin)),
+      );
+      setNotice('公司管理员账号已更新');
+    }, 'admin');
+  }
+
+  async function updateCompanyAdminScopes(
+    adminId: string,
+    payload: { scopes: Array<{ companyId: string; gameIds: string[] }> },
+  ) {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
+
+    await runAction('company-admin-scopes', async (isCurrent) => {
+      const result = await aiKsApi.updateCompanyAdminScopes(
+        adminAccessToken,
+        adminId,
+        payload,
+      );
+      if (!isCurrent()) {
+        return;
+      }
+
+      setCompanyAdmins((current) =>
+        current.map((admin) => (admin.id === result.admin.id ? result.admin : admin)),
+      );
+      setNotice('公司管理员授权范围已保存');
+    }, 'admin');
+  }
+
   async function loadAdminResources() {
     if (!adminAccessToken) {
       setError('请先登录管理员账号');
@@ -920,6 +1737,29 @@ export function App() {
     setKuaishouTokenStatus(nextStatus);
     setKuaishouAppId((current) =>
       getDefaultKuaishouAppId(nextStatus, current),
+    );
+  }
+
+  function applyKuaishouOAuthCallbackFromLocation() {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const callback = readKuaishouOAuthCallback(window.location.search);
+    if (!callback) {
+      return;
+    }
+
+    setLoginMode('admin');
+    setKuaishouAuthCode(callback.authCode);
+    if (callback.appId) {
+      setKuaishouAppId(callback.appId);
+    }
+    setNotice('已读取快手授权回调 auth_code，请登录超级管理员后提交授权');
+    window.history.replaceState(
+      null,
+      document.title,
+      `${window.location.pathname}${window.location.hash}`,
     );
   }
 
@@ -1127,6 +1967,44 @@ export function App() {
 
       applyKuaishouTokenStatus(result);
       setNotice('平台 token 已刷新');
+    }, 'admin');
+  }
+
+  async function resetTestData() {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin()) {
+      return;
+    }
+
+    await runAction('reset-test-data', async (isCurrent) => {
+      await aiKsApi.resetTestData(adminAccessToken);
+      if (!isCurrent()) {
+        return;
+      }
+
+      clearAdminResourceState();
+      clearKuaishouTokenState();
+      setKuaishouEcpmJobs([]);
+      setConfigKuaishouEcpmJobs([]);
+      setGameSession(undefined);
+      setRefreshResult(undefined);
+      setSettlementPreview(undefined);
+      setSettlementBatches([]);
+      setSelectedSettlementDetail(undefined);
+      setAdminWithdrawals([]);
+      setAuditLogs([]);
+      setSelectedWithdrawalDetail(undefined);
+      setGameAppId('');
+      setJsCode('');
+      await reloadDemoContext(isCurrent);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setNotice('测试数据已清空，基础上下文已重新加载，可直接开始下一轮联调');
     }, 'admin');
   }
 
@@ -1502,6 +2380,42 @@ export function App() {
     }, 'account');
   }
 
+  async function loadAccountAgentBinding(token: string, isCurrent = () => true) {
+    const binding = await aiKsApi.getAccountAgentBinding(token);
+    if (!isCurrent()) {
+      return;
+    }
+
+    setAccountAgentBinding(binding);
+  }
+
+  async function bindAccountAgent() {
+    if (!account || !accessToken) {
+      setError('请先登录或注册账号');
+      return;
+    }
+
+    const targetInvitationCode = accountAgentInvitationCode.trim();
+    if (!targetInvitationCode) {
+      setError('请输入代理邀请码');
+      return;
+    }
+
+    await runAction('agent-binding', async (isCurrent) => {
+      const binding = await aiKsApi.bindAccountAgent(
+        accessToken,
+        targetInvitationCode,
+      );
+      if (!isCurrent()) {
+        return;
+      }
+
+      setAccountAgentBinding(binding);
+      setAccountAgentInvitationCode('');
+      setNotice('代理归属已更新，后续新结算会按当前代理分账');
+    }, 'account');
+  }
+
   async function loadAlipayProfile(token: string, isCurrent = () => true) {
     const profile = await aiKsApi.getAlipayProfile(token);
     if (!isCurrent()) {
@@ -1553,6 +2467,171 @@ export function App() {
     }, 'account');
   }
 
+  function applyAgentProfile(profile: AgentProfile) {
+    const nextAgent = pickAgentPrincipal(profile);
+    setCurrentAgent(nextAgent);
+    setAgentProfile(profile);
+    setOwnAgentAlipayAccount(profile.alipayAccount ?? '');
+    setOwnAgentAlipayRealName(profile.alipayRealName ?? '');
+  }
+
+  async function loadAgentPortalForToken(
+    token: string,
+    isCurrent = () => true,
+  ) {
+    await Promise.allSettled([
+      loadAgentProfileForToken(token, isCurrent),
+      loadAgentEarningsForToken(token, isCurrent),
+      loadAgentUsersForToken(token, isCurrent),
+      loadAgentWithdrawalsForToken(token, isCurrent),
+    ]);
+  }
+
+  async function loadAgentProfileForToken(token: string, isCurrent = () => true) {
+    const profile = await aiKsApi.getCurrentAgent(token);
+    if (!isCurrent()) {
+      return;
+    }
+
+    applyAgentProfile(profile);
+  }
+
+  async function loadAgentEarningsForToken(
+    token: string,
+    isCurrent = () => true,
+  ) {
+    const result = await aiKsApi.getAgentEarnings(token);
+    if (!isCurrent()) {
+      return;
+    }
+
+    setAgentEarnings(result);
+  }
+
+  async function loadAgentWithdrawalsForToken(
+    token: string,
+    isCurrent = () => true,
+  ) {
+    const result = await aiKsApi.getAgentWithdrawals(token);
+    if (!isCurrent()) {
+      return;
+    }
+
+    setAgentWithdrawals(result.batches);
+  }
+
+  async function loadAgentUsersForToken(token: string, isCurrent = () => true) {
+    const result = await aiKsApi.getAgentUsers(token);
+    if (!isCurrent()) {
+      return;
+    }
+
+    setAgentUsers(result);
+  }
+
+  async function loadAgentEarnings() {
+    if (!agentAccessToken) {
+      setError('请先登录代理账号');
+      return;
+    }
+
+    await runAction('agent-earnings', async (isCurrent) => {
+      await loadAgentEarningsForToken(agentAccessToken, isCurrent);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setNotice('代理收益已刷新');
+    }, 'agent');
+  }
+
+  async function loadAgentWithdrawals() {
+    if (!agentAccessToken) {
+      setError('请先登录代理账号');
+      return;
+    }
+
+    await runAction('agent-withdrawals', async (isCurrent) => {
+      await loadAgentWithdrawalsForToken(agentAccessToken, isCurrent);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setNotice('代理提现批次已刷新');
+    }, 'agent');
+  }
+
+  async function loadAgentUsers() {
+    if (!agentAccessToken) {
+      setError('请先登录代理账号');
+      return;
+    }
+
+    await runAction('agent-users', async (isCurrent) => {
+      await loadAgentUsersForToken(agentAccessToken, isCurrent);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setNotice('代理名下用户已刷新');
+    }, 'agent');
+  }
+
+  async function updateOwnAgentAlipayProfile() {
+    if (!agentAccessToken) {
+      setError('请先登录代理账号');
+      return;
+    }
+
+    await runAction('agent-alipay-own', async (isCurrent) => {
+      const profile = await aiKsApi.updateAgentAlipayProfile(agentAccessToken, {
+        alipayAccount: ownAgentAlipayAccount,
+        alipayRealName: ownAgentAlipayRealName,
+      });
+      if (!isCurrent()) {
+        return;
+      }
+
+      setOwnAgentAlipayAccount(profile.alipayAccount ?? '');
+      setOwnAgentAlipayRealName(profile.alipayRealName ?? '');
+      await loadAgentProfileForToken(agentAccessToken, isCurrent);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setNotice('代理支付宝资料已保存');
+    }, 'agent');
+  }
+
+  async function requestOwnAgentWithdrawal() {
+    if (!agentAccessToken) {
+      setError('请先登录代理账号');
+      return;
+    }
+
+    await runAction('agent-withdrawal-own', async (isCurrent) => {
+      const result = await aiKsApi.requestAgentWithdrawal(
+        agentAccessToken,
+        ownAgentWithdrawalAmountYuan,
+      );
+      if (!isCurrent()) {
+        return;
+      }
+
+      setOwnAgentWithdrawalAmountYuan('');
+      setAgentWithdrawals((current) => [result, ...current]);
+      await Promise.allSettled([
+        loadAgentProfileForToken(agentAccessToken, isCurrent),
+        loadAgentWithdrawalsForToken(agentAccessToken, isCurrent),
+      ]);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setNotice('代理提现已提交，等待超级管理员审核');
+    }, 'agent');
+  }
+
   function currentSettlementRangeState(): SettlementRangeState {
     return {
       gameAppId,
@@ -1579,6 +2658,7 @@ export function App() {
     nextSettlementBatchRequestVersion();
     applySettlementRangeChange({ gameAppId: value });
     setSettlementBatches([]);
+    setSelectedSettlementDetail(undefined);
   }
 
   function changeSettlementStartDate(value: string) {
@@ -1628,6 +2708,11 @@ export function App() {
     }
 
     setSettlementBatches(result.batches);
+    setSelectedSettlementDetail((current) =>
+      current && result.batches.some((batch) => batch.id === current.batch.id)
+        ? current
+        : undefined,
+    );
   }
 
   function nextSettlementBatchRequestVersion() {
@@ -1670,6 +2755,26 @@ export function App() {
       }
       return false;
     }
+  }
+
+  async function loadSettlementDetail(batchId: string) {
+    if (!adminAccessToken) {
+      setError('请先登录管理员账号');
+      return;
+    }
+
+    await runAction(`settlement-detail-${batchId}`, async (isCurrent) => {
+      const result = await aiKsApi.getSettlementDetail(
+        adminAccessToken,
+        batchId,
+      );
+      if (!isCurrent()) {
+        return;
+      }
+
+      setSelectedSettlementDetail(result);
+      setNotice(`已加载结算批次 ${batchId}`);
+    }, 'admin');
   }
 
   async function previewSettlement() {
@@ -1742,6 +2847,10 @@ export function App() {
 
       setSettlementPreview(undefined);
       setSettlementBatches((current) => [result.batch, ...current].slice(0, 20));
+      setSelectedSettlementDetail({
+        batch: result.batch,
+        items: result.items,
+      });
       const batchesLoaded = await loadSettlementBatchesForGame(
         adminAccessToken,
         range.gameId,
@@ -1989,12 +3098,19 @@ export function App() {
         <LoginPage
           adminPassword={adminPassword}
           adminUsername={adminUsername}
+          agentPassword={agentPassword}
+          agentUsername={agentUsername}
           busyAction={loginBusyAction(busyAction)}
+          invitationCode={invitationCode}
           mode={loginMode}
           onAdminPasswordChange={setAdminPassword}
           onAdminUsernameChange={setAdminUsername}
+          onAgentPasswordChange={setAgentPassword}
+          onAgentUsernameChange={setAgentUsername}
           onGuestEnter={enterGuestMode}
+          onInvitationCodeChange={setInvitationCode}
           onLoginAccount={loginAccount}
+          onLoginAgent={loginAgent}
           onLoginAdmin={loginAdmin}
           onModeChange={setLoginMode}
           onPasswordChange={setPassword}
@@ -2030,12 +3146,16 @@ export function App() {
         <AccountWorkspace
           account={account}
           accountEarnings={accountEarnings}
+          agentBinding={accountAgentBinding}
+          agentInvitationCode={accountAgentInvitationCode}
           alipayAccount={alipayAccount}
           alipayRealName={alipayRealName}
           bindIdentity={bindIdentity}
           busyAction={accountBusyAction(busyAction)}
+          onAgentInvitationCodeChange={setAccountAgentInvitationCode}
           onAlipayAccountChange={setAlipayAccount}
           onAlipayRealNameChange={setAlipayRealName}
+          onBindAgent={bindAccountAgent}
           onBindIdentityChange={setBindIdentity}
           onBindOpenId={bindAccountOpenId}
           onQueryAccountEarnings={queryAccountEarnings}
@@ -2046,6 +3166,27 @@ export function App() {
           withdrawalAmountYuan={withdrawalAmountYuan}
         />
       ) : null}
+      {activeView === 'agent' && appSession.mode === 'agent' ? (
+        <AgentWorkspace
+          agent={currentAgent}
+          alipayAccount={ownAgentAlipayAccount}
+          alipayRealName={ownAgentAlipayRealName}
+          busyAction={agentBusyAction(busyAction)}
+          earnings={agentEarnings}
+          onAlipayAccountChange={setOwnAgentAlipayAccount}
+          onAlipayRealNameChange={setOwnAgentAlipayRealName}
+          onLoadEarnings={loadAgentEarnings}
+          onLoadUsers={loadAgentUsers}
+          onLoadWithdrawals={loadAgentWithdrawals}
+          onRequestWithdrawal={requestOwnAgentWithdrawal}
+          onUpdateAlipayProfile={updateOwnAgentAlipayProfile}
+          onWithdrawalAmountChange={setOwnAgentWithdrawalAmountYuan}
+          profile={agentProfile}
+          users={agentUsers}
+          withdrawalAmountYuan={ownAgentWithdrawalAmountYuan}
+          withdrawals={agentWithdrawals}
+        />
+      ) : null}
       {activeView === 'operations' && appSession.mode === 'admin' ? (
         <OperationsWorkspace
           adminCompanies={adminCompanies}
@@ -2053,6 +3194,11 @@ export function App() {
           adminName={adminName}
           adminWithdrawalStatus={adminWithdrawalStatus}
           adminWithdrawals={adminWithdrawals}
+          adminAgents={adminAgents}
+          agentActionAgentId={agentActionAgentId}
+          agentAlipayAccount={agentAlipayAccount}
+          agentAlipayRealName={agentAlipayRealName}
+          agentWithdrawalAmountYuan={agentWithdrawalAmountYuan}
           auditLogs={auditLogs}
           balanceAmountYuan={balanceAmountYuan}
           balanceCompanyId={balanceCompanyId}
@@ -2061,6 +3207,8 @@ export function App() {
           budgetGameId={budgetGameId}
           budgetReason={budgetReason}
           busyAction={operationsBusyAction(busyAction)}
+          businessClosure={businessClosure}
+          companyAdmins={companyAdmins}
           configBudgetAmountYuan={configBudgetAmountYuan}
           configBudgetReason={configBudgetReason}
           configEcpmLookbackHours={configEcpmLookbackHours}
@@ -2069,6 +3217,7 @@ export function App() {
           configSection={configSection}
           gameAppId={gameAppId}
           games={games}
+          isSuperAdmin={isSuperAdmin(currentAdmin)}
           jsCode={jsCode}
           kuaishouAppId={kuaishouAppId}
           kuaishouAuthCode={kuaishouAuthCode}
@@ -2080,6 +3229,11 @@ export function App() {
           newGameCompanyId={newGameCompanyId}
           newGameName={newGameName}
           newGameSecret={newGameSecret}
+          newAgentInvitationCode={newAgentInvitationCode}
+          newAgentParentId={newAgentParentId}
+          newAgentPassword={newAgentPassword}
+          newAgentUsername={newAgentUsername}
+          onLoadPlatformConfig={loadPlatformConfig}
           onAdjustCompanyBalance={adjustCompanyBalance}
           onAllocateGameBudget={allocateGameBudget}
           onApproveWithdrawal={approveAdminWithdrawal}
@@ -2097,7 +3251,13 @@ export function App() {
           onConfigEcpmLookbackHoursChange={setConfigEcpmLookbackHours}
           onConfigGameDraftChange={changeConfigGameDraft}
           onConfigSectionChange={setConfigSection}
+          onAgentActionAgentIdChange={changeAgentActionAgentId}
+          onAgentAlipayAccountChange={setAgentAlipayAccount}
+          onAgentAlipayRealNameChange={setAgentAlipayRealName}
+          onAgentWithdrawalAmountChange={setAgentWithdrawalAmountYuan}
           onCreateCompany={createAdminCompany}
+          onCreateAgent={createAdminAgent}
+          onCreateCompanyAdmin={createCompanyAdmin}
           onCreateGame={createAdminGame}
           onCreateSession={createGameSession}
           onGameChange={changeGameAppId}
@@ -2110,28 +3270,48 @@ export function App() {
           onLoadKuaishouEcpmJobs={loadKuaishouEcpmJobs}
           onLoadKuaishouTokenStatus={loadKuaishouTokenStatus}
           onLoadAdminResources={loadAdminResources}
+          onLoadAdminAgents={loadAdminAgents}
           onLoadAuditLogs={loadAuditLogs}
+          onLoadBusinessClosure={loadBusinessClosure}
+          onLoadCompanyAdmins={loadCompanyAdmins}
+          onLoadSettlementDetail={loadSettlementDetail}
           onLoadWithdrawalDetail={loadWithdrawalDetail}
           onLoadWithdrawals={loadAdminWithdrawals}
           onNewCompanyNameChange={setNewCompanyName}
+          onNewAgentInvitationCodeChange={setNewAgentInvitationCode}
+          onNewAgentParentIdChange={setNewAgentParentId}
+          onNewAgentPasswordChange={setNewAgentPassword}
+          onNewAgentUsernameChange={setNewAgentUsername}
           onNewGameAppIdChange={setNewGameAppId}
           onNewGameCompanyIdChange={setNewGameCompanyId}
           onNewGameNameChange={setNewGameName}
           onNewGameSecretChange={setNewGameSecret}
           onPayWithdrawal={payAdminWithdrawal}
+          onPlatformConfigDraftChange={changePlatformConfigDraft}
           onPreviewSettlement={previewSettlement}
+          onResetTestData={resetTestData}
           onOpenGameConfig={openGameConfig}
           onRefreshConfigGameEcpm={refreshConfigGameEcpm}
           onRefreshEcpm={refreshEcpm}
+          onRetryKuaishouEcpmJob={retryKuaishouEcpmJob}
+          onRequestAgentWithdrawal={requestAdminAgentWithdrawal}
           onSaveGameConfig={saveGameConfig}
+          onSavePlatformConfig={savePlatformConfig}
           onSettlementEndDateChange={changeSettlementEndDate}
           onSettlementStartDateChange={changeSettlementStartDate}
           onSettlementUserIdChange={changeSettlementUserId}
           onSubmitConfigBudget={submitConfigBudget}
+          onUpdateAgentAlipay={updateAdminAgentAlipay}
+          onUpdateCompanyAdmin={updateCompanyAdmin}
+          onUpdateCompanyAdminScopes={updateCompanyAdminScopes}
+          operationsOverview={operationsOverview}
+          platformConfig={platformConfig}
+          platformConfigDraft={platformConfigDraft}
           refreshResult={refreshResult}
           sampleJsCodes={sampleJsCodes}
           selectedConfigGame={selectedConfigGame}
           selectedConfigGameId={selectedConfigGameId}
+          selectedSettlementDetail={selectedSettlementDetail}
           selectedGame={selectedGame}
           selectedWithdrawalDetail={selectedWithdrawalDetail}
           settlementBatches={settlementBatches}
@@ -2149,6 +3329,7 @@ export function App() {
 function loginBusyAction(action: AppBusyAction): LoginBusyAction {
   switch (action) {
     case 'admin-login':
+    case 'agent-login':
     case 'login':
     case 'register':
       return action;
@@ -2160,6 +3341,7 @@ function loginBusyAction(action: AppBusyAction): LoginBusyAction {
 function accountBusyAction(action: AppBusyAction): AccountWorkspaceBusyAction {
   switch (action) {
     case 'account-query':
+    case 'agent-binding':
     case 'alipay':
     case 'bind':
     case 'withdrawal':
@@ -2167,6 +3349,36 @@ function accountBusyAction(action: AppBusyAction): AccountWorkspaceBusyAction {
     default:
       return '';
   }
+}
+
+function agentBusyAction(action: AppBusyAction): AgentWorkspaceBusyAction {
+  switch (action) {
+    case 'agent-alipay-own':
+    case 'agent-earnings':
+    case 'agent-users':
+    case 'agent-withdrawal-own':
+    case 'agent-withdrawals':
+      return action;
+    default:
+      return '';
+  }
+}
+
+function pickAgentPrincipal(agent: AgentPrincipal): AgentPrincipal {
+  return {
+    id: agent.id,
+    invitationCode: agent.invitationCode,
+    username: agent.username,
+  };
+}
+
+function parseIntegerPercent(value: string) {
+  const parsed = Number(value.trim());
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 100) {
+    return undefined;
+  }
+
+  return parsed;
 }
 
 function operationsBusyAction(
@@ -2184,8 +3396,17 @@ function isOperationsBusyAction(
 ): action is OperationsWorkspaceBusyAction {
   switch (action) {
     case 'admin-withdrawals':
+    case 'agent-create':
+    case 'agent-alipay':
+    case 'agent-withdrawal':
+    case 'agents':
     case 'admin-resources':
     case 'audit-logs':
+    case 'business-closure':
+    case 'company-admin-create':
+    case 'company-admin-scopes':
+    case 'company-admin-update':
+    case 'company-admins':
     case 'company-balance':
     case 'company-create':
     case 'game-budget':
@@ -2197,7 +3418,9 @@ function isOperationsBusyAction(
     case 'kuaishou-ecpm-jobs':
     case 'kuaishou-refresh-token':
     case 'kuaishou-token':
+    case 'platform-config':
     case 'refresh':
+    case 'reset-test-data':
     case 'settlement-confirm':
     case 'settlement-preview':
     case 'session':
@@ -2208,7 +3431,9 @@ function isOperationsBusyAction(
         action.startsWith('close-') ||
         action.startsWith('detail-') ||
         action.startsWith('pay-failed-') ||
-        action.startsWith('pay-success-')
+        action.startsWith('pay-success-') ||
+        action.startsWith('retry-ecpm-') ||
+        action.startsWith('settlement-detail-')
       );
   }
 }

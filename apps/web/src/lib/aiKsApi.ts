@@ -1,7 +1,10 @@
 import { requestJson } from './api';
 import type {
+  AccountAgentBindingResult,
   AccountEarningsResult,
   AccountResult,
+  AdminAgentListResult,
+  AdminAgentResult,
   AdminAuthResult,
   AdminCompany,
   AdminCompanyAdminListResult,
@@ -18,9 +21,15 @@ import type {
   AdminWithdrawalBatch,
   AdminWithdrawalDetailResult,
   AdminWithdrawalListResult,
+  AgentAuthResult,
+  AgentEarningsResult,
+  AgentProfile,
+  AgentUsersResult,
+  AgentWithdrawalListResult,
   AlipayProfile,
   AuditLogListResult,
   AuthResult,
+  BusinessClosureReport,
   CurrentAdminResult,
   DemoGame,
   EarningsResult,
@@ -30,6 +39,8 @@ import type {
   IntegrationStatus,
   KuaishouEcpmSyncJobListResult,
   KuaishouTokenStatusResult,
+  PlatformConfig,
+  PlatformConfigUpdateInput,
   WithdrawalResult,
 } from '../types/api';
 
@@ -45,8 +56,16 @@ function companyAdminPath(adminId: string, suffix = '') {
   return `/admin/company-admins/${encodeURIComponent(adminId)}${suffix}`;
 }
 
+function agentPath(agentId: string, suffix = '') {
+  return `/admin/agents/${encodeURIComponent(agentId)}${suffix}`;
+}
+
 function gamePath(gameId: string, suffix = '') {
   return `/admin/games/${encodeURIComponent(gameId)}${suffix}`;
+}
+
+function kuaishouEcpmJobPath(jobId: string, suffix = '') {
+  return `/admin/kuaishou/ecpm/jobs/${encodeURIComponent(jobId)}${suffix}`;
 }
 
 function settlementQuery(range: AdminSettlementRange) {
@@ -88,7 +107,11 @@ export const aiKsApi = {
     );
   },
 
-  registerAccount(payload: { password: string; username: string }) {
+  registerAccount(payload: {
+    invitationCode?: string | null;
+    password: string;
+    username: string;
+  }) {
     return requestJson<AuthResult>('/accounts/register', {
       body: payload,
       method: 'POST',
@@ -102,8 +125,60 @@ export const aiKsApi = {
     });
   },
 
+  loginAgent(payload: { password: string; username: string }) {
+    return requestJson<AgentAuthResult>('/agents/login', {
+      body: payload,
+      method: 'POST',
+    });
+  },
+
   getCurrentAccount(accessToken: string) {
     return requestJson<AccountResult>('/accounts/me', { accessToken });
+  },
+
+  getCurrentAgent(accessToken: string) {
+    return requestJson<AgentProfile>('/agents/me', { accessToken });
+  },
+
+  getAgentEarnings(accessToken: string) {
+    return requestJson<AgentEarningsResult>('/agents/me/earnings', {
+      accessToken,
+    });
+  },
+
+  getAgentUsers(accessToken: string) {
+    return requestJson<AgentUsersResult>('/agents/me/users', {
+      accessToken,
+    });
+  },
+
+  getAgentAlipayProfile(accessToken: string) {
+    return requestJson<AlipayProfile>('/agents/me/alipay', { accessToken });
+  },
+
+  updateAgentAlipayProfile(
+    accessToken: string,
+    payload: { alipayAccount: string; alipayRealName: string },
+  ) {
+    return requestJson<AlipayProfile>('/agents/me/alipay', {
+      accessToken,
+      body: payload,
+      method: 'PATCH',
+    });
+  },
+
+  requestAgentWithdrawal(accessToken: string, amountYuan: string) {
+    return requestJson<AdminWithdrawalBatch>('/agents/me/withdrawals', {
+      accessToken,
+      body: { amountYuan },
+      method: 'POST',
+    });
+  },
+
+  getAgentWithdrawals(accessToken: string) {
+    return requestJson<AgentWithdrawalListResult>('/agents/me/withdrawals', {
+      accessToken,
+    });
   },
 
   bindAccountOpenId(accessToken: string, identity: string) {
@@ -118,6 +193,26 @@ export const aiKsApi = {
     return requestJson<AccountEarningsResult>('/accounts/me/earnings', {
       accessToken,
     });
+  },
+
+  getAccountAgentBinding(accessToken: string) {
+    return requestJson<AccountAgentBindingResult>(
+      '/accounts/me/agent-binding',
+      {
+        accessToken,
+      },
+    );
+  },
+
+  bindAccountAgent(accessToken: string, invitationCode: string) {
+    return requestJson<AccountAgentBindingResult>(
+      '/accounts/me/agent-binding',
+      {
+        accessToken,
+        body: { invitationCode },
+        method: 'PATCH',
+      },
+    );
   },
 
   getAlipayProfile(accessToken: string) {
@@ -165,6 +260,74 @@ export const aiKsApi = {
   getCompanyAdmins(adminAccessToken: string) {
     return requestJson<AdminCompanyAdminListResult>('/admin/company-admins', {
       accessToken: adminAccessToken,
+    });
+  },
+
+  getAdminAgents(adminAccessToken: string) {
+    return requestJson<AdminAgentListResult>('/admin/agents', {
+      accessToken: adminAccessToken,
+    });
+  },
+
+  createAdminAgent(
+    adminAccessToken: string,
+    payload: {
+      invitationCode: string;
+      parentAgentId?: string | null;
+      password: string;
+      username: string;
+    },
+  ) {
+    return requestJson<AdminAgentResult>('/admin/agents', {
+      accessToken: adminAccessToken,
+      body: payload,
+      method: 'POST',
+    });
+  },
+
+  updateAdminAgentAlipay(
+    adminAccessToken: string,
+    agentId: string,
+    payload: {
+      alipayAccount: string;
+      alipayRealName: string;
+    },
+  ) {
+    return requestJson<AdminAgentResult>(agentPath(agentId, '/alipay'), {
+      accessToken: adminAccessToken,
+      body: payload,
+      method: 'PATCH',
+    });
+  },
+
+  requestAdminAgentWithdrawal(
+    adminAccessToken: string,
+    agentId: string,
+    payload: {
+      amountYuan: string;
+    },
+  ) {
+    return requestJson<AdminWithdrawalBatch>(agentPath(agentId, '/withdrawals'), {
+      accessToken: adminAccessToken,
+      body: payload,
+      method: 'POST',
+    });
+  },
+
+  getPlatformConfig(adminAccessToken: string) {
+    return requestJson<PlatformConfig>('/admin/platform-config', {
+      accessToken: adminAccessToken,
+    });
+  },
+
+  updatePlatformConfig(
+    adminAccessToken: string,
+    payload: PlatformConfigUpdateInput,
+  ) {
+    return requestJson<PlatformConfig>('/admin/platform-config', {
+      accessToken: adminAccessToken,
+      body: payload,
+      method: 'PATCH',
     });
   },
 
@@ -336,6 +499,17 @@ export const aiKsApi = {
     );
   },
 
+  retryKuaishouEcpmJob(adminAccessToken: string, jobId: string) {
+    return requestJson<EcpmRefreshResult>(
+      kuaishouEcpmJobPath(jobId, '/retry'),
+      {
+        accessToken: adminAccessToken,
+        body: {},
+        method: 'POST',
+      },
+    );
+  },
+
   getKuaishouTokenStatus(adminAccessToken: string) {
     return requestJson<KuaishouTokenStatusResult>('/admin/kuaishou/token', {
       accessToken: adminAccessToken,
@@ -450,6 +624,22 @@ export const aiKsApi = {
 
   getAuditLogs(adminAccessToken: string) {
     return requestJson<AuditLogListResult>('/admin/audit-logs?limit=20', {
+      accessToken: adminAccessToken,
+    });
+  },
+
+  resetTestData(adminAccessToken: string) {
+    return requestJson<{ success: true }>('/admin/system/reset-test-data', {
+      accessToken: adminAccessToken,
+      body: {
+        confirmation: 'RESET_TEST_DATA',
+      },
+      method: 'POST',
+    });
+  },
+
+  getBusinessClosure(adminAccessToken: string) {
+    return requestJson<BusinessClosureReport>('/admin/business-closure', {
       accessToken: adminAccessToken,
     });
   },

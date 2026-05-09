@@ -4,6 +4,7 @@ import { Button, InputField, MetricCard, Panel } from '../components/ui';
 import { formatMoney } from '../lib/format';
 import type {
   AccountEarningsResult,
+  AccountAgentBindingResult,
   AccountResult,
   WithdrawalResult,
 } from '../types/api';
@@ -11,6 +12,7 @@ import type {
 export type AccountWorkspaceBusyAction =
   | ''
   | 'account-query'
+  | 'agent-binding'
   | 'alipay'
   | 'bind'
   | 'withdrawal';
@@ -18,11 +20,15 @@ export type AccountWorkspaceBusyAction =
 export interface AccountWorkspaceProps {
   account?: AccountResult;
   accountEarnings?: AccountEarningsResult;
+  agentBinding?: AccountAgentBindingResult;
+  agentInvitationCode: string;
   alipayAccount: string;
   alipayRealName: string;
   bindIdentity: string;
   busyAction: AccountWorkspaceBusyAction;
+  onAgentInvitationCodeChange(value: string): void;
   onAlipayAccountChange(value: string): void;
+  onBindAgent(): void;
   onAlipayRealNameChange(value: string): void;
   onBindIdentityChange(value: string): void;
   onBindOpenId(): void;
@@ -37,12 +43,16 @@ export interface AccountWorkspaceProps {
 export function AccountWorkspace({
   account,
   accountEarnings,
+  agentBinding,
+  agentInvitationCode,
   alipayAccount,
   alipayRealName,
   bindIdentity,
   busyAction,
+  onAgentInvitationCodeChange,
   onAlipayAccountChange,
   onAlipayRealNameChange,
+  onBindAgent,
   onBindIdentityChange,
   onBindOpenId,
   onQueryAccountEarnings,
@@ -108,6 +118,47 @@ export function AccountWorkspace({
                 {busyAction === 'account-query' ? '查询中' : '账号收益'}
               </Button>
             </div>
+          </div>
+        </Panel>
+
+        <Panel
+          description={
+            agentBinding?.agent
+              ? `当前代理：${agentBinding.agent.username}`
+              : '注册后可用代理邀请码绑定'
+          }
+          title="代理归属"
+        >
+          <div className="query-form">
+            <InputField
+              label="代理邀请码"
+              onChange={onAgentInvitationCodeChange}
+              placeholder="输入代理邀请码"
+              value={agentInvitationCode}
+            />
+            <Button
+              disabled={!account || !agentInvitationCode.trim() || workspaceBusy}
+              icon={<Link2 size={16} />}
+              onClick={onBindAgent}
+            >
+              {busyAction === 'agent-binding' ? '绑定中' : '绑定代理'}
+            </Button>
+            <ReadoutGrid
+              items={[
+                {
+                  label: '当前代理',
+                  value: agentBinding?.agent?.username ?? '-',
+                },
+                {
+                  label: '邀请码',
+                  value: agentBinding?.agent?.invitationCode ?? '-',
+                },
+                {
+                  label: '代理 ID',
+                  value: agentBinding?.agent?.id ?? '-',
+                },
+              ]}
+            />
           </div>
         </Panel>
 

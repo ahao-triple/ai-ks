@@ -90,8 +90,12 @@ export function WithdrawalBatchTable(props: WithdrawalBatchTableProps) {
       label: '批次',
     },
     {
-      key: 'userId',
-      label: '用户',
+      key: 'owner',
+      label: '归属',
+      render: (row) =>
+        row.ownerType === 'AGENT'
+          ? `代理 ${row.ownerId ?? '-'}`
+          : `用户 ${row.userId ?? row.ownerId ?? '-'}`,
     },
     {
       align: 'right',

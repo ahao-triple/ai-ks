@@ -37,6 +37,63 @@ describe('DemoStore', () => {
     expect(result.totalDisplayAmountLi).toBe(5000n);
     expect(result.rows).toHaveLength(1);
   });
+
+  it('uses platform display ratio config when saving ECPM rows', async () => {
+    const prisma = createFakePrisma();
+    const store = new DemoStore(prisma, undefined, {
+      getConfig: jest.fn(async () => ({
+        defaultAgentId: null,
+        defaultAgentRatioPercent: 0,
+        directAgentRatioPercent: 0,
+        displayRatioPercent: 60,
+        feeRatioPercent: 0,
+        minWithdrawalLi: 10000n,
+        parentAgentRatioPercent: 0,
+        userSettlementRatioPercent: 100,
+      })),
+    });
+
+    const [game] = await store.listGames();
+    await store.upsertOpenId({
+      gameAppId: game.gameAppId,
+      openId: 'mock_open_002',
+    });
+
+    const [row] = await store.addEcpmRows({
+      gameAppId: game.gameAppId,
+      rows: [
+        {
+          eventTime: new Date('2026-05-07T03:00:00.000Z'),
+          openId: 'mock_open_002',
+          platformEventId: 'evt_002',
+          rawCostLi: 10000n,
+        },
+      ],
+    });
+
+    expect(row.displayAmountLi).toBe(6000n);
+    expect(row.configSnapshot).toEqual({
+      ratioPercent: 60,
+    });
+  });
+
+  it('refreshes demo default agent credentials during demo seeding', async () => {
+    const prisma = createFakePrisma({
+      agents: [
+        {
+          id: 'demo-agent-default',
+          passwordHash: 'stale-hash',
+        },
+      ],
+    });
+    const store = new DemoStore(prisma);
+
+    await store.listGames();
+
+    expect(prisma.getAgent('demo-agent-default')?.passwordHash).not.toBe(
+      'stale-hash',
+    );
+  });
 });
 
 type FakeCompany = {
@@ -86,7 +143,10 @@ type FakeRawEcpm = {
   createdAt: Date;
 };
 
-function createFakePrisma() {
+function createFakePrisma(seed: { agents?: any[] } = {}) {
+  const agents = new Map<string, any>(
+    (seed.agents ?? []).map((agent) => [agent.id, agent]),
+  );
   const companies = new Map<string, FakeCompany>();
   const games = new Map<string, FakeGame>();
   const openIds = new Map<string, FakeOpenId>();
@@ -98,6 +158,14 @@ function createFakePrisma() {
   });
 
   return {
+    agent: {
+      upsert: async ({ create, update, where }: any) => {
+        const existing = agents.get(where.id);
+        const next = existing ? { ...existing, ...update } : { ...create };
+        agents.set(next.id, next);
+        return next;
+      },
+    },
     company: {
       upsert: async ({ create, update, where }: any) => {
         const existing = companies.get(where.id);
@@ -162,5 +230,6 @@ function createFakePrisma() {
         return next;
       },
     },
+    getAgent: (id: string) => agents.get(id),
   } as any;
 }

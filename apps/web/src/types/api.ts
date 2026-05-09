@@ -104,6 +104,17 @@ export type AuthResult = {
   account: AccountResult;
 };
 
+export type AccountAgentBinding = {
+  id: string;
+  invitationCode: string;
+  parentAgentId: string | null;
+  username: string;
+};
+
+export type AccountAgentBindingResult = {
+  agent: AccountAgentBinding | null;
+};
+
 export type SuperAdminPrincipal = {
   role: 'SUPER_ADMIN';
   username: string;
@@ -121,6 +132,17 @@ export type AdminPrincipal = CompanyAdminPrincipal | SuperAdminPrincipal;
 export type AdminAuthResult = {
   accessToken: string;
   admin: AdminPrincipal;
+};
+
+export type AgentPrincipal = {
+  id: string;
+  invitationCode: string;
+  username: string;
+};
+
+export type AgentAuthResult = {
+  accessToken: string;
+  agent: AgentPrincipal;
 };
 
 export type CurrentAdminResult = {
@@ -190,6 +212,54 @@ export type AdminCompanyAdminResult = {
   admin: AdminCompanyAdmin;
 };
 
+export type AdminAgent = {
+  alipayAccount: string | null;
+  alipayRealName: string | null;
+  availableBalance: MoneyValue;
+  createdAt: string;
+  enabled: boolean;
+  frozenBalance: MoneyValue;
+  id: string;
+  invitationCode: string;
+  parentAgent: {
+    id: string;
+    invitationCode: string;
+    username: string;
+  } | null;
+  parentAgentId: string | null;
+  username: string;
+};
+
+export type AdminAgentListResult = {
+  agents: AdminAgent[];
+};
+
+export type AdminAgentResult = {
+  agent: AdminAgent;
+};
+
+export type PlatformConfig = {
+  defaultAgentId: string | null;
+  defaultAgentRatioPercent: number;
+  directAgentRatioPercent: number;
+  displayRatioPercent: number;
+  feeRatioPercent: number;
+  minWithdrawal: MoneyValue;
+  parentAgentRatioPercent: number;
+  userSettlementRatioPercent: number;
+};
+
+export type PlatformConfigUpdateInput = {
+  defaultAgentId: string | null;
+  defaultAgentRatioPercent: number;
+  directAgentRatioPercent: number;
+  displayRatioPercent: number;
+  feeRatioPercent: number;
+  minWithdrawalYuan: string;
+  parentAgentRatioPercent: number;
+  userSettlementRatioPercent: number;
+};
+
 export type AccountEarningsResult = {
   date: string;
   openIds: string[];
@@ -223,11 +293,63 @@ export type WithdrawalResult = {
 
 export type AdminWithdrawalBatch = WithdrawalResult & {
   createdAt: string;
+  ownerId: string | null;
+  ownerType: 'AGENT' | 'USER' | 'COMPANY_ADMIN' | 'SUPER_ADMIN';
   updatedAt: string;
-  userId: string;
+  userId: string | null;
 };
 
 export type AdminWithdrawalListResult = {
+  batches: AdminWithdrawalBatch[];
+};
+
+export type AgentProfile = AgentPrincipal & {
+  alipayAccount: string | null;
+  alipayRealName: string | null;
+  availableBalance: MoneyValue;
+  frozenBalance: MoneyValue;
+};
+
+export type AgentEarningRole =
+  | 'DEFAULT_AGENT'
+  | 'DIRECT_AGENT'
+  | 'PARENT_AGENT';
+
+export type AgentEarningRow = {
+  amount: MoneyValue;
+  batchId: string;
+  createdAt: string;
+  id: string;
+  itemId: string;
+  openId: string;
+  rawEcpmId: string;
+  role: AgentEarningRole;
+  settlementAmount: MoneyValue;
+  userId: string;
+};
+
+export type AgentEarningsResult = {
+  rows: AgentEarningRow[];
+  totalAmount: MoneyValue;
+};
+
+export type AgentUserRow = {
+  createdAt: string;
+  currentAgentId: string;
+  currentAgentInvitationCode: string;
+  currentAgentUsername: string;
+  id: string;
+  readableId: string;
+  relation: 'CHILD_AGENT' | 'DIRECT';
+  username: string;
+};
+
+export type AgentUsersResult = {
+  rows: AgentUserRow[];
+  totalCount: number;
+};
+
+export type AgentWithdrawalListResult = {
   batches: AdminWithdrawalBatch[];
 };
 
@@ -272,12 +394,21 @@ export type AdminSettlementPreview = {
 
 export type AdminSettlementItem = {
   createdAt: string;
+  defaultAgentAmount: MoneyValue;
+  defaultAgentId: string | null;
+  directAgentAmount: MoneyValue;
+  directAgentId: string | null;
   displayAmount: MoneyValue;
+  feeAmount: MoneyValue;
   gameOpenIdId: string;
   id: string;
   openId: string;
+  parentAgentAmount: MoneyValue;
+  parentAgentId: string | null;
   rawEcpmId: string;
   settlementAmount: MoneyValue;
+  splitSnapshot: unknown;
+  userAmount: MoneyValue;
   userId: string;
 };
 
@@ -311,4 +442,44 @@ export type AdminSettlementListResult = {
 export type AdminSettlementDetailResult = {
   batch: AdminSettlementBatch;
   items: AdminSettlementItem[];
+};
+
+export type BusinessClosureStatus = 'ATTENTION' | 'BLOCKED' | 'READY';
+
+export type BusinessClosureCheck = {
+  description: string;
+  evidence: string[];
+  key:
+    | 'agents'
+    | 'ecpm'
+    | 'open_ids'
+    | 'resources'
+    | 'settlement'
+    | 'user_agent_binding'
+    | 'withdrawal';
+  label: string;
+  status: BusinessClosureStatus;
+};
+
+export type BusinessClosureReport = {
+  checks: BusinessClosureCheck[];
+  metrics: {
+    activeAgentCount: number;
+    boundOpenIdCount: number;
+    boundUserCount: number;
+    companyCount: number;
+    gameBudgetLi: string;
+    gameCount: number;
+    openIdCount: number;
+    pendingEcpmCount: number;
+    rawEcpmCount: number;
+    settlementBatchCount: number;
+    userCount: number;
+    withdrawalBatchCount: number;
+  };
+  summary: {
+    attention: number;
+    blocked: number;
+    ready: number;
+  };
 };

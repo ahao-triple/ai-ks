@@ -16,6 +16,13 @@ import type {
   AdminSettlementListResult,
   AdminSettlementPreview,
   AdminWithdrawalBatch,
+  AccountAgentBindingResult,
+  AgentAuthResult,
+  AgentEarningsResult,
+  AgentProfile,
+  AgentUsersResult,
+  AgentWithdrawalListResult,
+  BusinessClosureReport,
   CurrentAdminResult,
   EcpmRefreshResult,
   KuaishouEcpmSyncJob,
@@ -90,6 +97,51 @@ describe('aiKsApi', () => {
     );
   });
 
+  it('binds account agent invitations with the account token', async () => {
+    mockJsonResponse({ agent: { id: 'agent-1' } });
+
+    await aiKsApi.bindAccountAgent('account-token', 'AGENT1');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/accounts/me/agent-binding`,
+      {
+        body: JSON.stringify({ invitationCode: 'AGENT1' }),
+        headers: {
+          Authorization: 'Bearer account-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'PATCH',
+      },
+    );
+  });
+
+  it('logs in agents and loads the agent portal with the agent token', async () => {
+    mockJsonResponse({ accessToken: 'agent-token', agent: { id: 'agent-1' } });
+
+    await aiKsApi.loginAgent({
+      password: 'demo-agent-pass',
+      username: 'demo_default_agent',
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(`${API_BASE_URL}/agents/login`, {
+      body: expect.any(String),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    });
+
+    mockJsonResponse({ id: 'agent-1', username: 'agent_1' });
+    await aiKsApi.getCurrentAgent('agent-token');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(`${API_BASE_URL}/agents/me`, {
+      body: undefined,
+      headers: {
+        Authorization: 'Bearer agent-token',
+        'Content-Type': 'application/json',
+      },
+      method: 'GET',
+    });
+  });
+
   it('encodes withdrawal batch id path segments for mutations', async () => {
     mockJsonResponse({ id: 'batch 1/2', status: 'PENDING' });
 
@@ -161,6 +213,27 @@ describe('aiKsApi', () => {
       .returns.resolves.toEqualTypeOf<{ game: AdminGame }>();
     expectTypeOf(aiKsApi.allocateGameBudget)
       .returns.resolves.toEqualTypeOf<AdminGameBudgetAllocationResult>();
+    expectTypeOf(aiKsApi.resetTestData)
+      .returns.resolves.toEqualTypeOf<{ success: true }>();
+    expectTypeOf(aiKsApi.getBusinessClosure)
+      .returns.resolves.toEqualTypeOf<BusinessClosureReport>();
+  });
+
+  it('types agent portal methods as agent responses', () => {
+    expectTypeOf(aiKsApi.loginAgent)
+      .returns.resolves.toEqualTypeOf<AgentAuthResult>();
+    expectTypeOf(aiKsApi.getCurrentAgent)
+      .returns.resolves.toEqualTypeOf<AgentProfile>();
+    expectTypeOf(aiKsApi.getAgentEarnings)
+      .returns.resolves.toEqualTypeOf<AgentEarningsResult>();
+    expectTypeOf(aiKsApi.getAgentWithdrawals)
+      .returns.resolves.toEqualTypeOf<AgentWithdrawalListResult>();
+    expectTypeOf(aiKsApi.getAgentUsers)
+      .returns.resolves.toEqualTypeOf<AgentUsersResult>();
+    expectTypeOf(aiKsApi.getAccountAgentBinding)
+      .returns.resolves.toEqualTypeOf<AccountAgentBindingResult>();
+    expectTypeOf(aiKsApi.bindAccountAgent)
+      .returns.resolves.toEqualTypeOf<AccountAgentBindingResult>();
   });
 
   it('types kuaishou token methods as token status responses', () => {
@@ -175,6 +248,8 @@ describe('aiKsApi', () => {
   it('types kuaishou ecpm job methods and refresh responses', () => {
     expectTypeOf(aiKsApi.getKuaishouEcpmJobs)
       .returns.resolves.toEqualTypeOf<KuaishouEcpmSyncJobListResult>();
+    expectTypeOf(aiKsApi.retryKuaishouEcpmJob)
+      .returns.resolves.toEqualTypeOf<EcpmRefreshResult>();
     expectTypeOf<EcpmRefreshResult['job']>().toEqualTypeOf<KuaishouEcpmSyncJob>();
   });
 
@@ -185,6 +260,44 @@ describe('aiKsApi', () => {
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       `${API_BASE_URL}/admin/companies`,
+      {
+        body: undefined,
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'GET',
+      },
+    );
+  });
+
+  it('resets test data with super admin confirmation payload', async () => {
+    mockJsonResponse({ success: true });
+
+    await aiKsApi.resetTestData('admin-token');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/system/reset-test-data`,
+      {
+        body: JSON.stringify({
+          confirmation: 'RESET_TEST_DATA',
+        }),
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      },
+    );
+  });
+
+  it('loads business closure checks with the admin token', async () => {
+    mockJsonResponse({ checks: [], metrics: {}, summary: {} });
+
+    await aiKsApi.getBusinessClosure('admin-token');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/business-closure`,
       {
         body: undefined,
         headers: {
@@ -482,6 +595,24 @@ describe('aiKsApi', () => {
           'Content-Type': 'application/json',
         },
         method: 'GET',
+      },
+    );
+  });
+
+  it('retries kuaishou ecpm sync jobs with an encoded job id', async () => {
+    mockJsonResponse({ requestedOpenIds: [], rows: [], savedCount: 0 });
+
+    await aiKsApi.retryKuaishouEcpmJob('admin-token', 'job 1/2');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/kuaishou/ecpm/jobs/job%201%2F2/retry`,
+      {
+        body: JSON.stringify({}),
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
       },
     );
   });

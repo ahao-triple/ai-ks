@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { LoginPage } from './LoginPage';
 import { GuestQueryPage } from './GuestQueryPage';
 import { AccountWorkspace } from './AccountWorkspace';
+import { AgentWorkspace } from './AgentWorkspace';
 import {
   OperationsWorkspace,
   type OperationsWorkspaceProps,
@@ -17,13 +18,17 @@ import {
   getAdminEntrySettlementGameRowId,
   getSettlementGameRowId,
   isSuperAdmin,
+  readKuaishouOAuthCallback,
   shouldApplySettlementBatchResponse,
 } from '../App';
+import { buildOperationsOverview } from '../lib/operationsOverview';
 import type {
   AdminCompany,
   AdminGame,
   AdminSettlementBatch,
+  AdminSettlementDetailResult,
   AdminSettlementPreview,
+  BusinessClosureReport,
   KuaishouEcpmSyncJob,
   KuaishouTokenStatusResult,
 } from '../types/api';
@@ -58,6 +63,31 @@ const serverSettlementBatch: AdminSettlementBatch = {
   userCount: 2,
 };
 
+const settlementDetail: AdminSettlementDetailResult = {
+  batch: serverSettlementBatch,
+  items: [
+    {
+      createdAt: '2026-05-08T12:00:00.000Z',
+      defaultAgentAmount: { li: '50', yuan: '0.05' },
+      defaultAgentId: null,
+      directAgentAmount: { li: '100', yuan: '0.10' },
+      directAgentId: 'agent-direct-1',
+      displayAmount: { li: '1000', yuan: '1.00' },
+      feeAmount: { li: '50', yuan: '0.05' },
+      gameOpenIdId: 'open-row-1',
+      id: 'item-1',
+      openId: 'open-1',
+      parentAgentAmount: { li: '100', yuan: '0.10' },
+      parentAgentId: 'agent-parent-1',
+      rawEcpmId: 'ecpm-1',
+      settlementAmount: { li: '1000', yuan: '1.00' },
+      splitSnapshot: {},
+      userAmount: { li: '700', yuan: '0.70' },
+      userId: 'user-1',
+    },
+  ],
+};
+
 const adminCompany: AdminCompany = {
   balance: { li: '12345', yuan: '12.35' },
   createdAt: '2026-05-08T01:00:00.000Z',
@@ -81,6 +111,23 @@ const adminGame: AdminGame = {
   name: 'Runner',
   settlementPaused: true,
   updatedAt: '2026-05-08T02:30:00.000Z',
+};
+
+const companyAdminAccount = {
+  createdAt: '2026-05-08T03:00:00.000Z',
+  deletedAt: null,
+  displayName: 'Acme 只读管理员',
+  enabled: true,
+  id: 'company-admin-1',
+  scopes: [
+    {
+      companyId: 'company-1',
+      gameIds: ['game-1'],
+      operationCodes: ['company.read', 'game.read'],
+    },
+  ],
+  updatedAt: '2026-05-08T03:30:00.000Z',
+  username: 'acme_admin',
 };
 
 const kuaishouTokenStatus: KuaishouTokenStatusResult = {
@@ -116,15 +163,58 @@ const kuaishouEcpmJob: KuaishouEcpmSyncJob = {
   updatedAt: '2026-05-08T00:01:00.000Z',
 };
 
+const businessClosureReport: BusinessClosureReport = {
+  checks: [
+    {
+      description: '真实数据测试前必须至少有公司、游戏和可用预算。',
+      evidence: ['公司 1 个', '游戏 1 个', '游戏预算合计 10000 厘'],
+      key: 'resources',
+      label: '公司 / 游戏 / 预算',
+      status: 'READY',
+    },
+    {
+      description: '用户归属决定真实结算时直属代理和上级代理分账。',
+      evidence: ['用户 1 个', '已绑定代理用户 1 个'],
+      key: 'user_agent_binding',
+      label: '用户代理归属',
+      status: 'READY',
+    },
+  ],
+  metrics: {
+    activeAgentCount: 1,
+    boundOpenIdCount: 1,
+    boundUserCount: 1,
+    companyCount: 1,
+    gameBudgetLi: '10000',
+    gameCount: 1,
+    openIdCount: 1,
+    pendingEcpmCount: 1,
+    rawEcpmCount: 1,
+    settlementBatchCount: 0,
+    userCount: 1,
+    withdrawalBatchCount: 0,
+  },
+  summary: {
+    attention: 0,
+    blocked: 0,
+    ready: 2,
+  },
+};
+
 function operationsWorkspaceProps(
   overrides: Partial<OperationsWorkspaceProps> = {},
 ): OperationsWorkspaceProps {
-  return {
+  const defaults: Omit<OperationsWorkspaceProps, 'operationsOverview'> = {
     adminName: '',
     adminCompanies: [],
     adminGames: [],
     adminWithdrawalStatus: 'PENDING_REVIEW',
     adminWithdrawals: [],
+    adminAgents: [],
+    agentActionAgentId: '',
+    agentAlipayAccount: '',
+    agentAlipayRealName: '',
+    agentWithdrawalAmountYuan: '',
     auditLogs: [],
     balanceAmountYuan: '',
     balanceCompanyId: '',
@@ -133,6 +223,8 @@ function operationsWorkspaceProps(
     budgetGameId: '',
     budgetReason: '',
     busyAction: '',
+    businessClosure: undefined,
+    companyAdmins: [],
     configBudgetAmountYuan: '',
     configBudgetReason: '',
     configEcpmLookbackHours: 3,
@@ -141,16 +233,42 @@ function operationsWorkspaceProps(
     configSection: 'basic',
     gameAppId: 'game-1',
     games: [],
+    isSuperAdmin: true,
     jsCode: '',
     kuaishouAppId: '',
     kuaishouAuthCode: '',
     kuaishouEcpmJobs: [],
     kuaishouSecret: '',
+    newAgentInvitationCode: '',
+    newAgentParentId: '',
+    newAgentPassword: '',
+    newAgentUsername: '',
     newCompanyName: '',
     newGameAppId: '',
     newGameCompanyId: '',
     newGameName: '',
     newGameSecret: '',
+    platformConfig: {
+      defaultAgentId: null,
+      defaultAgentRatioPercent: 0,
+      directAgentRatioPercent: 0,
+      displayRatioPercent: 50,
+      feeRatioPercent: 0,
+      minWithdrawal: { li: '10000', yuan: '10.00' },
+      parentAgentRatioPercent: 0,
+      userSettlementRatioPercent: 100,
+    },
+    platformConfigDraft: {
+      defaultAgentId: '',
+      defaultAgentRatioPercent: '0',
+      directAgentRatioPercent: '0',
+      displayRatioPercent: '50',
+      feeRatioPercent: '0',
+      minWithdrawalYuan: '10.00',
+      parentAgentRatioPercent: '0',
+      userSettlementRatioPercent: '100',
+    },
+    onLoadPlatformConfig: () => undefined,
     onAdjustCompanyBalance: () => undefined,
     onAllocateGameBudget: () => undefined,
     onApproveWithdrawal: () => undefined,
@@ -163,7 +281,13 @@ function operationsWorkspaceProps(
     onCloseWithdrawal: () => undefined,
     onConfirmSettlement: () => undefined,
     onCloseGameConfig: () => undefined,
+    onAgentActionAgentIdChange: () => undefined,
+    onAgentAlipayAccountChange: () => undefined,
+    onAgentAlipayRealNameChange: () => undefined,
+    onAgentWithdrawalAmountChange: () => undefined,
+    onCreateAgent: () => undefined,
     onCreateCompany: () => undefined,
+    onCreateCompanyAdmin: () => undefined,
     onCreateGame: () => undefined,
     onCreateSession: () => undefined,
     onConfigBudgetAmountChange: () => undefined,
@@ -181,9 +305,17 @@ function operationsWorkspaceProps(
     onLoadKuaishouEcpmJobs: () => undefined,
     onLoadKuaishouTokenStatus: () => undefined,
     onLoadAdminResources: () => undefined,
+    onLoadAdminAgents: () => undefined,
     onLoadAuditLogs: () => undefined,
+    onLoadBusinessClosure: () => undefined,
+    onLoadCompanyAdmins: () => undefined,
+    onLoadSettlementDetail: () => undefined,
     onLoadWithdrawalDetail: () => undefined,
     onLoadWithdrawals: () => undefined,
+    onNewAgentInvitationCodeChange: () => undefined,
+    onNewAgentParentIdChange: () => undefined,
+    onNewAgentPasswordChange: () => undefined,
+    onNewAgentUsernameChange: () => undefined,
     onNewCompanyNameChange: () => undefined,
     onNewGameAppIdChange: () => undefined,
     onNewGameCompanyIdChange: () => undefined,
@@ -191,22 +323,45 @@ function operationsWorkspaceProps(
     onNewGameSecretChange: () => undefined,
     onPayWithdrawal: () => undefined,
     onPreviewSettlement: () => undefined,
+    onResetTestData: () => undefined,
+    onPlatformConfigDraftChange: () => undefined,
     onRefreshEcpm: () => undefined,
     onRefreshConfigGameEcpm: () => undefined,
+    onRetryKuaishouEcpmJob: () => undefined,
+    onRequestAgentWithdrawal: () => undefined,
     onSaveGameConfig: () => undefined,
+    onSavePlatformConfig: () => undefined,
     onSettlementEndDateChange: () => undefined,
     onSettlementStartDateChange: () => undefined,
     onSettlementUserIdChange: () => undefined,
     onOpenGameConfig: () => undefined,
     onSubmitConfigBudget: () => undefined,
+    onUpdateAgentAlipay: () => undefined,
+    onUpdateCompanyAdmin: () => undefined,
+    onUpdateCompanyAdminScopes: () => undefined,
     sampleJsCodes: [],
     selectedConfigGame: undefined,
     selectedConfigGameId: '',
+    selectedSettlementDetail: undefined,
     settlementBatches: [],
     settlementEndDate: '2026-05-08',
     settlementStartDate: '2026-05-08',
     settlementUserId: '',
-    ...overrides,
+  };
+
+  const merged = { ...defaults, ...overrides };
+
+  return {
+    ...merged,
+    operationsOverview:
+      overrides.operationsOverview ??
+      buildOperationsOverview({
+        adminGames: merged.adminGames,
+        configKuaishouEcpmJobs: merged.configKuaishouEcpmJobs,
+        kuaishouEcpmJobs: merged.kuaishouEcpmJobs,
+        settlementBatches: merged.settlementBatches,
+        settlementPreview: merged.settlementPreview,
+      }),
   };
 }
 
@@ -242,11 +397,18 @@ describe('LoginPage', () => {
       <LoginPage
         adminPassword="admin123456"
         adminUsername="admin"
+        agentPassword="demo-agent-pass"
+        agentUsername="demo_default_agent"
+        invitationCode=""
         busyAction=""
         mode="account"
         onAdminPasswordChange={() => undefined}
         onAdminUsernameChange={() => undefined}
+        onAgentPasswordChange={() => undefined}
+        onAgentUsernameChange={() => undefined}
         onGuestEnter={() => undefined}
+        onInvitationCodeChange={() => undefined}
+        onLoginAgent={() => undefined}
         onLoginAdmin={() => undefined}
         onLoginAccount={() => undefined}
         onModeChange={() => undefined}
@@ -259,8 +421,43 @@ describe('LoginPage', () => {
     );
 
     expect(html).toContain('游客登录');
+    expect(html).toContain('代理');
+    expect(html).toContain('代理邀请码');
     expect(html).toContain('登录');
     expect(html).not.toContain('收益明细');
+  });
+
+  it('renders agent login fields in agent mode', () => {
+    const html = renderToStaticMarkup(
+      <LoginPage
+        adminPassword="admin123456"
+        adminUsername="admin"
+        agentPassword="demo-agent-pass"
+        agentUsername="demo_default_agent"
+        invitationCode=""
+        busyAction=""
+        mode="agent"
+        onAdminPasswordChange={() => undefined}
+        onAdminUsernameChange={() => undefined}
+        onAgentPasswordChange={() => undefined}
+        onAgentUsernameChange={() => undefined}
+        onGuestEnter={() => undefined}
+        onInvitationCodeChange={() => undefined}
+        onLoginAgent={() => undefined}
+        onLoginAdmin={() => undefined}
+        onLoginAccount={() => undefined}
+        onModeChange={() => undefined}
+        onPasswordChange={() => undefined}
+        onRegister={() => undefined}
+        onUsernameChange={() => undefined}
+        password="demo123456"
+        username="demo_user"
+      />,
+    );
+
+    expect(html).toContain('代理账号');
+    expect(html).toContain('代理密码');
+    expect(html).not.toContain('注册');
   });
 
   it('disables guest entry while account login is busy', () => {
@@ -268,11 +465,18 @@ describe('LoginPage', () => {
       <LoginPage
         adminPassword="admin123456"
         adminUsername="admin"
+        agentPassword="demo-agent-pass"
+        agentUsername="demo_default_agent"
+        invitationCode=""
         busyAction="login"
         mode="account"
         onAdminPasswordChange={() => undefined}
         onAdminUsernameChange={() => undefined}
+        onAgentPasswordChange={() => undefined}
+        onAgentUsernameChange={() => undefined}
         onGuestEnter={() => undefined}
+        onInvitationCodeChange={() => undefined}
+        onLoginAgent={() => undefined}
         onLoginAdmin={() => undefined}
         onLoginAccount={() => undefined}
         onModeChange={() => undefined}
@@ -287,6 +491,55 @@ describe('LoginPage', () => {
     expect(html).toContain(
       '<button class="ui-button ui-button-ghost" type="button" disabled="">游客登录</button>',
     );
+  });
+});
+
+describe('AgentWorkspace', () => {
+  it('renders agent profile, earnings, alipay, and withdrawal panels', () => {
+    const html = renderToStaticMarkup(
+      <AgentWorkspace
+        agent={{
+          id: 'agent-1',
+          invitationCode: 'AGENT1',
+          username: 'agent_1',
+        }}
+        alipayAccount=""
+        alipayRealName=""
+        busyAction=""
+        onLoadUsers={() => undefined}
+        onAlipayAccountChange={() => undefined}
+        onAlipayRealNameChange={() => undefined}
+        onLoadEarnings={() => undefined}
+        onLoadWithdrawals={() => undefined}
+        onRequestWithdrawal={() => undefined}
+        onUpdateAlipayProfile={() => undefined}
+        onWithdrawalAmountChange={() => undefined}
+        withdrawalAmountYuan="10.00"
+        users={{
+          rows: [
+            {
+              createdAt: '2026-05-10T00:00:00.000Z',
+              currentAgentId: 'agent-1',
+              currentAgentInvitationCode: 'AGENT1',
+              currentAgentUsername: 'agent_1',
+              id: 'user-1',
+              readableId: 'USER001',
+              relation: 'DIRECT',
+              username: 'direct_user',
+            },
+          ],
+          totalCount: 1,
+        }}
+      />,
+    );
+
+    expect(html).toContain('代理收益概览');
+    expect(html).toContain('代理支付宝资料');
+    expect(html).toContain('代理提现申请');
+    expect(html).toContain('代理结算明细');
+    expect(html).toContain('代理名下用户');
+    expect(html).toContain('direct_user');
+    expect(html).toContain('代理提现批次');
   });
 });
 
@@ -310,10 +563,14 @@ describe('AccountWorkspace', () => {
   it('renders account forms and account earnings table', () => {
     const html = renderToStaticMarkup(
       <AccountWorkspace
+        agentBinding={{ agent: null }}
+        agentInvitationCode=""
         alipayAccount=""
         alipayRealName=""
         bindIdentity=""
         busyAction=""
+        onAgentInvitationCodeChange={() => undefined}
+        onBindAgent={() => undefined}
         onAlipayAccountChange={() => undefined}
         onAlipayRealNameChange={() => undefined}
         onBindIdentityChange={() => undefined}
@@ -327,6 +584,7 @@ describe('AccountWorkspace', () => {
     );
 
     expect(html).toContain('ID 绑定');
+    expect(html).toContain('代理归属');
     expect(html).toContain('支付宝资料');
     expect(html).toContain('提现申请');
     expect(html).toContain('账号收益明细');
@@ -340,10 +598,21 @@ describe('AccountWorkspace', () => {
           readableId: '1234567',
           username: 'demo_user',
         }}
+        agentBinding={{
+          agent: {
+            id: 'agent-1',
+            invitationCode: 'AGENT1',
+            parentAgentId: null,
+            username: 'agent_1',
+          },
+        }}
+        agentInvitationCode="AGENT2"
         alipayAccount="demo@example.com"
         alipayRealName="Demo User"
         bindIdentity="open-id-1"
         busyAction="withdrawal"
+        onAgentInvitationCodeChange={() => undefined}
+        onBindAgent={() => undefined}
         onAlipayAccountChange={() => undefined}
         onAlipayRealNameChange={() => undefined}
         onBindIdentityChange={() => undefined}
@@ -356,7 +625,7 @@ describe('AccountWorkspace', () => {
       />,
     );
 
-    expect(html.match(/<button\b[^>]*disabled=""/g)).toHaveLength(4);
+    expect(html.match(/<button\b[^>]*disabled=""/g)).toHaveLength(5);
     expect(html).toContain('提交中');
     expect(html).toContain('等待管理员确认结算');
     expect(html).not.toMatch(/<button\b[^>]*>.*确认结算.*<\/button>/);
@@ -364,6 +633,180 @@ describe('AccountWorkspace', () => {
 });
 
 describe('OperationsWorkspace', () => {
+  it('renders pane navigation and defaults to overview pane', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace {...operationsWorkspaceProps()} />,
+    );
+
+    expect(html).toContain('运营台模块');
+    expect(html).toContain(
+      '<button aria-current="page" class="operations-nav-item" type="button">总览</button>',
+    );
+    expect(html).toContain('>维护</button>');
+    expect(html).toContain('>权限</button>');
+    expect(html).toContain('operations-pane operations-pane-active');
+  });
+
+  it('hides maintenance pane for company admins', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          isSuperAdmin: false,
+        })}
+      />,
+    );
+
+    expect(html).not.toContain('测试数据维护');
+    expect(html).not.toContain('清空测试数据');
+    expect(html).not.toContain('公司管理员管理');
+    expect(html).not.toContain('平台业务配置');
+  });
+
+  it('renders platform config center for super admins', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          platformConfig: {
+            defaultAgentId: 'agent-default-1',
+            defaultAgentRatioPercent: 5,
+            directAgentRatioPercent: 10,
+            displayRatioPercent: 60,
+            feeRatioPercent: 5,
+            minWithdrawal: { li: '20000', yuan: '20.00' },
+            parentAgentRatioPercent: 10,
+            userSettlementRatioPercent: 70,
+          },
+          platformConfigDraft: {
+            defaultAgentId: 'agent-default-1',
+            defaultAgentRatioPercent: '5',
+            directAgentRatioPercent: '10',
+            displayRatioPercent: '60',
+            feeRatioPercent: '5',
+            minWithdrawalYuan: '20.00',
+            parentAgentRatioPercent: '10',
+            userSettlementRatioPercent: '70',
+          },
+        })}
+      />,
+    );
+
+    expect(html).toContain('配置中心');
+    expect(html).toContain('平台业务配置');
+    expect(html).toContain('展示金额比例');
+    expect(html).toContain('用户结算比例');
+    expect(html).toContain('直属代理比例');
+    expect(html).toContain('最低提现金额');
+    expect(html).toContain('保存平台配置');
+    expect(html).toContain('分账合计：100%');
+  });
+
+  it('renders the super admin company admin management pane', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          adminCompanies: [adminCompany],
+          adminGames: [adminGame],
+          companyAdmins: [companyAdminAccount],
+        })}
+      />,
+    );
+
+    expect(html).toContain('公司管理员管理');
+    expect(html).toContain('打开创建账号弹窗');
+    expect(html).toContain('acme_admin');
+    expect(html).toContain('Acme 只读管理员');
+    expect(html).toContain('已启用');
+    expect(html).toContain('编辑账号');
+    expect(html).toContain('分配范围');
+  });
+
+  it('renders operations overview metrics and exception summary', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          adminGames: [
+            {
+              ...adminGame,
+              budget: { li: '1200', yuan: '12.00' },
+              settlementPaused: false,
+            },
+            {
+              ...adminGame,
+              budget: { li: '800', yuan: '8.00' },
+              gameAppId: 'ks_game_002',
+              id: 'game-2',
+              name: 'Puzzle',
+              settlementPaused: true,
+            },
+          ],
+          configKuaishouEcpmJobs: [
+            {
+              ...kuaishouEcpmJob,
+              errorMessage: 'token expired',
+              id: 'job-failed-2',
+              status: 'FAILED',
+            },
+          ],
+          kuaishouEcpmJobs: [
+            {
+              ...kuaishouEcpmJob,
+              errorMessage: 'token expired',
+              id: 'job-failed-1',
+              status: 'FAILED',
+            },
+          ],
+          settlementPreview: {
+            ...confirmableSettlementPreview,
+            settlementAmount: { li: '500', yuan: '5.00' },
+            settlementCount: 3,
+          },
+        })}
+      />,
+    );
+
+    expect(html).toContain('运营总览');
+    expect(html).toContain('今日收益');
+    expect(html).toContain('游戏预算余额');
+    expect(html).toContain('待结算金额');
+    expect(html).toContain('异常任务数');
+    expect(html).toContain('游戏排行');
+    expect(html).toContain('异常摘要');
+  });
+
+  it('renders business closure checks in the overview pane', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          businessClosure: businessClosureReport,
+        })}
+      />,
+    );
+
+    expect(html).toContain('真实数据闭环核对');
+    expect(html).toContain('公司 / 游戏 / 预算');
+    expect(html).toContain('用户代理归属');
+    expect(html).toContain('公司 1 个');
+    expect(html).toContain('刷新核对');
+  });
+
+  it('renders overview empty states when admin data is missing', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          adminGames: [],
+          configKuaishouEcpmJobs: [],
+          kuaishouEcpmJobs: [],
+          settlementPreview: undefined,
+        })}
+      />,
+    );
+
+    expect(html).toContain('暂无可用游戏排行');
+    expect(html).toContain('暂无异常任务');
+    expect(html).toContain('请先创建游戏并分配预算');
+    expect(html).toContain('可点击“刷新任务”检查最新同步状态');
+  });
+
   it('renders admin operations sections', () => {
     const html = renderToStaticMarkup(
       <OperationsWorkspace {...operationsWorkspaceProps({ gameAppId: '' })} />,
@@ -373,6 +816,7 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('快手 ECPM');
     expect(html).toContain('结算确认');
     expect(html).toContain('预览结算');
+    expect(html).toContain('打开确认弹窗');
     expect(html).toContain('提现审核');
     expect(html).toContain('审计日志');
   });
@@ -403,11 +847,12 @@ describe('OperationsWorkspace', () => {
 
   it('requires a confirmable settlement preview before enabling confirmation', () => {
     const withoutPreview = renderToStaticMarkup(
-      <OperationsWorkspace {...operationsWorkspaceProps()} />,
+      <OperationsWorkspace {...operationsWorkspaceProps({ isSuperAdmin: false })} />,
     );
     const withPreview = renderToStaticMarkup(
       <OperationsWorkspace
         {...operationsWorkspaceProps({
+          isSuperAdmin: false,
           settlementPreview: confirmableSettlementPreview,
         })}
       />,
@@ -435,6 +880,27 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('¥ 30.00');
     expect(html).toContain('¥ 70.00');
     expect(html).not.toContain('暂无结算批次');
+    expect(html).toContain('查看明细');
+  });
+
+  it('renders settlement split detail with user, agent, default, and fee amounts', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          selectedSettlementDetail: settlementDetail,
+          settlementBatches: [serverSettlementBatch],
+        })}
+      />,
+    );
+
+    expect(html).toContain('结算明细');
+    expect(html).toContain('open-1');
+    expect(html).toContain('user-1');
+    expect(html).toContain('agent-direct-1');
+    expect(html).toContain('agent-parent-1');
+    expect(html).toContain('¥ 0.70');
+    expect(html).toContain('¥ 0.10');
+    expect(html).toContain('¥ 0.05');
   });
 
   it('renders the admin budget management panel with companies and games', () => {
@@ -463,10 +929,10 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('ks_game_001');
     expect(html).toContain('¥ 6.00');
     expect(html).toContain('已暂停');
-    expect(html).toContain('创建公司');
-    expect(html).toContain('充值公司余额');
-    expect(html).toContain('创建游戏');
-    expect(html).toContain('分配游戏预算');
+    expect(html).toContain('打开创建公司弹窗');
+    expect(html).toContain('打开充值弹窗');
+    expect(html).toContain('打开创建游戏弹窗');
+    expect(html).toContain('打开预算分配弹窗');
   });
 
   it('renders a config button for each admin game', () => {
@@ -486,7 +952,7 @@ describe('OperationsWorkspace', () => {
       />,
     );
 
-    expect(html.match(/配置/g)).toHaveLength(2);
+    expect(html.match(/ui-button-compact/g)).toHaveLength(2);
   });
 
   it('renders selected game config modules and ecpm sync policy copy', () => {
@@ -565,8 +1031,10 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('database');
     expect(html).toContain('advertiser-1');
     expect(html).toContain('2026-05-09');
-    expect(html).toContain('提交授权');
-    expect(html).toContain('刷新 token');
+    expect(html).toContain('打开授权弹窗');
+    expect(html).toContain('直接刷新 token');
+    expect(html).toContain('授权回调地址');
+    expect(html).toContain('auth_code=AUTH_CODE');
     expect(html).not.toContain('access-token');
     expect(html).not.toContain('refresh-token');
   });
@@ -594,6 +1062,26 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('FAILED');
     expect(html).toContain('token expired');
     expect(html).toContain('kuaishou');
+  });
+
+  it('renders retry actions for failed kuaishou ecpm sync jobs', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          kuaishouEcpmJobs: [
+            {
+              ...kuaishouEcpmJob,
+              errorMessage: 'token expired',
+              id: 'job-failed-1',
+              status: 'FAILED',
+            },
+          ],
+        })}
+      />,
+    );
+
+    expect(html).toContain('重试失败任务');
+    expect(html).toContain('job-failed-1');
   });
 });
 
@@ -704,5 +1192,19 @@ describe('kuaishou token helpers', () => {
         '',
       ),
     ).toBe('');
+  });
+
+  it('reads kuaishou OAuth callback query parameters from auth_code or code', () => {
+    expect(
+      readKuaishouOAuthCallback('?auth_code=auth-1&app_id=app-1'),
+    ).toEqual({
+      appId: 'app-1',
+      authCode: 'auth-1',
+    });
+    expect(readKuaishouOAuthCallback('?code=auth-2')).toEqual({
+      appId: '',
+      authCode: 'auth-2',
+    });
+    expect(readKuaishouOAuthCallback('?state=ignored')).toBeUndefined();
   });
 });

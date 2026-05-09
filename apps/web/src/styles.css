@@ -337,6 +337,47 @@ select {
   gap: 16px;
 }
 
+.operations-nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(84px, 1fr));
+  gap: 8px;
+}
+
+.operations-nav-item {
+  width: 100%;
+  min-height: 34px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--muted);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.operations-nav-item:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-soft);
+  color: var(--foreground);
+}
+
+.operations-nav-item[aria-current="page"] {
+  border-color: rgba(204, 120, 92, 0.32);
+  background: var(--primary-soft);
+  color: var(--primary-hover);
+}
+
+.operations-pane {
+  display: none;
+}
+
+.operations-pane.operations-pane-active {
+  display: grid;
+  gap: 16px;
+}
+
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -370,6 +411,134 @@ select {
 
 .readout-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.overview-block {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.overview-heading {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.overview-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.overview-exception-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-exception-item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 10px;
+}
+
+.overview-exception-item strong {
+  font-size: 13px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.overview-exception-item span {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.super-admin-guide {
+  display: grid;
+  gap: 12px;
+}
+
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.workflow-card {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  padding: 12px;
+}
+
+.workflow-card h3,
+.workflow-card p {
+  margin: 0;
+}
+
+.workflow-card h3 {
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.workflow-card p {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.workflow-meta {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.workflow-meta dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.workflow-meta dd {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 13px;
+}
+
+.inline-code {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  padding: 3px 6px;
+  color: var(--foreground);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+}
+
+.field-help {
+  margin: -3px 0 0;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .tool-grid .readout-grid {
@@ -655,6 +824,74 @@ select {
   overflow-x: auto;
 }
 
+.ui-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  background: rgba(20, 20, 19, 0.42);
+  padding: 18px;
+}
+
+.ui-dialog {
+  width: min(760px, 100%);
+  max-height: calc(100vh - 36px);
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: 0 24px 60px rgba(20, 20, 19, 0.24);
+}
+
+.ui-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+  padding: 16px;
+}
+
+.ui-dialog-header > div {
+  min-width: 0;
+}
+
+.ui-dialog-title,
+.ui-dialog-description {
+  margin: 0;
+}
+
+.ui-dialog-title {
+  overflow-wrap: anywhere;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.ui-dialog-description {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.ui-dialog-body {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 16px;
+}
+
+.ui-dialog-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+  border-top: 1px solid var(--border);
+  padding: 16px;
+}
+
 .ui-metric-card {
   display: grid;
   gap: 6px;
@@ -928,8 +1165,14 @@ select {
 
 @media (max-width: 1120px) {
   .split-grid,
-  .tool-grid {
+  .tool-grid,
+  .overview-grid,
+  .workflow-grid {
     grid-template-columns: 1fr;
+  }
+
+  .operations-nav {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .metric-grid-four {
@@ -1000,6 +1243,10 @@ select {
     grid-template-columns: 1fr;
   }
 
+  .operations-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .ui-panel-header {
     flex-direction: column;
     align-items: stretch;
@@ -1007,6 +1254,19 @@ select {
 
   .ui-panel-actions {
     justify-content: flex-start;
+  }
+
+  .ui-dialog-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .ui-dialog-footer {
+    justify-content: stretch;
+  }
+
+  .ui-dialog-footer .ui-button {
+    width: 100%;
   }
 
   .game-config-nav {

@@ -41,15 +41,54 @@ describe('AccountWalletService', () => {
 
     await expect(
       service.requestWithdrawal({
-        amountLi: 6000n,
+        amountLi: 11000n,
         userId: 'user-1',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('rejects withdrawals below the configured minimum amount', async () => {
+    const prisma = createFakePrisma();
+    const service = new AccountWalletService(prisma, {
+      getConfig: jest.fn(async () => ({
+        defaultAgentId: null,
+        defaultAgentRatioPercent: 0,
+        directAgentRatioPercent: 0,
+        displayRatioPercent: 50,
+        feeRatioPercent: 0,
+        minWithdrawalLi: 3000n,
+        parentAgentRatioPercent: 0,
+        userSettlementRatioPercent: 100,
+      })),
+    });
+    await service.updateAlipayProfile({
+      alipayAccount: 'alice@example.com',
+      alipayRealName: 'Alice',
+      userId: 'user-1',
+    });
+
+    await expect(
+      service.requestWithdrawal({
+        amountLi: 2000n,
+        userId: 'user-1',
+      }),
+    ).rejects.toThrow('提现金额低于最低提现金额');
+  });
+
   it('freezes balance and creates a pending user withdrawal detail', async () => {
     const prisma = createFakePrisma();
-    const service = new AccountWalletService(prisma);
+    const service = new AccountWalletService(prisma, {
+      getConfig: jest.fn(async () => ({
+        defaultAgentId: null,
+        defaultAgentRatioPercent: 0,
+        directAgentRatioPercent: 0,
+        displayRatioPercent: 50,
+        feeRatioPercent: 0,
+        minWithdrawalLi: 1000n,
+        parentAgentRatioPercent: 0,
+        userSettlementRatioPercent: 100,
+      })),
+    });
     await service.updateAlipayProfile({
       alipayAccount: 'alice@example.com',
       alipayRealName: 'Alice',

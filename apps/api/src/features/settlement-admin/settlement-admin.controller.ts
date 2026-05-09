@@ -188,12 +188,21 @@ function presentSettlementBatch(batch: SettlementBatchWithItems) {
 function presentSettlementItem(item: SettlementBatchWithItems['items'][number]) {
   return {
     createdAt: item.createdAt.toISOString(),
+    defaultAgentAmount: presentMoneyLi(item.defaultAgentAmountLi),
+    defaultAgentId: item.defaultAgentId,
+    directAgentAmount: presentMoneyLi(item.directAgentAmountLi),
+    directAgentId: item.directAgentId,
     displayAmount: presentMoneyLi(item.displayAmountLi),
+    feeAmount: presentMoneyLi(item.feeAmountLi),
     gameOpenIdId: item.gameOpenIdId,
     id: item.id,
     openId: item.openId,
+    parentAgentAmount: presentMoneyLi(item.parentAgentAmountLi),
+    parentAgentId: item.parentAgentId,
     rawEcpmId: item.rawEcpmId,
     settlementAmount: presentMoneyLi(item.settlementAmountLi),
+    splitSnapshot: item.splitSnapshot,
+    userAmount: presentMoneyLi(item.userAmountLi),
     userId: item.userId,
   };
 }

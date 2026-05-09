@@ -6,14 +6,35 @@ import {
   NotFoundException,
   Optional,
 } from '@nestjs/common';
-import { type Company, type Game, Prisma } from '@prisma/client';
+import {
+  type Agent,
+  type Company,
+  type Game,
+  Prisma,
+  PrincipalType,
+  type WithdrawalBatch,
+  type WithdrawalDetail,
+  WithdrawalDetailStatus,
+  WithdrawalDetailType,
+} from '@prisma/client';
+import { hash } from 'bcryptjs';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AdminAccessControlService } from '../admin-auth/admin-access-control.service';
 import { type AdminPrincipal } from '../admin-auth/admin-auth.service';
+import {
+  DEFAULT_PLATFORM_CONFIG,
+  PlatformConfigService,
+} from '../platform-config/platform-config.service';
 
 type AdminResourcesPrisma = Pick<
   PrismaService,
-  '$transaction' | 'auditLog' | 'company' | 'game'
+  | '$executeRawUnsafe'
+  | '$transaction'
+  | 'agent'
+  | 'auditLog'
+  | 'company'
+  | 'game'
+  | 'withdrawalBatch'
 >;
 
 export type AdminActor = {
@@ -67,8 +88,37 @@ export type AllocateGameBudgetInput = {
   reason?: string;
 };
 
+export type CreateAgentInput = {
+  actor: AdminActor;
+  invitationCode: string;
+  parentAgentId?: string | null;
+  password: string;
+  username: string;
+};
+
+export type UpdateAgentAlipayProfileInput = {
+  actor: AdminActor;
+  agentId: string;
+  alipayAccount: string;
+  alipayRealName: string;
+};
+
+export type RequestAgentWithdrawalInput = {
+  actor: AdminActor;
+  agentId: string;
+  amountLi: bigint;
+};
+
 export type GameWithCompany = Game & {
   company: Company | null;
+};
+
+export type AgentWithParent = Agent & {
+  parentAgent: Pick<Agent, 'id' | 'invitationCode' | 'username'> | null;
+};
+
+export type AgentWithdrawalBatch = WithdrawalBatch & {
+  details: WithdrawalDetail[];
 };
 
 export type AllocateGameBudgetResult = {
@@ -76,9 +126,33 @@ export type AllocateGameBudgetResult = {
   game: GameWithCompany;
 };
 
+export type ResetTestDataInput = {
+  actor: AdminActor;
+};
+
 export const ADMIN_RESOURCES_NOW = Symbol('ADMIN_RESOURCES_NOW');
 
 const ALLOWED_ECPM_SYNC_INTERVAL_HOURS = new Set([1, 3, 6, 12, 24]);
+
+const RESET_TABLE_NAMES = [
+  'settlement_batch_items',
+  'settlement_batches',
+  'withdrawal_details',
+  'withdrawal_batches',
+  'raw_ecpms',
+  'game_open_ids',
+  'user_agent_binding_history',
+  'user_accounts',
+  'company_admin_scopes',
+  'company_admin_accounts',
+  'games',
+  'companies',
+  'agents',
+  'platform_configs',
+  'audit_logs',
+  'kuaishou_platform_tokens',
+  'kuaishou_ecpm_sync_jobs',
+] as const;
 
 @Injectable()
 export class AdminResourcesService {
@@ -88,6 +162,12 @@ export class AdminResourcesService {
     @Optional()
     @Inject(ADMIN_RESOURCES_NOW)
     private readonly nowProvider: () => Date = () => new Date(),
+    @Optional()
+    @Inject(PlatformConfigService)
+    private readonly platformConfigService?: Pick<
+      PlatformConfigService,
+      'getConfig'
+    >,
   ) {}
 
   async listCompanies(input: ListCompaniesInput) {
@@ -138,6 +218,191 @@ export class AdminResourcesService {
     });
 
     return company;
+  }
+
+  listAgents(): Promise<AgentWithParent[]> {
+    return this.prisma.agent.findMany({
+      include: {
+        parentAgent: {
+          select: {
+            id: true,
+            invitationCode: true,
+            username: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+      where: {
+        deletedAt: null,
+      },
+    }) as Promise<AgentWithParent[]>;
+  }
+
+  async createAgent(input: CreateAgentInput): Promise<AgentWithParent> {
+    const parentAgentId = input.parentAgentId?.trim() || null;
+    if (parentAgentId) {
+      const parent = await this.prisma.agent.findUnique({
+        where: {
+          id: parentAgentId,
+        },
+      });
+      if (!parent || parent.deletedAt !== null || !parent.enabled) {
+        throw new BadRequestException('上级代理不存在或未启用');
+      }
+    }
+
+    try {
+      const agent = await this.prisma.agent.create({
+        data: {
+          invitationCode: input.invitationCode,
+          parentAgentId,
+          passwordHash: await hash(input.password, 10),
+          username: input.username,
+        },
+        include: {
+          parentAgent: {
+            select: {
+              id: true,
+              invitationCode: true,
+              username: true,
+            },
+          },
+        },
+      });
+
+      await this.recordAudit(input.actor, {
+        action: 'agent.created',
+        metadata: {
+          invitationCode: agent.invitationCode,
+          parentAgentId: agent.parentAgentId,
+          username: agent.username,
+        },
+        targetId: agent.id,
+        targetType: 'agent',
+      });
+
+      return agent as AgentWithParent;
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        throw new ConflictException('代理用户名或邀请码已存在');
+      }
+
+      throw error;
+    }
+  }
+
+  async updateAgentAlipayProfile(input: UpdateAgentAlipayProfileInput) {
+    const agent = await findActiveAgent(this.prisma, input.agentId);
+    const updated = await this.prisma.agent.update({
+      data: {
+        alipayAccount: input.alipayAccount,
+        alipayRealName: input.alipayRealName,
+      },
+      where: {
+        id: agent.id,
+      },
+    });
+
+    await this.recordAudit(input.actor, {
+      action: 'agent.alipay_updated',
+      metadata: {
+        alipayAccount: updated.alipayAccount,
+        alipayRealName: updated.alipayRealName,
+      },
+      targetId: updated.id,
+      targetType: 'agent',
+    });
+
+    return updated;
+  }
+
+  async requestAgentWithdrawal(
+    input: RequestAgentWithdrawalInput,
+  ): Promise<AgentWithdrawalBatch> {
+    this.assertPositiveAmount(input.amountLi);
+    const agent = await findActiveAgent(this.prisma, input.agentId);
+    if (!agent.alipayAccount || !agent.alipayRealName) {
+      throw new BadRequestException('请先维护代理支付宝收款信息');
+    }
+    const recipientAlipay = agent.alipayAccount;
+    const recipientName = agent.alipayRealName;
+    const platformConfig =
+      (await this.platformConfigService?.getConfig()) ??
+      DEFAULT_PLATFORM_CONFIG;
+    if (input.amountLi < platformConfig.minWithdrawalLi) {
+      throw new BadRequestException('提现金额低于最低提现金额');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.agent.updateMany({
+        data: {
+          availableBalanceLi: {
+            decrement: input.amountLi,
+          },
+          frozenBalanceLi: {
+            increment: input.amountLi,
+          },
+        },
+        where: {
+          availableBalanceLi: {
+            gte: input.amountLi,
+          },
+          deletedAt: null,
+          enabled: true,
+          id: agent.id,
+        },
+      });
+      if (updated.count !== 1) {
+        throw new BadRequestException('代理可提现余额不足');
+      }
+
+      const withdrawal = await tx.withdrawalBatch.create({
+        data: {
+          ownerId: agent.id,
+          ownerType: PrincipalType.AGENT,
+          status: 'PENDING_REVIEW',
+          totalAmountLi: input.amountLi,
+          userId: null,
+          details: {
+            create: [
+              {
+                amountLi: input.amountLi,
+                configSnapshot: {
+                  minWithdrawalLi: platformConfig.minWithdrawalLi.toString(),
+                  source: 'agent_withdrawal_v1',
+                },
+                recipientAlipay,
+                recipientName,
+                status: WithdrawalDetailStatus.PENDING_REVIEW,
+                type: WithdrawalDetailType.AGENT,
+              },
+            ],
+          },
+        },
+        include: {
+          details: true,
+        },
+      });
+
+      await this.recordAudit(
+        input.actor,
+        {
+          action: 'agent.withdrawal_requested',
+          metadata: {
+            amountLi: input.amountLi.toString(),
+            agentId: agent.id,
+            minWithdrawalLi: platformConfig.minWithdrawalLi.toString(),
+          },
+          targetId: withdrawal.id,
+          targetType: 'withdrawal_batch',
+        },
+        tx,
+      );
+
+      return withdrawal as AgentWithdrawalBatch;
+    });
   }
 
   async adjustCompanyBalance(input: AdjustCompanyBalanceInput) {
@@ -359,6 +624,13 @@ export class AdminResourcesService {
     });
   }
 
+  async resetTestData(_input: ResetTestDataInput) {
+    const tables = RESET_TABLE_NAMES.join(', ');
+    await this.prisma.$executeRawUnsafe(
+      `TRUNCATE TABLE ${tables} RESTART IDENTITY CASCADE`,
+    );
+  }
+
   private assertPositiveAmount(amountLi: bigint) {
     if (amountLi <= 0n) {
       throw new BadRequestException('金额必须大于 0');
@@ -403,6 +675,23 @@ async function findActiveCompany(
   }
 
   return company;
+}
+
+async function findActiveAgent(
+  prisma: Pick<AdminResourcesPrisma, 'agent'>,
+  agentId: string,
+) {
+  const agent = await prisma.agent.findUnique({
+    where: {
+      id: agentId,
+    },
+  });
+
+  if (!agent || agent.deletedAt !== null || !agent.enabled) {
+    throw new NotFoundException(`Agent ${agentId} is not found`);
+  }
+
+  return agent;
 }
 
 async function findActiveGame(

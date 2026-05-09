@@ -58,4 +58,18 @@ describe('session model', () => {
       }).map((item) => item.key),
     ).toEqual(['query', 'operations']);
   });
+
+  it('shows the agent workspace for agent sessions', () => {
+    expect(
+      getVisibleNavItems({
+        accessToken: 'agent-token',
+        agent: {
+          id: 'agent-1',
+          invitationCode: 'AGENT1',
+          username: 'agent_1',
+        },
+        mode: 'agent',
+      }).map((item) => item.key),
+    ).toEqual(['query', 'agent']);
+  });
 });

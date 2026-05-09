@@ -1,4 +1,8 @@
-import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { KuaishouRefreshController } from './kuaishou-refresh.controller';
 
 describe('KuaishouRefreshController', () => {
@@ -131,6 +135,55 @@ describe('KuaishouRefreshController', () => {
       limit: 20,
     });
   });
+
+  it('retries failed ECPM sync jobs with their original data-hour range', async () => {
+    const dependencies = createDependencies();
+    const controller = createController(dependencies);
+
+    const result = await controller.retryJob(admin, 'job-1');
+
+    expect(dependencies.syncJobService.findJobById).toHaveBeenCalledWith(
+      'job-1',
+    );
+    expect(dependencies.rangeSyncService.refreshRange).toHaveBeenCalledWith({
+      actorId: 'admin',
+      actorType: 'SUPER_ADMIN',
+      dataHours: [
+        '2026-05-08T12:00:00+08:00',
+        '2026-05-08T13:00:00+08:00',
+        '2026-05-08T14:00:00+08:00',
+      ],
+      gameAppId: 'game-1',
+      lookbackHours: 3,
+      markTokenError: true,
+    });
+    expect(result).toEqual(refreshResult);
+  });
+
+  it('rejects retrying missing ECPM sync jobs', async () => {
+    const dependencies = createDependencies();
+    dependencies.syncJobService.findJobById.mockResolvedValue(null as any);
+    const controller = createController(dependencies);
+
+    await expect(controller.retryJob(admin, 'missing-job')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(dependencies.rangeSyncService.refreshRange).not.toHaveBeenCalled();
+  });
+
+  it('rejects retrying successful ECPM sync jobs', async () => {
+    const dependencies = createDependencies();
+    dependencies.syncJobService.findJobById.mockResolvedValue({
+      ...syncJob,
+      status: 'SUCCEEDED',
+    });
+    const controller = createController(dependencies);
+
+    await expect(controller.retryJob(admin, 'job-1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(dependencies.rangeSyncService.refreshRange).not.toHaveBeenCalled();
+  });
 });
 
 const admin = { role: 'SUPER_ADMIN' as const, username: 'admin' };
@@ -154,6 +207,26 @@ const refreshResult = {
   source: 'kuaishou' as const,
 };
 
+const syncJob = {
+  actorId: 'admin',
+  actorType: 'SUPER_ADMIN',
+  createdAt: new Date('2026-05-08T00:00:00.000Z'),
+  dataHour: '2026-05-08T14:00:00+08:00',
+  endedDataHour: '2026-05-08T14:00:00+08:00',
+  errorMessage: 'token expired',
+  finishedAt: new Date('2026-05-08T00:01:00.000Z'),
+  gameAppId: 'game-1',
+  id: 'job-1',
+  lookbackHours: 3,
+  requestedOpenIdCount: 1,
+  savedCount: 0,
+  source: null,
+  startedAt: new Date('2026-05-08T00:00:00.000Z'),
+  startedDataHour: '2026-05-08T12:00:00+08:00',
+  status: 'FAILED',
+  updatedAt: new Date('2026-05-08T00:01:00.000Z'),
+};
+
 function createController(dependencies: ReturnType<typeof createDependencies>) {
   return new (KuaishouRefreshController as any)(
     dependencies.rangeSyncService,
@@ -163,32 +236,23 @@ function createController(dependencies: ReturnType<typeof createDependencies>) {
 }
 
 function createDependencies() {
-  const syncJob = {
-    actorId: 'admin',
-    actorType: 'SUPER_ADMIN',
-    createdAt: new Date('2026-05-08T00:00:00.000Z'),
-    dataHour: '2026-05-08T14:00:00+08:00',
-    endedDataHour: '2026-05-08T14:00:00+08:00',
-    errorMessage: null,
-    finishedAt: new Date('2026-05-08T00:01:00.000Z'),
-    gameAppId: 'game-1',
-    id: 'job-1',
-    lookbackHours: 1,
-    requestedOpenIdCount: 1,
-    savedCount: 1,
-    source: 'kuaishou',
-    startedAt: new Date('2026-05-08T00:00:00.000Z'),
-    startedDataHour: '2026-05-08T14:00:00+08:00',
-    status: 'SUCCEEDED',
-    updatedAt: new Date('2026-05-08T00:01:00.000Z'),
-  };
-
   return {
     rangeSyncService: {
       refreshRange: jest.fn(async () => refreshResult),
     },
     syncJobService: {
-      listJobs: jest.fn(async () => [syncJob]),
+      findJobById: jest.fn(async () => syncJob),
+      listJobs: jest.fn(async () => [
+        {
+          ...syncJob,
+          errorMessage: null,
+          lookbackHours: 1,
+          savedCount: 1,
+          source: 'kuaishou',
+          startedDataHour: '2026-05-08T14:00:00+08:00',
+          status: 'SUCCEEDED',
+        },
+      ]),
     },
     accessControlService: {
       resolveReadScope: jest.fn(async (): Promise<any> => ({

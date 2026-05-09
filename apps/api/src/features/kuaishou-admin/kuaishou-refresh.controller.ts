@@ -3,10 +3,16 @@ import {
   Body,
   Controller,
   Get,
+  NotFoundException,
+  Param,
   Post,
   Query,
   UseGuards,
 } from '@nestjs/common';
+import {
+  type KuaishouEcpmSyncJob,
+  KuaishouEcpmSyncJobStatus,
+} from '@prisma/client';
 import { z } from 'zod';
 import {
   type AdminPrincipal,
@@ -20,7 +26,10 @@ import {
   KuaishouEcpmSyncJobService,
   presentKuaishouEcpmSyncJob,
 } from './kuaishou-ecpm-sync-job.service';
-import { KuaishouEcpmRangeSyncService } from './kuaishou-ecpm-range-sync.service';
+import {
+  buildDataHoursBetween,
+  KuaishouEcpmRangeSyncService,
+} from './kuaishou-ecpm-range-sync.service';
 
 const lookbackHoursSchema = z.union([
   z.literal(1),
@@ -84,6 +93,31 @@ export class KuaishouRefreshController {
       jobs: jobs.map(presentKuaishouEcpmSyncJob),
     };
   }
+
+  @Post('ecpm/jobs/:jobId/retry')
+  @UseGuards(SuperAdminGuard)
+  async retryJob(
+    @CurrentAdmin() admin: AdminPrincipal,
+    @Param('jobId') jobId: string,
+  ) {
+    const actor = requireSuperAdminPrincipal(admin);
+    const job = await this.syncJobService.findJobById(jobId);
+    if (!job) {
+      throw new NotFoundException('ECPM sync job not found');
+    }
+    if (job.status !== KuaishouEcpmSyncJobStatus.FAILED) {
+      throw new BadRequestException('Only failed ECPM sync jobs can be retried');
+    }
+
+    return this.rangeSyncService.refreshRange({
+      actorId: actor.username,
+      actorType: actor.role,
+      dataHours: buildRetryDataHours(job),
+      gameAppId: job.gameAppId,
+      lookbackHours: resolveRetryLookbackHours(job),
+      markTokenError: true,
+    });
+  }
 }
 
 function parseLimit(value?: string) {
@@ -97,4 +131,17 @@ function parseLimit(value?: string) {
   }
 
   return Math.min(Math.max(Math.trunc(parsed), 1), 100);
+}
+
+function buildRetryDataHours(job: KuaishouEcpmSyncJob) {
+  return buildDataHoursBetween(
+    job.startedDataHour ?? job.dataHour,
+    job.endedDataHour ?? job.dataHour,
+  );
+}
+
+function resolveRetryLookbackHours(job: KuaishouEcpmSyncJob) {
+  return job.lookbackHours && [1, 3, 6, 12, 24].includes(job.lookbackHours)
+    ? job.lookbackHours
+    : 1;
 }

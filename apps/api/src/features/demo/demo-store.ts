@@ -1,15 +1,28 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SettlementStatus } from '@prisma/client';
+import { hash } from 'bcryptjs';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { generateReadableId } from '../../domain/identity/readable-id';
 import { computeDisplayAmount } from '../../domain/money/display-amount.strategy';
+import {
+  DEFAULT_PLATFORM_CONFIG,
+  PlatformConfigService,
+} from '../platform-config/platform-config.service';
 
 const DEMO_COMPANY_ID = 'demo-company-001';
 const DEMO_GAME_ID = 'demo-game-001';
 const DEMO_GAME_APP_ID = 'demo_ks_game';
 const DEMO_GAME_SECRET = 'demo_ks_secret';
+const DEMO_DEFAULT_AGENT_ID = 'demo-agent-default';
+const DEMO_DEFAULT_AGENT_USERNAME = 'demo_default_agent';
+const DEMO_DEFAULT_AGENT_INVITATION_CODE = 'DEMO_DEFAULT';
 
-type DemoPrisma = Pick<PrismaService, 'company' | 'game' | 'gameOpenId' | 'rawEcpm'>;
+type DemoPrisma = Pick<
+  PrismaService,
+  'agent' | 'company' | 'game' | 'gameOpenId' | 'rawEcpm'
+>;
+type DemoConfig = Pick<ConfigService, 'get'>;
 
 type GameWithCompany = {
   id: string;
@@ -79,9 +92,21 @@ export type QueryEarningsInput = {
 
 @Injectable()
 export class DemoStore {
-  constructor(@Inject(PrismaService) private readonly prisma: DemoPrisma) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: DemoPrisma,
+    @Optional() @Inject(ConfigService) private readonly configService?: DemoConfig,
+    @Optional()
+    private readonly platformConfigService?: Pick<
+      PlatformConfigService,
+      'getConfig'
+    >,
+  ) {}
 
   async ensureDemoData() {
+    if (!this.shouldAutoSeed()) {
+      return;
+    }
+
     await this.prisma.company.upsert({
       create: {
         id: DEMO_COMPANY_ID,
@@ -113,6 +138,30 @@ export class DemoStore {
         gameAppId: DEMO_GAME_APP_ID,
       },
     });
+
+    await this.prisma.agent.upsert({
+      create: {
+        id: DEMO_DEFAULT_AGENT_ID,
+        invitationCode: DEMO_DEFAULT_AGENT_INVITATION_CODE,
+        passwordHash: await hash('demo-agent-pass', 10),
+        username: DEMO_DEFAULT_AGENT_USERNAME,
+      },
+      update: {
+        deletedAt: null,
+        enabled: true,
+        invitationCode: DEMO_DEFAULT_AGENT_INVITATION_CODE,
+        passwordHash: await hash('demo-agent-pass', 10),
+        username: DEMO_DEFAULT_AGENT_USERNAME,
+      },
+      where: {
+        id: DEMO_DEFAULT_AGENT_ID,
+      },
+    });
+  }
+
+  private shouldAutoSeed() {
+    const raw = this.configService?.get<string>('DEMO_AUTO_SEED');
+    return raw?.trim().toLowerCase() !== 'false';
   }
 
   async listGames(): Promise<DemoGame[]> {
@@ -198,6 +247,10 @@ export class DemoStore {
       throw new Error(`Game ${input.gameAppId} is not configured`);
     }
 
+    const platformConfig =
+      (await this.platformConfigService?.getConfig()) ??
+      DEFAULT_PLATFORM_CONFIG;
+    const ratioPercent = platformConfig.displayRatioPercent;
     const savedRows = [];
     for (const row of input.rows) {
       const openIdRecord = await this.prisma.gameOpenId.findUnique({
@@ -208,13 +261,13 @@ export class DemoStore {
       const displayAmount = computeDisplayAmount({
         rawCostLi: row.rawCostLi,
         rule: {
-          ratioPercent: 50,
+          ratioPercent,
         },
       });
       const savedRow = await this.prisma.rawEcpm.upsert({
         create: {
           configSnapshot: {
-            ratioPercent: 50,
+            ratioPercent,
           },
           displayAmountLi: displayAmount.displayAmountLi,
           eventTime: row.eventTime,
@@ -227,7 +280,7 @@ export class DemoStore {
         },
         update: {
           configSnapshot: {
-            ratioPercent: 50,
+            ratioPercent,
           },
           displayAmountLi: displayAmount.displayAmountLi,
           eventTime: row.eventTime,

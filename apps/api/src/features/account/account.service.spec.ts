@@ -72,7 +72,80 @@ describe('AccountService', () => {
       username: 'alice',
     });
   });
+
+  it('binds a user to an active agent during registration', async () => {
+    const prisma = createFakePrisma();
+    const service = new AccountService(prisma);
+
+    const user = await service.register({
+      invitationCode: 'AGENT1',
+      password: 'secret123',
+      username: 'alice',
+    });
+
+    expect(prisma.getUser(user.id)?.currentAgentId).toBe('agent-1');
+    expect(await service.getAgentBinding(user.id)).toMatchObject({
+      agent: {
+        id: 'agent-1',
+        invitationCode: 'AGENT1',
+        username: 'agent_1',
+      },
+    });
+    expect(prisma.getBindingHistory()).toEqual([
+      expect.objectContaining({
+        fromAgentId: null,
+        source: 'registration_invitation',
+        toAgentId: 'agent-1',
+        userId: user.id,
+      }),
+    ]);
+  });
+
+  it('changes the current agent by invitation code and records history', async () => {
+    const prisma = createFakePrisma();
+    const service = new AccountService(prisma);
+
+    const user = await service.register({
+      invitationCode: 'AGENT1',
+      password: 'secret123',
+      username: 'alice',
+    });
+
+    const binding = await service.bindAgentByInvitationCode({
+      invitationCode: 'AGENT2',
+      userId: user.id,
+    });
+
+    expect(binding.agent).toMatchObject({
+      id: 'agent-2',
+      invitationCode: 'AGENT2',
+      username: 'agent_2',
+    });
+    expect(prisma.getUser(user.id)?.currentAgentId).toBe('agent-2');
+    expect(prisma.getBindingHistory()).toEqual([
+      expect.objectContaining({
+        fromAgentId: null,
+        source: 'registration_invitation',
+        toAgentId: 'agent-1',
+        userId: user.id,
+      }),
+      expect.objectContaining({
+        fromAgentId: 'agent-1',
+        source: 'user_invitation',
+        toAgentId: 'agent-2',
+        userId: user.id,
+      }),
+    ]);
+  });
 });
+
+type FakeAgent = {
+  id: string;
+  deletedAt: Date | null;
+  enabled: boolean;
+  invitationCode: string;
+  username: string;
+};
 
 type FakeUser = {
   id: string;
@@ -112,6 +185,29 @@ type FakeRawEcpm = {
 };
 
 function createFakePrisma() {
+  const agents = new Map<string, FakeAgent>([
+    [
+      'agent-1',
+      {
+        deletedAt: null,
+        enabled: true,
+        id: 'agent-1',
+        invitationCode: 'AGENT1',
+        username: 'agent_1',
+      },
+    ],
+    [
+      'agent-2',
+      {
+        deletedAt: null,
+        enabled: true,
+        id: 'agent-2',
+        invitationCode: 'AGENT2',
+        username: 'agent_2',
+      },
+    ],
+  ]);
+  const agentBindings: any[] = [];
   const users = new Map<string, FakeUser>();
   const openIds = new Map<string, FakeOpenId>([
     [
@@ -141,7 +237,21 @@ function createFakePrisma() {
     },
   ];
 
-  return {
+  const prisma = {
+    agent: {
+      findUnique: async ({ where }: any) => {
+        if ('invitationCode' in where) {
+          return (
+            Array.from(agents.values()).find(
+              (agent) => agent.invitationCode === where.invitationCode,
+            ) ?? null
+          );
+        }
+
+        return agents.get(where.id) ?? null;
+      },
+    },
+    getBindingHistory: () => agentBindings,
     getOpenId: (openId: string) => openIds.get(openId),
     getUser: (id: string) => users.get(id),
     gameOpenId: {
@@ -207,21 +317,62 @@ function createFakePrisma() {
         users.set(user.id, user);
         return user;
       },
-      findUnique: async ({ where }: any) => {
+      findUnique: async ({ include, where }: any) => {
+        const presentUser = (user: FakeUser | null) => {
+          if (!user) {
+            return null;
+          }
+
+          if (include?.currentAgent) {
+            return {
+              ...user,
+              currentAgent: user.currentAgentId
+                ? agents.get(user.currentAgentId) ?? null
+                : null,
+            };
+          }
+
+          return user;
+        };
+
         if ('id' in where) {
-          return users.get(where.id) ?? null;
+          return presentUser(users.get(where.id) ?? null);
         }
 
         if ('username' in where) {
-          return (
+          return presentUser(
             Array.from(users.values()).find(
               (user) => user.username === where.username,
-            ) ?? null
+            ) ?? null,
           );
         }
 
         return null;
       },
+      update: async ({ data, where }: any) => {
+        const user = users.get(where.id);
+        if (!user) {
+          throw new Error('user not found');
+        }
+
+        const next = { ...user, ...data, updatedAt: new Date() };
+        users.set(next.id, next);
+        return next;
+      },
     },
+    userAgentBindingHistory: {
+      create: async ({ data }: any) => {
+        const binding = {
+          createdAt: new Date(),
+          id: `binding-${agentBindings.length + 1}`,
+          ...data,
+        };
+        agentBindings.push(binding);
+        return binding;
+      },
+    },
+    $transaction: async (callback: any) => callback(prisma),
   } as any;
+
+  return prisma as any;
 }

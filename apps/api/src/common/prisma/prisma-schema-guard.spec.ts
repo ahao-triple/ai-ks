@@ -87,6 +87,16 @@ describe('PrismaSchemaGuard', () => {
         'company_admin_scopes.principal_id',
         'company_admin_scopes.game_ids',
         'company_admin_scopes.operation_codes',
+        'agents.available_balance_li',
+        'agents.frozen_balance_li',
+        'platform_configs.default_agent_id',
+        'platform_configs.display_ratio_percent',
+        'platform_configs.user_settlement_ratio_percent',
+        'settlement_batch_items.user_amount_li',
+        'settlement_batch_items.direct_agent_amount_li',
+        'settlement_batch_items.fee_amount_li',
+        'withdrawal_batches.owner_type',
+        'withdrawal_batches.owner_id',
       ]),
     );
   });

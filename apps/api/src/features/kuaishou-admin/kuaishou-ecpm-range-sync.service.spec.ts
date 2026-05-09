@@ -113,6 +113,55 @@ describe('KuaishouEcpmRangeSyncService', () => {
     });
   });
 
+  it('uses explicit data hours when retrying a failed sync job', async () => {
+    const dependencies = createDependencies();
+    const service = createService(dependencies);
+    const dataHours = [
+      '2026-05-08T09:00:00+08:00',
+      '2026-05-08T10:00:00+08:00',
+    ];
+
+    await service.refreshRange({
+      actorId: 'admin',
+      actorType: 'SUPER_ADMIN',
+      dataHours,
+      gameAppId: 'game-1',
+      lookbackHours: 3,
+      markTokenError: true,
+    });
+
+    expect(dependencies.ecpmClient.refresh).toHaveBeenCalledTimes(2);
+    expect(dependencies.ecpmClient.refresh).toHaveBeenNthCalledWith(1, {
+      dataHour: dataHours[0],
+      gameAppId: 'game-1',
+      openIds: ['open-1'],
+    });
+    expect(dependencies.ecpmClient.refresh).toHaveBeenNthCalledWith(2, {
+      dataHour: dataHours[1],
+      gameAppId: 'game-1',
+      openIds: ['open-1'],
+    });
+    expect(dependencies.syncJobService.startJob).toHaveBeenCalledWith({
+      actorId: 'admin',
+      actorType: 'SUPER_ADMIN',
+      dataHour: dataHours[1],
+      endedDataHour: dataHours[1],
+      gameAppId: 'game-1',
+      lookbackHours: 3,
+      requestedOpenIdCount: 1,
+      startedDataHour: dataHours[0],
+    });
+    expect(dependencies.auditLogService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          dataHours,
+          endedDataHour: dataHours[1],
+          startedDataHour: dataHours[0],
+        }),
+      }),
+    );
+  });
+
   it('uses explicit empty openIds and does not list known openIds', async () => {
     const dependencies = createDependencies();
     const service = createService(dependencies);

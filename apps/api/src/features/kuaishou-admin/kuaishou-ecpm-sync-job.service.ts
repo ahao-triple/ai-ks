@@ -120,6 +120,14 @@ export class KuaishouEcpmSyncJobService {
     return job !== null;
   }
 
+  findJobById(jobId: string) {
+    return this.prisma.kuaishouEcpmSyncJob.findUnique({
+      where: {
+        id: jobId,
+      },
+    });
+  }
+
   private now() {
     return this.nowProvider?.() ?? new Date();
   }

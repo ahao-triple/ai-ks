@@ -15,6 +15,7 @@ enum PrincipalType {
 }
 
 enum WithdrawalDetailType {
+  AGENT
   USER
   DIRECT_AGENT
   PARENT_AGENT
@@ -132,6 +133,8 @@ model Agent {
   parentAgentId  String?   @map("parent_agent_id")
   alipayAccount  String?   @map("alipay_account")
   alipayRealName String?   @map("alipay_real_name")
+  availableBalanceLi BigInt @default(0) @map("available_balance_li")
+  frozenBalanceLi    BigInt @default(0) @map("frozen_balance_li")
   enabled        Boolean   @default(true)
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
@@ -143,6 +146,22 @@ model Agent {
 
   @@index([parentAgentId])
   @@map("agents")
+}
+
+model PlatformConfig {
+  key                         String   @id @default("default")
+  displayRatioPercent         Int      @default(50) @map("display_ratio_percent")
+  userSettlementRatioPercent  Int      @default(100) @map("user_settlement_ratio_percent")
+  directAgentRatioPercent     Int      @default(0) @map("direct_agent_ratio_percent")
+  parentAgentRatioPercent     Int      @default(0) @map("parent_agent_ratio_percent")
+  defaultAgentRatioPercent    Int      @default(0) @map("default_agent_ratio_percent")
+  defaultAgentId              String?  @map("default_agent_id")
+  feeRatioPercent             Int      @default(0) @map("fee_ratio_percent")
+  minWithdrawalLi             BigInt   @default(10000) @map("min_withdrawal_li")
+  createdAt                   DateTime @default(now()) @map("created_at")
+  updatedAt                   DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_configs")
 }
 
 model CompanyAdminAccount {
@@ -239,6 +258,15 @@ model SettlementBatchItem {
   openId             String   @map("open_id")
   displayAmountLi    BigInt   @map("display_amount_li")
   settlementAmountLi BigInt   @map("settlement_amount_li")
+  userAmountLi       BigInt   @default(0) @map("user_amount_li")
+  directAgentId      String?  @map("direct_agent_id")
+  directAgentAmountLi BigInt  @default(0) @map("direct_agent_amount_li")
+  parentAgentId      String?  @map("parent_agent_id")
+  parentAgentAmountLi BigInt  @default(0) @map("parent_agent_amount_li")
+  defaultAgentId     String?  @map("default_agent_id")
+  defaultAgentAmountLi BigInt @default(0) @map("default_agent_amount_li")
+  feeAmountLi        BigInt   @default(0) @map("fee_amount_li")
+  splitSnapshot      Json?    @map("split_snapshot")
   createdAt          DateTime @default(now()) @map("created_at")
 
   batch      SettlementBatch @relation(fields: [batchId], references: [id])
@@ -284,7 +312,9 @@ model CompanyAdminScope {
 
 model WithdrawalBatch {
   id            String   @id @default(uuid())
-  userId        String   @map("user_id")
+  userId        String?  @map("user_id")
+  ownerType     PrincipalType @default(USER) @map("owner_type")
+  ownerId       String?  @map("owner_id")
   status        String
   totalAmountLi BigInt   @map("total_amount_li")
   createdAt     DateTime @default(now()) @map("created_at")

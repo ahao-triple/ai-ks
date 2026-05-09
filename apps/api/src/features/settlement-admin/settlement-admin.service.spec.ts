@@ -62,6 +62,62 @@ describe('SettlementAdminService', () => {
     expect(prisma.getAuditActions()).toContain('settlement.confirmed');
   });
 
+  it('applies platform split config and snapshots user, agent, default, and fee amounts', async () => {
+    const prisma = createFakePrisma();
+    const platformConfig = {
+      getConfig: jest.fn(async () => ({
+        defaultAgentId: 'agent-default-1',
+        defaultAgentRatioPercent: 5,
+        directAgentRatioPercent: 10,
+        displayRatioPercent: 50,
+        feeRatioPercent: 5,
+        minWithdrawalLi: 10000n,
+        parentAgentRatioPercent: 10,
+        userSettlementRatioPercent: 70,
+      })),
+    };
+    const service = new SettlementAdminService(
+      prisma,
+      createAccessControl(),
+      platformConfig as any,
+    );
+
+    const result = await service.confirmSettlement({
+      gameId: 'game-1',
+      operatorId: 'admin',
+      operatorType: 'SUPER_ADMIN',
+      ...range,
+    });
+
+    expect(result.batch.settledAmountLi).toBe(3000n);
+    expect(result.batch.configSnapshot).toMatchObject({
+      settlementRule: {
+        defaultAgentRatioPercent: 5,
+        directAgentRatioPercent: 10,
+        feeRatioPercent: 5,
+        parentAgentRatioPercent: 10,
+        userSettlementRatioPercent: 70,
+      },
+    });
+    expect(result.items[0]).toMatchObject({
+      defaultAgentAmountLi: 50n,
+      defaultAgentId: 'agent-default-1',
+      directAgentAmountLi: 100n,
+      directAgentId: 'agent-direct-1',
+      feeAmountLi: 50n,
+      parentAgentAmountLi: 100n,
+      parentAgentId: 'agent-parent-1',
+      settlementAmountLi: 1000n,
+      userAmountLi: 700n,
+    });
+    expect(prisma.getUser('user-1')?.availableBalanceLi).toBe(700n);
+    expect(prisma.getUser('user-2')?.availableBalanceLi).toBe(1400n);
+    expect(prisma.getAgent('agent-direct-1')?.availableBalanceLi).toBe(300n);
+    expect(prisma.getAgent('agent-parent-1')?.availableBalanceLi).toBe(300n);
+    expect(prisma.getAgent('agent-default-1')?.availableBalanceLi).toBe(150n);
+    expect(prisma.getGame('game-1')?.budgetLi).toBe(7000n);
+  });
+
   it('marks the game paused and rejects confirmation when budget is insufficient', async () => {
     const prisma = createFakePrisma({
       gameBudgetLi: 2500n,
@@ -462,7 +518,15 @@ type FakeGame = {
 type FakeOpenId = {
   id: string;
   openId: string;
+  user?: FakeUser | null;
   userId: string | null;
+};
+
+type FakeAgent = {
+  availableBalanceLi: bigint;
+  id: string;
+  parentAgent: FakeAgent | null;
+  parentAgentId: string | null;
 };
 
 type FakeRawEcpm = {
@@ -479,6 +543,8 @@ type FakeRawEcpm = {
 type FakeUser = {
   id: string;
   availableBalanceLi: bigint;
+  currentAgent: FakeAgent | null;
+  currentAgentId: string | null;
 };
 
 function createFakePrisma(
@@ -517,15 +583,73 @@ function createFakePrisma(
     ],
   ]);
 
-  const openIds = new Map<string, FakeOpenId>([
-    ['open-row-1', { id: 'open-row-1', openId: 'open-1', userId: 'user-1' }],
-    ['open-row-2', { id: 'open-row-2', openId: 'open-2', userId: 'user-2' }],
-    ['open-row-3', { id: 'open-row-3', openId: 'open-3', userId: null }],
+  const defaultAgent: FakeAgent = {
+    availableBalanceLi: 0n,
+    id: 'agent-default-1',
+    parentAgent: null,
+    parentAgentId: null,
+  };
+  const parentAgent: FakeAgent = {
+    availableBalanceLi: 0n,
+    id: 'agent-parent-1',
+    parentAgent: null,
+    parentAgentId: null,
+  };
+  const directAgent: FakeAgent = {
+    availableBalanceLi: 0n,
+    id: 'agent-direct-1',
+    parentAgent,
+    parentAgentId: parentAgent.id,
+  };
+  const agents = new Map<string, FakeAgent>([
+    [defaultAgent.id, defaultAgent],
+    [parentAgent.id, parentAgent],
+    [directAgent.id, directAgent],
+  ]);
+  const users = new Map<string, FakeUser>([
+    [
+      'user-1',
+      {
+        availableBalanceLi: 0n,
+        currentAgent: directAgent,
+        currentAgentId: directAgent.id,
+        id: 'user-1',
+      },
+    ],
+    [
+      'user-2',
+      {
+        availableBalanceLi: 0n,
+        currentAgent: directAgent,
+        currentAgentId: directAgent.id,
+        id: 'user-2',
+      },
+    ],
   ]);
 
-  const users = new Map<string, FakeUser>([
-    ['user-1', { availableBalanceLi: 0n, id: 'user-1' }],
-    ['user-2', { availableBalanceLi: 0n, id: 'user-2' }],
+  const openIds = new Map<string, FakeOpenId>([
+    [
+      'open-row-1',
+      {
+        id: 'open-row-1',
+        openId: 'open-1',
+        user: users.get('user-1') ?? null,
+        userId: 'user-1',
+      },
+    ],
+    [
+      'open-row-2',
+      {
+        id: 'open-row-2',
+        openId: 'open-2',
+        user: users.get('user-2') ?? null,
+        userId: 'user-2',
+      },
+    ],
+    [
+      'open-row-3',
+      { id: 'open-row-3', openId: 'open-3', user: null, userId: null },
+    ],
   ]);
 
   const rawEcpms = new Map<string, FakeRawEcpm>();
@@ -632,6 +756,10 @@ function createFakePrisma(
     new Map(
       Array.from(users.entries()).map(([key, value]) => [key, { ...value }]),
     );
+  const cloneAgents = () =>
+    new Map(
+      Array.from(agents.entries()).map(([key, value]) => [key, { ...value }]),
+    );
   const restoreMap = <T>(target: Map<string, T>, snapshot: Map<string, T>) => {
     target.clear();
     for (const [key, value] of snapshot) {
@@ -641,6 +769,7 @@ function createFakePrisma(
 
   const prisma: SettlementAdminPrisma & {
     getAuditActions(): string[];
+    getAgent(id: string): FakeAgent | undefined;
     getBatchCount(): number;
     getEventNames(): string[];
     getGame(id: string): FakeGame | undefined;
@@ -752,6 +881,7 @@ function createFakePrisma(
       const gameSnapshot = cloneGames();
       const rawEcpmSnapshot = cloneRawEcpms();
       const userSnapshot = cloneUsers();
+      const agentSnapshot = cloneAgents();
       const batchSnapshot = [...batches];
       const auditLogSnapshot = [...auditLogs];
 
@@ -761,6 +891,7 @@ function createFakePrisma(
         restoreMap(games, gameSnapshot);
         restoreMap(rawEcpms, rawEcpmSnapshot);
         restoreMap(users, userSnapshot);
+        restoreMap(agents, agentSnapshot);
         batches.length = 0;
         batches.push(...batchSnapshot);
         auditLogs.length = 0;
@@ -772,6 +903,21 @@ function createFakePrisma(
       create: async ({ data }: any) => {
         auditLogs.push(data);
         return data;
+      },
+    } as any,
+    agent: {
+      updateMany: async ({ data, where }: any) => {
+        events.push('agent.updateMany');
+        const agent = agents.get(where.id);
+        if (!agent) {
+          return {
+            count: 0,
+          };
+        }
+        agent.availableBalanceLi += data.availableBalanceLi.increment;
+        return {
+          count: 1,
+        };
       },
     } as any,
     game: {
@@ -921,6 +1067,7 @@ function createFakePrisma(
     } as any,
     getAuditActions: () => auditLogs.map((row) => row.action),
     addBatch: (batch: any) => batches.unshift(batch),
+    getAgent: (id: string) => agents.get(id),
     getBatchCount: () => batches.length,
     getEventNames: () => events,
     getGame: (id: string) => games.get(id),

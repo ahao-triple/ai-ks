@@ -3,6 +3,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   type WithdrawalBatch,
@@ -11,6 +12,10 @@ import {
   WithdrawalDetailType,
 } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import {
+  DEFAULT_PLATFORM_CONFIG,
+  PlatformConfigService,
+} from '../platform-config/platform-config.service';
 
 type WalletPrisma = Pick<
   PrismaService,
@@ -34,7 +39,14 @@ export type AccountWithdrawal = WithdrawalBatch & {
 
 @Injectable()
 export class AccountWalletService {
-  constructor(@Inject(PrismaService) private readonly prisma: WalletPrisma) {}
+  constructor(
+    @Inject(PrismaService) private readonly prisma: WalletPrisma,
+    @Optional()
+    private readonly platformConfigService?: Pick<
+      PlatformConfigService,
+      'getConfig'
+    >,
+  ) {}
 
   async getAlipayProfile(userId: string) {
     const user = await this.findUserOrThrow(userId);
@@ -68,13 +80,18 @@ export class AccountWalletService {
     if (input.amountLi <= 0n) {
       throw new BadRequestException('提现金额必须大于 0');
     }
-
     const user = await this.findUserOrThrow(input.userId);
     if (!user.alipayAccount || !user.alipayRealName) {
       throw new BadRequestException('请先维护支付宝收款信息');
     }
     const recipientAlipay = user.alipayAccount;
     const recipientName = user.alipayRealName;
+    const platformConfig =
+      (await this.platformConfigService?.getConfig()) ??
+      DEFAULT_PLATFORM_CONFIG;
+    if (input.amountLi < platformConfig.minWithdrawalLi) {
+      throw new BadRequestException('提现金额低于最低提现金额');
+    }
 
     const withdrawal = await this.prisma.$transaction(async (tx) => {
       const updated = await tx.userAccount.updateMany({
@@ -100,6 +117,8 @@ export class AccountWalletService {
 
       return tx.withdrawalBatch.create({
         data: {
+          ownerId: input.userId,
+          ownerType: 'USER',
           status: 'PENDING_REVIEW',
           totalAmountLi: input.amountLi,
           userId: input.userId,
@@ -108,7 +127,8 @@ export class AccountWalletService {
               {
                 amountLi: input.amountLi,
                 configSnapshot: {
-                  source: 'account_withdrawal_mvp',
+                  minWithdrawalLi: platformConfig.minWithdrawalLi.toString(),
+                  source: 'account_withdrawal_v1',
                 },
                 recipientAlipay,
                 recipientName,

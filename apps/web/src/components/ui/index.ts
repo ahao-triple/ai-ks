@@ -8,6 +8,8 @@ export type {
   DataTableColumn,
   DataTableProps,
 } from './DataTable';
+export { Dialog } from './Dialog';
+export type { DialogProps } from './Dialog';
 export { InputField } from './InputField';
 export type { InputFieldProps } from './InputField';
 export { MetricCard } from './MetricCard';

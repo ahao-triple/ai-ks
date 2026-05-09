@@ -5,6 +5,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   Prisma,
@@ -16,13 +17,24 @@ import {
   type SettlementBatchItem,
 } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
+import {
+  computeSettlementSplit,
+  type SettlementSplitRule,
+} from '../../domain/settlement/settlement-split';
 import { AdminAccessControlService } from '../admin-auth/admin-access-control.service';
 import { type AdminPrincipal } from '../admin-auth/admin-auth.service';
+import {
+  DEFAULT_PLATFORM_CONFIG,
+  PlatformConfigService,
+  snapshotPlatformConfig,
+  type PlatformBusinessConfig,
+} from '../platform-config/platform-config.service';
 
 export type SettlementAdminPrisma = Pick<
   PrismaService,
   | '$transaction'
   | '$queryRaw'
+  | 'agent'
   | 'auditLog'
   | 'game'
   | 'rawEcpm'
@@ -45,8 +57,36 @@ export type ConfirmSettlementInput = SettlementRangeInput & {
 type PendingSettlementRow = RawEcpm & {
   openIdRecord: {
     id: string;
+    user?: {
+      currentAgent?: {
+        id: string;
+        parentAgent?: {
+          id: string;
+        } | null;
+        parentAgentId: string | null;
+      } | null;
+      currentAgentId: string | null;
+    } | null;
     userId: string | null;
   } | null;
+};
+
+type SettlementItemAllocation = {
+  defaultAgentAmountLi: bigint;
+  defaultAgentId: string | null;
+  directAgentAmountLi: bigint;
+  directAgentId: string | null;
+  displayAmountLi: bigint;
+  feeAmountLi: bigint;
+  gameOpenIdId: string;
+  openId: string;
+  parentAgentAmountLi: bigint;
+  parentAgentId: string | null;
+  rawEcpmId: string;
+  settlementAmountLi: bigint;
+  splitSnapshot: Prisma.InputJsonObject;
+  userAmountLi: bigint;
+  userId: string;
 };
 
 type LockedSettlementGame = {
@@ -102,6 +142,11 @@ export class SettlementAdminService {
   constructor(
     @Inject(PrismaService) private readonly prisma: SettlementAdminPrisma,
     private readonly accessControlService: AdminAccessControlService,
+    @Optional()
+    private readonly platformConfigService?: Pick<
+      PlatformConfigService,
+      'getConfig'
+    >,
   ) {}
 
   async previewSettlement(
@@ -132,12 +177,14 @@ export class SettlementAdminService {
     input: ConfirmSettlementInput,
   ): Promise<ConfirmSettlementResult> {
     this.assertValidRange(input);
+    const platformConfig = await this.getPlatformConfig();
 
     try {
       return await this.prisma.$transaction(async (tx) => {
         const service = new SettlementAdminService(
           tx as unknown as SettlementAdminPrisma,
           this.accessControlService,
+          this.platformConfigService,
         );
         const lockedGame = await tx.$queryRaw<LockedSettlementGame[]>(
           Prisma.sql`
@@ -175,6 +222,9 @@ export class SettlementAdminService {
           boundRows,
           await lockOpenIds(tx, boundRows),
         );
+        const itemAllocations = boundRows.map((row) =>
+          createSettlementItemAllocation(row, platformConfig),
+        );
 
         let updatedCount = 0;
         for (const row of boundRows) {
@@ -209,18 +259,11 @@ export class SettlementAdminService {
             budgetAfterLi: game.budgetLi - settlementAmountLi,
             budgetBeforeLi: game.budgetLi,
             companyId: game.companyId,
-            configSnapshot: createSettlementConfigSnapshot(),
+            configSnapshot: createSettlementConfigSnapshot(platformConfig),
             endedAt: input.endedAt,
             gameId: game.id,
             items: {
-              create: boundRows.map((row) => ({
-                displayAmountLi: row.displayAmountLi,
-                gameOpenIdId: row.openIdRecordId as string,
-                openId: row.openId,
-                rawEcpmId: row.id,
-                settlementAmountLi: row.displayAmountLi,
-                userId: row.openIdRecord?.userId as string,
-              })),
+              create: itemAllocations,
             },
             operatorId: input.operatorId,
             operatorType: input.operatorType,
@@ -235,7 +278,7 @@ export class SettlementAdminService {
           },
         });
 
-        for (const [userId, amountLi] of sumByUser(boundRows)) {
+        for (const [userId, amountLi] of sumByUser(itemAllocations)) {
           await tx.userAccount.update({
             data: {
               availableBalanceLi: {
@@ -246,6 +289,31 @@ export class SettlementAdminService {
               id: userId,
             },
           });
+        }
+
+        let creditedAgentCount = 0;
+        const agentTotals = sumByAgent(itemAllocations);
+        for (const [agentId, amountLi] of agentTotals) {
+          const updatedAgent = await tx.agent.updateMany({
+            data: {
+              availableBalanceLi: {
+                increment: amountLi,
+              },
+            },
+            where: {
+              deletedAt: null,
+              enabled: true,
+              id: agentId,
+            },
+          });
+          creditedAgentCount += updatedAgent.count;
+        }
+        if (creditedAgentCount !== agentTotals.size) {
+          throw new SettlementConflictError(
+            game.id,
+            agentTotals.size,
+            creditedAgentCount,
+          );
         }
 
         const updatedGame = await tx.game.updateMany({
@@ -281,10 +349,19 @@ export class SettlementAdminService {
               budgetAfterLi: (game.budgetLi - settlementAmountLi).toString(),
               budgetBeforeLi: game.budgetLi.toString(),
               endedAt: input.endedAt.toISOString(),
+              feeAmountLi: sumItemAmount(
+                itemAllocations,
+                'feeAmountLi',
+              ).toString(),
+              agentAmountLi: sumAgentAmount(itemAllocations).toString(),
               settledAmountLi: settlementAmountLi.toString(),
               settledCount: boundRows.length,
               startedAt: input.startedAt.toISOString(),
               unboundCount: unboundRows.length,
+              userAmountLi: sumItemAmount(
+                itemAllocations,
+                'userAmountLi',
+              ).toString(),
               userCount: countUsers(boundRows),
             },
             targetId: batch.id,
@@ -460,6 +537,10 @@ export class SettlementAdminService {
     return game;
   }
 
+  private getPlatformConfig() {
+    return this.platformConfigService?.getConfig() ?? DEFAULT_PLATFORM_CONFIG;
+  }
+
   private findPendingRows(input: SettlementRangeInput, bound: boolean) {
     const baseWhere = {
       eventTime: {
@@ -501,7 +582,19 @@ export class SettlementAdminService {
 
     return this.prisma.rawEcpm.findMany({
       include: {
-        openIdRecord: true,
+        openIdRecord: {
+          include: {
+            user: {
+              include: {
+                currentAgent: {
+                  include: {
+                    parentAgent: true,
+                  },
+                },
+              },
+            },
+          },
+        },
       },
       orderBy: {
         eventTime: 'asc',
@@ -536,10 +629,13 @@ class SettlementBudgetInsufficientError extends Error {
   }
 }
 
-function createSettlementConfigSnapshot(): Prisma.InputJsonObject {
+function createSettlementConfigSnapshot(
+  platformConfig: PlatformBusinessConfig,
+): Prisma.InputJsonObject {
   return {
     displayAmountBasis: 'raw_ecpm.displayAmountLi',
-    source: 'admin_settlement_mvp',
+    settlementRule: snapshotPlatformConfig(platformConfig),
+    source: 'admin_settlement_config_v1',
   };
 }
 
@@ -552,17 +648,124 @@ function countUsers(rows: PendingSettlementRow[]) {
     .size;
 }
 
-function sumByUser(rows: PendingSettlementRow[]) {
+function sumByUser(items: SettlementItemAllocation[]) {
   const totals = new Map<string, bigint>();
-  for (const row of rows) {
-    const userId = row.openIdRecord?.userId;
-    if (!userId) {
-      continue;
-    }
-    totals.set(userId, (totals.get(userId) ?? 0n) + row.displayAmountLi);
+  for (const item of items) {
+    totals.set(item.userId, (totals.get(item.userId) ?? 0n) + item.userAmountLi);
   }
 
   return totals;
+}
+
+function sumByAgent(items: SettlementItemAllocation[]) {
+  const totals = new Map<string, bigint>();
+  for (const item of items) {
+    addAgentAmount(totals, item.directAgentId, item.directAgentAmountLi);
+    addAgentAmount(totals, item.parentAgentId, item.parentAgentAmountLi);
+    addAgentAmount(totals, item.defaultAgentId, item.defaultAgentAmountLi);
+  }
+
+  return totals;
+}
+
+function addAgentAmount(
+  totals: Map<string, bigint>,
+  agentId: string | null,
+  amountLi: bigint,
+) {
+  if (!agentId || amountLi <= 0n) {
+    return;
+  }
+
+  totals.set(agentId, (totals.get(agentId) ?? 0n) + amountLi);
+}
+
+function sumItemAmount(
+  items: SettlementItemAllocation[],
+  field: 'feeAmountLi' | 'userAmountLi',
+) {
+  return items.reduce((total, item) => total + item[field], 0n);
+}
+
+function sumAgentAmount(items: SettlementItemAllocation[]) {
+  return items.reduce(
+    (total, item) =>
+      total +
+      item.directAgentAmountLi +
+      item.parentAgentAmountLi +
+      item.defaultAgentAmountLi,
+    0n,
+  );
+}
+
+function createSettlementItemAllocation(
+  row: PendingSettlementRow,
+  platformConfig: PlatformBusinessConfig,
+): SettlementItemAllocation {
+  const userId = row.openIdRecord?.userId;
+  const gameOpenIdId = row.openIdRecordId;
+  if (!userId || !gameOpenIdId) {
+    throw new SettlementConflictError(row.gameId, 1, 0);
+  }
+
+  const directAgent = row.openIdRecord?.user?.currentAgent ?? null;
+  const parentAgent = directAgent?.parentAgent ?? null;
+  const split = computeSettlementSplit({
+    displayAmountLi: row.displayAmountLi,
+    rule: createSplitRule(platformConfig),
+  });
+  const orphanedDirectAgentAmountLi = directAgent
+    ? 0n
+    : split.directAgentAmountLi;
+  const orphanedParentAgentAmountLi = parentAgent
+    ? 0n
+    : split.parentAgentAmountLi;
+  const defaultAgentAmountLi =
+    split.defaultAgentAmountLi +
+    orphanedDirectAgentAmountLi +
+    orphanedParentAgentAmountLi;
+  const defaultAgentId =
+    defaultAgentAmountLi > 0n ? platformConfig.defaultAgentId : null;
+
+  return {
+    defaultAgentAmountLi,
+    defaultAgentId,
+    directAgentAmountLi: directAgent ? split.directAgentAmountLi : 0n,
+    directAgentId: directAgent?.id ?? null,
+    displayAmountLi: row.displayAmountLi,
+    feeAmountLi: split.feeAmountLi,
+    gameOpenIdId,
+    openId: row.openId,
+    parentAgentAmountLi: parentAgent ? split.parentAgentAmountLi : 0n,
+    parentAgentId: parentAgent?.id ?? null,
+    rawEcpmId: row.id,
+    settlementAmountLi: split.totalAmountLi,
+    splitSnapshot: {
+      defaultAgentAmountLi: defaultAgentAmountLi.toString(),
+      defaultAgentId,
+      directAgentAmountLi: (directAgent ? split.directAgentAmountLi : 0n).toString(),
+      directAgentMissingToDefaultLi: orphanedDirectAgentAmountLi.toString(),
+      feeAmountLi: split.feeAmountLi.toString(),
+      parentAgentAmountLi: (parentAgent ? split.parentAgentAmountLi : 0n).toString(),
+      parentAgentMissingToDefaultLi: orphanedParentAgentAmountLi.toString(),
+      rule: snapshotPlatformConfig(platformConfig),
+      userAmountLi: split.userAmountLi.toString(),
+    },
+    userAmountLi: split.userAmountLi,
+    userId,
+  };
+}
+
+function createSplitRule(
+  platformConfig: PlatformBusinessConfig,
+): SettlementSplitRule {
+  return {
+    defaultAgentRatioPercent: platformConfig.defaultAgentRatioPercent,
+    directAgentRatioPercent: platformConfig.directAgentRatioPercent,
+    feeRatioPercent: platformConfig.feeRatioPercent,
+    parentAgentRatioPercent: platformConfig.parentAgentRatioPercent,
+    userRatioPercent: platformConfig.userSettlementRatioPercent,
+  };
 }
 
 function lockOpenIds(

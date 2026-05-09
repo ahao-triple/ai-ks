@@ -5,6 +5,7 @@ import {
   Button,
   DataTable,
   type DataTableColumn,
+  Dialog,
   InputField,
   MetricCard,
   Panel,
@@ -44,6 +45,24 @@ describe('UI primitives', () => {
 
     expect(markup).toContain('Overview');
     expect(markup).toContain('Current activity');
+  });
+
+  it('renders a Dialog when open is true', () => {
+    const markup = renderToStaticMarkup(
+      <Dialog
+        description="Danger action"
+        onClose={() => undefined}
+        open
+        title="Confirm"
+      >
+        Body
+      </Dialog>,
+    );
+
+    expect(markup).toContain('ui-dialog');
+    expect(markup).toContain('Confirm');
+    expect(markup).toContain('Danger action');
+    expect(markup).toContain('Body');
   });
 
   it('renders a warning StatusBadge with warning class', () => {

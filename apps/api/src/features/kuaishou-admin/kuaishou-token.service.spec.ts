@@ -74,6 +74,80 @@ describe('KuaishouTokenService', () => {
     });
   });
 
+  it('encrypts stored secrets when an encryption key is configured', async () => {
+    const { oauth, prisma, service } = createService({
+      env: {
+        KUAISHOU_TOKEN_ENCRYPTION_KEY: Buffer.from(
+          '0123456789abcdef0123456789abcdef',
+        ).toString('base64'),
+      },
+    });
+    oauth.exchangeResult = {
+      accessToken: 'access-1',
+      accessTokenExpiresIn: 60,
+      advertiserId: 'advertiser-1',
+      raw: {},
+      refreshToken: 'refresh-1',
+      refreshTokenExpiresIn: 120,
+    };
+    oauth.refreshResult = {
+      accessToken: 'access-2',
+      accessTokenExpiresIn: 60,
+      advertiserId: 'advertiser-2',
+      raw: {},
+      refreshToken: 'refresh-2',
+      refreshTokenExpiresIn: 120,
+    };
+
+    await service.authorizeWithAuthCode({
+      actor: adminActor,
+      appId: 'app-1',
+      authCode: 'auth-code-1',
+      secret: 'secret-1',
+    });
+
+    expect(prisma.getToken()?.secret).toMatch(/^enc:v1:/);
+    expect(prisma.getToken()?.secret).not.toContain('secret-1');
+
+    await service.refreshStoredToken({ actor: adminActor });
+
+    expect(oauth.lastRefreshInput).toEqual({
+      appId: 'app-1',
+      refreshToken: 'refresh-1',
+      secret: 'secret-1',
+    });
+    expect(prisma.getToken()?.secret).toMatch(/^enc:v1:/);
+  });
+
+  it('refreshes legacy plaintext stored secrets when encryption is later enabled', async () => {
+    const { oauth, service } = createService({
+      env: {
+        KUAISHOU_TOKEN_ENCRYPTION_KEY: Buffer.from(
+          '0123456789abcdef0123456789abcdef',
+        ).toString('base64'),
+      },
+      token: activeToken({
+        secret: 'legacy-secret',
+      }),
+    });
+    oauth.refreshResult = {
+      accessToken: 'access-2',
+      accessTokenExpiresIn: 60,
+      advertiserId: 'advertiser-2',
+      raw: {},
+      refreshToken: 'refresh-2',
+      refreshTokenExpiresIn: 120,
+    };
+
+    await service.refreshStoredToken({ actor: adminActor });
+
+    expect(oauth.lastRefreshInput).toEqual({
+      appId: 'app-1',
+      refreshToken: 'refresh-1',
+      secret: 'legacy-secret',
+    });
+  });
+
   it('stores error status when auth_code authorization fails', async () => {
     const { oauth, prisma, service } = createService();
     oauth.exchangeError = new Error('auth_code invalid');

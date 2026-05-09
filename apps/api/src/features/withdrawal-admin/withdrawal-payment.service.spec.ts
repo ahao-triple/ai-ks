@@ -84,7 +84,32 @@ describe('WithdrawalPaymentService', () => {
       frozenBalanceLi: 0n,
     });
   });
+
+  it('closes a failed agent batch and refunds the agent frozen balance', async () => {
+    const prisma = createFakePrisma();
+    const service = new WithdrawalPaymentService(prisma);
+    await service.payBatch({
+      batchId: 'batch-agent-1',
+      mockResult: 'failed',
+    });
+
+    const result = await service.closeFailedBatch({
+      batchId: 'batch-agent-1',
+    });
+
+    expect(result.status).toBe('CLOSED');
+    expect(prisma.getAgent('agent-1')).toMatchObject({
+      availableBalanceLi: 3000n,
+      frozenBalanceLi: 0n,
+    });
+  });
 });
+
+type FakeAgent = {
+  id: string;
+  availableBalanceLi: bigint;
+  frozenBalanceLi: bigint;
+};
 
 type FakeUser = {
   id: string;
@@ -107,7 +132,9 @@ type FakeDetail = {
 
 type FakeBatch = {
   id: string;
-  userId: string;
+  ownerId: string | null;
+  ownerType: string;
+  userId: string | null;
   status: string;
   totalAmountLi: bigint;
   createdAt: Date;
@@ -116,6 +143,16 @@ type FakeBatch = {
 };
 
 function createFakePrisma() {
+  const agents = new Map<string, FakeAgent>([
+    [
+      'agent-1',
+      {
+        id: 'agent-1',
+        availableBalanceLi: 0n,
+        frozenBalanceLi: 3000n,
+      },
+    ],
+  ]);
   const users = new Map<string, FakeUser>([
     [
       'user-1',
@@ -149,7 +186,36 @@ function createFakePrisma() {
         status: 'APPROVED',
         totalAmountLi: 3000n,
         updatedAt: new Date('2026-05-07T01:00:00.000Z'),
+        ownerId: 'user-1',
+        ownerType: 'USER',
         userId: 'user-1',
+      },
+    ],
+    [
+      'batch-agent-1',
+      {
+        id: 'batch-agent-1',
+        createdAt: new Date('2026-05-07T01:30:00.000Z'),
+        details: [
+          {
+            id: 'detail-agent-1',
+            alipayResponseSnapshot: null,
+            amountLi: 3000n,
+            batchId: 'batch-agent-1',
+            errorCode: null,
+            errorMessage: null,
+            recipientAlipay: 'agent@example.com',
+            recipientName: 'Agent One',
+            status: 'APPROVED',
+            type: 'AGENT',
+          },
+        ],
+        ownerId: 'agent-1',
+        ownerType: 'AGENT',
+        status: 'APPROVED',
+        totalAmountLi: 3000n,
+        updatedAt: new Date('2026-05-07T01:30:00.000Z'),
+        userId: null,
       },
     ],
     [
@@ -161,14 +227,39 @@ function createFakePrisma() {
         status: 'PENDING_REVIEW',
         totalAmountLi: 2000n,
         updatedAt: new Date('2026-05-07T02:00:00.000Z'),
+        ownerId: 'user-2',
+        ownerType: 'USER',
         userId: 'user-2',
       },
     ],
   ]);
 
   const prisma = {
+    getAgent: (id: string) => agents.get(id),
     getBatch: (id: string) => batches.get(id),
     getUser: (id: string) => users.get(id),
+    agent: {
+      updateMany: async ({ data, where }: any) => {
+        const agent = agents.get(where.id);
+        if (!agent || agent.frozenBalanceLi < where.frozenBalanceLi.gte) {
+          return {
+            count: 0,
+          };
+        }
+
+        agents.set(agent.id, {
+          ...agent,
+          availableBalanceLi:
+            agent.availableBalanceLi + data.availableBalanceLi.increment,
+          frozenBalanceLi:
+            agent.frozenBalanceLi - data.frozenBalanceLi.decrement,
+        });
+
+        return {
+          count: 1,
+        };
+      },
+    },
     userAccount: {
       updateMany: async ({ data, where }: any) => {
         const user = users.get(where.id);

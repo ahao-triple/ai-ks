@@ -174,6 +174,8 @@ function presentWithdrawalBatch(batch: WithdrawalBatchWithDetails) {
     id: batch.id,
     status: batch.status,
     totalAmount: presentMoneyLi(batch.totalAmountLi),
+    ownerId: batch.ownerId,
+    ownerType: batch.ownerType,
     userId: batch.userId,
     createdAt: batch.createdAt.toISOString(),
     updatedAt: batch.updatedAt.toISOString(),

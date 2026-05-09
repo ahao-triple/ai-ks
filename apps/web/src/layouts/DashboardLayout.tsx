@@ -113,6 +113,10 @@ function SessionBadge({ session }: { session: AppSession }) {
     );
   }
 
+  if (session.mode === 'agent') {
+    return <StatusBadge tone="muted">{session.agent.username}</StatusBadge>;
+  }
+
   if (session.mode === 'guest') {
     return <StatusBadge tone="warning">游客</StatusBadge>;
   }

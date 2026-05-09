@@ -161,6 +161,17 @@ describe('KuaishouEcpmSyncJobService', () => {
     await expect(service.hasRunningJob('game-2')).resolves.toBe(false);
   });
 
+  it('finds one sync job by id for retry decisions', async () => {
+    const { service } = createService();
+    const job = await service.startJob(baseStartInput());
+
+    await expect(service.findJobById(job.id)).resolves.toMatchObject({
+      gameAppId: 'game-1',
+      id: job.id,
+    });
+    await expect(service.findJobById('missing-job')).resolves.toBeNull();
+  });
+
   it('presents job dates as ISO strings', async () => {
     const { service } = createService();
     const job = await service.startJob(baseStartInput());
@@ -267,6 +278,8 @@ function createFakePrisma() {
         rows.find((row) =>
           Object.entries(where).every(([key, value]) => row[key] === value),
         ) ?? null,
+      findUnique: async ({ where }: any) =>
+        rows.find((row) => row.id === where.id) ?? null,
     },
   } as any;
 }

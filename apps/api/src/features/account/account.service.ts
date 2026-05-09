@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -11,10 +12,16 @@ import { generateReadableId } from '../../domain/identity/readable-id';
 
 type AccountPrisma = Pick<
   PrismaService,
-  'gameOpenId' | 'rawEcpm' | 'userAccount'
+  | '$transaction'
+  | 'agent'
+  | 'gameOpenId'
+  | 'rawEcpm'
+  | 'userAccount'
+  | 'userAgentBindingHistory'
 >;
 
 export type RegisterAccountInput = {
+  invitationCode?: string | null;
   username: string;
   password: string;
 };
@@ -35,18 +42,51 @@ export type QueryAccountEarningsInput = {
   endAt: Date;
 };
 
+export type BindAgentByInvitationCodeInput = {
+  invitationCode: string;
+  userId: string;
+};
+
 @Injectable()
 export class AccountService {
   constructor(@Inject(PrismaService) private readonly prisma: AccountPrisma) {}
 
   async register(input: RegisterAccountInput) {
-    const user = await this.createUserAccount(input);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        const invitationCode = input.invitationCode?.trim() || '';
+        const agent = invitationCode
+          ? await findActiveAgentByInvitationCode(tx, invitationCode)
+          : null;
+        const user = await tx.userAccount.create({
+          data: {
+            currentAgentId: agent?.id ?? null,
+            passwordHash: await hash(input.password, 10),
+            readableId: generateReadableId(`user:${input.username}`),
+            username: input.username,
+          },
+        });
 
-    return {
-      id: user.id,
-      readableId: user.readableId,
-      username: user.username,
-    };
+        if (agent) {
+          await tx.userAgentBindingHistory.create({
+            data: {
+              fromAgentId: null,
+              source: 'registration_invitation',
+              toAgentId: agent.id,
+              userId: user.id,
+            },
+          });
+        }
+
+        return presentAccount(user);
+      });
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        throw new ConflictException('用户名已存在，请换一个用户名');
+      }
+
+      throw error;
+    }
   }
 
   async login(input: LoginAccountInput) {
@@ -61,28 +101,82 @@ export class AccountService {
     }
 
     return {
-      id: user.id,
-      readableId: user.readableId,
-      username: user.username,
+      ...presentAccount(user),
     };
   }
 
-  private async createUserAccount(input: RegisterAccountInput) {
-    try {
-      return await this.prisma.userAccount.create({
-        data: {
-          passwordHash: await hash(input.password, 10),
-          readableId: generateReadableId(`user:${input.username}`),
-          username: input.username,
+  async getAgentBinding(userId: string) {
+    const user = (await this.prisma.userAccount.findUnique({
+      include: {
+        currentAgent: {
+          select: {
+            id: true,
+            invitationCode: true,
+            parentAgentId: true,
+            username: true,
+          },
+        },
+      },
+      where: {
+        id: userId,
+      },
+    })) as {
+      currentAgent?: {
+        id: string;
+        invitationCode: string;
+        parentAgentId: string | null;
+        username: string;
+      } | null;
+    } | null;
+    if (!user) {
+      throw new NotFoundException(`User ${userId} is not found`);
+    }
+
+    return {
+      agent: user.currentAgent ? presentAgentBinding(user.currentAgent) : null,
+    };
+  }
+
+  async bindAgentByInvitationCode(input: BindAgentByInvitationCodeInput) {
+    const invitationCode = input.invitationCode.trim();
+    if (!invitationCode) {
+      throw new BadRequestException('请输入代理邀请码');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      const user = await tx.userAccount.findUnique({
+        where: {
+          id: input.userId,
         },
       });
-    } catch (error) {
-      if (isUniqueConstraintError(error)) {
-        throw new ConflictException('用户名已存在，请换一个用户名');
+      if (!user) {
+        throw new NotFoundException(`User ${input.userId} is not found`);
       }
 
-      throw error;
-    }
+      const agent = await findActiveAgentByInvitationCode(tx, invitationCode);
+      if (user.currentAgentId !== agent.id) {
+        await tx.userAccount.update({
+          data: {
+            currentAgentId: agent.id,
+          },
+          where: {
+            id: user.id,
+          },
+        });
+        await tx.userAgentBindingHistory.create({
+          data: {
+            fromAgentId: user.currentAgentId,
+            source: 'user_invitation',
+            toAgentId: agent.id,
+            userId: user.id,
+          },
+        });
+      }
+
+      return {
+        agent: presentAgentBinding(agent),
+      };
+    });
   }
 
   async bindOpenId(input: BindOpenIdInput) {
@@ -186,6 +280,49 @@ export class AccountService {
       },
     });
   }
+}
+
+function presentAccount(user: {
+  id: string;
+  readableId: string;
+  username: string;
+}) {
+  return {
+    id: user.id,
+    readableId: user.readableId,
+    username: user.username,
+  };
+}
+
+function presentAgentBinding(agent: {
+  id: string;
+  invitationCode: string;
+  parentAgentId?: string | null;
+  username: string;
+}) {
+  return {
+    id: agent.id,
+    invitationCode: agent.invitationCode,
+    parentAgentId: agent.parentAgentId ?? null,
+    username: agent.username,
+  };
+}
+
+async function findActiveAgentByInvitationCode(
+  prisma: Pick<AccountPrisma, 'agent'>,
+  invitationCode: string,
+) {
+  const agent = await prisma.agent.findUnique({
+    where: {
+      invitationCode,
+    },
+  });
+
+  if (!agent || agent.deletedAt !== null || !agent.enabled) {
+    throw new NotFoundException('代理邀请码不存在或已停用');
+  }
+
+  return agent;
 }
 
 function sum(values: bigint[]) {

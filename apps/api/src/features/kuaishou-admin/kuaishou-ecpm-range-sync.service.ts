@@ -21,6 +21,7 @@ export const KUAISHOU_ECPM_RANGE_SYNC_NOW = Symbol(
 export type KuaishouEcpmRangeSyncInput = {
   actorId: string;
   actorType: string;
+  dataHours?: string[];
   gameAppId: string;
   lookbackHours: number;
   markTokenError: boolean;
@@ -49,7 +50,10 @@ export class KuaishouEcpmRangeSyncService {
       throw new BadRequestException('Unsupported lookbackHours');
     }
 
-    const dataHours = buildRecentDataHours(input.lookbackHours, this.now());
+    const dataHours =
+      input.dataHours && input.dataHours.length > 0
+        ? input.dataHours
+        : buildRecentDataHours(input.lookbackHours, this.now());
     const startedDataHour = dataHours[0];
     const endedDataHour = dataHours[dataHours.length - 1];
     const requestedOpenIds = input.openIds !== undefined
@@ -200,6 +204,30 @@ export function buildRecentDataHours(lookbackHours: number, now: Date) {
     const hourMs = flooredChinaHourMs - (lookbackHours - 1 - index) * HOUR_MS;
     return formatChinaDataHour(hourMs);
   });
+}
+
+export function buildDataHoursBetween(
+  startedDataHour: string,
+  endedDataHour: string,
+) {
+  const startMs = Date.parse(startedDataHour);
+  const endMs = Date.parse(endedDataHour);
+  if (
+    !Number.isFinite(startMs) ||
+    !Number.isFinite(endMs) ||
+    startMs > endMs
+  ) {
+    throw new BadRequestException('Invalid ECPM retry data-hour range');
+  }
+
+  const count = Math.floor((endMs - startMs) / HOUR_MS) + 1;
+  if (count > 24) {
+    throw new BadRequestException('ECPM retry data-hour range is too large');
+  }
+
+  return Array.from({ length: count }, (_, index) =>
+    formatChinaDataHour(startMs + index * HOUR_MS + CHINA_TIMEZONE_OFFSET_MS),
+  );
 }
 
 function formatChinaDataHour(chinaHourMs: number) {

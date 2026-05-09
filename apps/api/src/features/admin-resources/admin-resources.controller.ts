@@ -21,6 +21,8 @@ import { SuperAdminGuard } from '../admin-auth/super-admin.guard';
 import { presentMoneyLi } from '../demo/money-presenter';
 import {
   AdminResourcesService,
+  type AgentWithdrawalBatch,
+  type AgentWithParent,
   type GameWithCompany,
 } from './admin-resources.service';
 
@@ -30,6 +32,22 @@ const reasonSchema = z.string().optional();
 
 const createCompanySchema = z.object({
   name: idSchema,
+});
+
+const createAgentSchema = z.object({
+  invitationCode: idSchema,
+  parentAgentId: idSchema.optional().nullable(),
+  password: z.string().min(8),
+  username: idSchema,
+});
+
+const updateAgentAlipaySchema = z.object({
+  alipayAccount: idSchema,
+  alipayRealName: idSchema,
+});
+
+const requestAgentWithdrawalSchema = z.object({
+  amountYuan: amountSchema,
 });
 
 const adjustCompanyBalanceSchema = z.object({
@@ -67,6 +85,10 @@ const updateGameSchema = z.object({
 const allocateGameBudgetSchema = z.object({
   amountYuan: amountSchema,
   reason: reasonSchema,
+});
+
+const resetTestDataSchema = z.object({
+  confirmation: z.literal('RESET_TEST_DATA'),
 });
 
 @Controller()
@@ -124,6 +146,84 @@ export class AdminResourcesController {
     return {
       company: presentCompany(company),
     };
+  }
+
+  @Get('admin/agents')
+  @UseGuards(SuperAdminGuard)
+  async listAgents() {
+    const agents = await this.adminResourcesService.listAgents();
+
+    return {
+      agents: agents.map(presentAgent),
+    };
+  }
+
+  @Post('admin/agents')
+  @UseGuards(SuperAdminGuard)
+  async createAgent(
+    @CurrentAdmin() admin: AdminPrincipal,
+    @Body() body: unknown,
+  ) {
+    const input = parseBody(createAgentSchema, body, 'Agent input is invalid');
+    const agent = await this.adminResourcesService.createAgent({
+      actor: requireSuperAdminPrincipal(admin),
+      invitationCode: input.invitationCode,
+      parentAgentId: input.parentAgentId,
+      password: input.password,
+      username: input.username,
+    });
+
+    return {
+      agent: presentAgent(agent),
+    };
+  }
+
+  @Patch('admin/agents/:agentId/alipay')
+  @UseGuards(SuperAdminGuard)
+  async updateAgentAlipay(
+    @CurrentAdmin() admin: AdminPrincipal,
+    @Param('agentId') agentId: string,
+    @Body() body: unknown,
+  ) {
+    const input = parseBody(
+      updateAgentAlipaySchema,
+      body,
+      'Agent alipay input is invalid',
+    );
+    const agent = await this.adminResourcesService.updateAgentAlipayProfile({
+      actor: requireSuperAdminPrincipal(admin),
+      agentId: parseId(agentId, 'Agent id is invalid'),
+      alipayAccount: input.alipayAccount,
+      alipayRealName: input.alipayRealName,
+    });
+
+    return {
+      agent: presentAgent({
+        ...agent,
+        parentAgent: null,
+      }),
+    };
+  }
+
+  @Post('admin/agents/:agentId/withdrawals')
+  @UseGuards(SuperAdminGuard)
+  async requestAgentWithdrawal(
+    @CurrentAdmin() admin: AdminPrincipal,
+    @Param('agentId') agentId: string,
+    @Body() body: unknown,
+  ) {
+    const input = parseBody(
+      requestAgentWithdrawalSchema,
+      body,
+      'Agent withdrawal input is invalid',
+    );
+    const withdrawal = await this.adminResourcesService.requestAgentWithdrawal({
+      actor: requireSuperAdminPrincipal(admin),
+      agentId: parseId(agentId, 'Agent id is invalid'),
+      amountLi: parsePositiveAmountLi(input.amountYuan),
+    });
+
+    return presentWithdrawalBatch(withdrawal);
   }
 
   @Get('admin/games')
@@ -220,6 +320,26 @@ export class AdminResourcesController {
       game: presentGame(result.game),
     };
   }
+
+  @Post('admin/system/reset-test-data')
+  @UseGuards(SuperAdminGuard)
+  async resetTestData(
+    @CurrentAdmin() admin: AdminPrincipal,
+    @Body() body: unknown,
+  ) {
+    parseBody(
+      resetTestDataSchema,
+      body,
+      'Reset confirmation is invalid',
+    );
+    await this.adminResourcesService.resetTestData({
+      actor: requireSuperAdminPrincipal(admin),
+    });
+
+    return {
+      success: true,
+    };
+  }
 }
 
 function parseBody<T extends z.ZodTypeAny>(
@@ -279,6 +399,47 @@ function presentCompany(company: {
     id: company.id,
     name: company.name,
     updatedAt: company.updatedAt.toISOString(),
+  };
+}
+
+function presentAgent(agent: AgentWithParent) {
+  return {
+    alipayAccount: agent.alipayAccount,
+    alipayRealName: agent.alipayRealName,
+    availableBalance: presentMoneyLi(agent.availableBalanceLi),
+    createdAt: agent.createdAt.toISOString(),
+    enabled: agent.enabled,
+    frozenBalance: presentMoneyLi(agent.frozenBalanceLi),
+    id: agent.id,
+    invitationCode: agent.invitationCode,
+    parentAgent: agent.parentAgent,
+    parentAgentId: agent.parentAgentId,
+    username: agent.username,
+  };
+}
+
+function presentWithdrawalBatch(batch: AgentWithdrawalBatch) {
+  return {
+    createdAt: batch.createdAt.toISOString(),
+    details: batch.details.map((detail) => ({
+      amount: presentMoneyLi(detail.amountLi),
+      alipayRequestSnapshot: detail.alipayRequestSnapshot,
+      alipayResponseSnapshot: detail.alipayResponseSnapshot,
+      errorCode: detail.errorCode,
+      errorMessage: detail.errorMessage,
+      id: detail.id,
+      recipientAlipay: detail.recipientAlipay,
+      recipientName: detail.recipientName,
+      status: detail.status,
+      type: detail.type,
+    })),
+    id: batch.id,
+    ownerId: batch.ownerId,
+    ownerType: batch.ownerType,
+    status: batch.status,
+    totalAmount: presentMoneyLi(batch.totalAmountLi),
+    updatedAt: batch.updatedAt.toISOString(),
+    userId: batch.userId,
   };
 }
 

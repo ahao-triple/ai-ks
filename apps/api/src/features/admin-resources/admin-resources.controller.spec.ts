@@ -231,6 +231,28 @@ describe('AdminResourcesController', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('resets test data when confirmation phrase is provided', async () => {
+    const service = createService();
+    const controller = new AdminResourcesController(service);
+
+    await expect(
+      controller.resetTestData(admin, { confirmation: 'RESET_TEST_DATA' }),
+    ).resolves.toEqual({
+      success: true,
+    });
+    expect(service.lastResetTestDataInput).toEqual({
+      actor: admin,
+    });
+  });
+
+  it('rejects reset when confirmation phrase is invalid', async () => {
+    const controller = new AdminResourcesController(createService());
+
+    await expect(
+      controller.resetTestData(admin, { confirmation: 'RESET' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('direct write method calls still reject company admins', async () => {
     const service = createService();
     const controller = new AdminResourcesController(service);
@@ -269,12 +291,18 @@ describe('AdminResourcesController', () => {
         amountYuan: '1.00',
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      controller.resetTestData(companyAdmin, {
+        confirmation: 'RESET_TEST_DATA',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
 
     expect(service.lastCreateCompanyInput).toBeUndefined();
     expect(service.lastCreateGameInput).toBeUndefined();
     expect(service.lastUpdateGameInput).toBeUndefined();
     expect(service.lastAllocateGameBudgetInput).toBeUndefined();
     expect(service.lastAdjustCompanyBalanceInput).toBeUndefined();
+    expect(service.lastResetTestDataInput).toBeUndefined();
   });
 });
 
@@ -318,6 +346,7 @@ function createService(options: { game?: Record<string, unknown> } = {}) {
     lastCreateGameInput: undefined as unknown,
     lastListCompaniesInput: undefined as unknown,
     lastListGamesInput: undefined as unknown,
+    lastResetTestDataInput: undefined as unknown,
     lastUpdateGameInput: undefined as unknown,
     listCompanies: async function (input: unknown) {
       this.lastListCompaniesInput = input;
@@ -361,6 +390,10 @@ function createService(options: { game?: Record<string, unknown> } = {}) {
         },
         game,
       };
+    },
+    resetTestData: async function (input: unknown) {
+      this.lastResetTestDataInput = input;
+      return undefined;
     },
   } as any;
 }

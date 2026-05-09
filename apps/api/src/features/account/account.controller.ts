@@ -26,14 +26,21 @@ import {
 import { CurrentAccount } from './current-account.decorator';
 
 const registerSchema = z.object({
+  invitationCode: z.string().optional().nullable(),
   password: z.string().min(6),
   username: z.string().min(3),
 });
 
-const loginSchema = registerSchema;
+const loginSchema = registerSchema.omit({
+  invitationCode: true,
+});
 
 const bindOpenIdSchema = z.object({
   identity: z.string().min(1),
+});
+
+const bindAgentSchema = z.object({
+  invitationCode: z.string().min(1),
 });
 
 const updateAlipayProfileSchema = z.object({
@@ -83,6 +90,25 @@ export class AccountController {
     const input = bindOpenIdSchema.parse(body);
     return this.accountService.bindOpenId({
       identity: input.identity,
+      userId: account.id,
+    });
+  }
+
+  @Get('me/agent-binding')
+  @UseGuards(AccountJwtGuard)
+  getOwnAgentBinding(@CurrentAccount() account: AccountPrincipal) {
+    return this.accountService.getAgentBinding(account.id);
+  }
+
+  @Patch('me/agent-binding')
+  @UseGuards(AccountJwtGuard)
+  bindOwnAgentByInvitationCode(
+    @CurrentAccount() account: AccountPrincipal,
+    @Body() body: unknown,
+  ) {
+    const input = bindAgentSchema.parse(body);
+    return this.accountService.bindAgentByInvitationCode({
+      invitationCode: input.invitationCode,
       userId: account.id,
     });
   }

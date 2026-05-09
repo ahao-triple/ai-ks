@@ -7,6 +7,12 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  randomBytes,
+} from 'node:crypto';
+import {
   type KuaishouPlatformToken,
   KuaishouTokenStatus,
 } from '@prisma/client';
@@ -18,6 +24,7 @@ import {
 import { type AdminPrincipal } from '../admin-auth/admin-auth.service';
 
 const DEFAULT_TOKEN_KEY = 'default';
+const ENCRYPTED_SECRET_PREFIX = 'enc:v1:';
 export const KUAISHOU_TOKEN_NOW = Symbol('KUAISHOU_TOKEN_NOW');
 
 type TokenPrisma = Pick<PrismaService, 'kuaishouPlatformToken'>;
@@ -125,18 +132,20 @@ export class KuaishouTokenService {
       throw new BadRequestException('缺少 refresh token，请重新授权');
     }
 
+    const secret = this.decodeStoredSecret(token.secret);
+
     try {
       const result = await this.oauthClient.refreshAccessToken({
         appId: token.appId,
         refreshToken: token.refreshToken,
-        secret: token.secret,
+        secret,
       });
       const updated = await this.upsertActiveToken({
         appId: token.appId,
         authorizedAt: token.authorizedAt ?? this.now(),
         refreshedAt: this.now(),
         result,
-        secret: token.secret,
+        secret,
       });
 
       return presentTokenStatus(updated, this.now());
@@ -260,7 +269,7 @@ export class KuaishouTokenService {
         refreshedAt: input.refreshedAt,
         refreshToken: input.result.refreshToken,
         refreshTokenExpiresAt,
-        secret: input.secret,
+        secret: this.encodeStoredSecret(input.secret),
         status: KuaishouTokenStatus.ACTIVE,
       },
       update: {
@@ -273,7 +282,7 @@ export class KuaishouTokenService {
         refreshedAt: input.refreshedAt,
         refreshToken: input.result.refreshToken,
         refreshTokenExpiresAt,
-        secret: input.secret,
+        secret: this.encodeStoredSecret(input.secret),
         status: KuaishouTokenStatus.ACTIVE,
       },
       where: {
@@ -292,19 +301,87 @@ export class KuaishouTokenService {
         appId: input.appId,
         key: DEFAULT_TOKEN_KEY,
         lastError: input.lastError,
-        secret: input.secret,
+        secret: this.encodeStoredSecret(input.secret),
         status: KuaishouTokenStatus.ERROR,
       },
       update: {
         appId: input.appId,
         lastError: input.lastError,
-        secret: input.secret,
+        secret: this.encodeStoredSecret(input.secret),
         status: KuaishouTokenStatus.ERROR,
       },
       where: {
         key: DEFAULT_TOKEN_KEY,
       },
     });
+  }
+
+  private encodeStoredSecret(secret: string) {
+    const key = this.readSecretEncryptionKey();
+    if (!key) {
+      return secret;
+    }
+
+    const iv = randomBytes(12);
+    const cipher = createCipheriv('aes-256-gcm', key, iv);
+    const encrypted = Buffer.concat([
+      cipher.update(secret, 'utf8'),
+      cipher.final(),
+    ]);
+    const tag = cipher.getAuthTag();
+
+    return [
+      ENCRYPTED_SECRET_PREFIX.slice(0, -1),
+      iv.toString('base64'),
+      tag.toString('base64'),
+      encrypted.toString('base64'),
+    ].join(':');
+  }
+
+  private decodeStoredSecret(secret: string) {
+    if (!secret.startsWith(ENCRYPTED_SECRET_PREFIX)) {
+      return secret;
+    }
+
+    const key = this.readSecretEncryptionKey();
+    if (!key) {
+      throw new BadRequestException(
+        '缺少 KUAISHOU_TOKEN_ENCRYPTION_KEY，无法解密快手 secret',
+      );
+    }
+
+    const [, , ivText, tagText, encryptedText] = secret.split(':');
+    if (!ivText || !tagText || !encryptedText) {
+      throw new BadRequestException('快手 secret 加密数据格式无效');
+    }
+
+    const decipher = createDecipheriv(
+      'aes-256-gcm',
+      key,
+      Buffer.from(ivText, 'base64'),
+    );
+    decipher.setAuthTag(Buffer.from(tagText, 'base64'));
+
+    return Buffer.concat([
+      decipher.update(Buffer.from(encryptedText, 'base64')),
+      decipher.final(),
+    ]).toString('utf8');
+  }
+
+  private readSecretEncryptionKey() {
+    const raw = this.configService
+      .get<string>('KUAISHOU_TOKEN_ENCRYPTION_KEY')
+      ?.trim();
+    if (!raw) {
+      return undefined;
+    }
+
+    const decoded = Buffer.from(raw, 'base64');
+    if (decoded.length === 32) {
+      return decoded;
+    }
+
+    return createHash('sha256').update(raw).digest();
   }
 }
 

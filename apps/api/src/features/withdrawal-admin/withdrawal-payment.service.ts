@@ -8,12 +8,13 @@ import {
   type WithdrawalBatch,
   type WithdrawalDetail,
   WithdrawalDetailStatus,
+  PrincipalType,
 } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 
 type WithdrawalPaymentPrisma = Pick<
   PrismaService,
-  '$transaction' | 'userAccount' | 'withdrawalBatch' | 'withdrawalDetail'
+  '$transaction' | 'agent' | 'userAccount' | 'withdrawalBatch' | 'withdrawalDetail'
 >;
 
 export type PaidWithdrawalBatch = WithdrawalBatch & {
@@ -117,22 +118,45 @@ export class WithdrawalPaymentService {
         throw new BadRequestException('只有失败提现批次可以关闭并退回');
       }
 
-      const refunded = await tx.userAccount.updateMany({
-        data: {
-          availableBalanceLi: {
-            increment: batch.totalAmountLi,
+      let refunded: { count: number };
+      if (batch.ownerType === PrincipalType.AGENT && batch.ownerId) {
+        refunded = await tx.agent.updateMany({
+          data: {
+            availableBalanceLi: {
+              increment: batch.totalAmountLi,
+            },
+            frozenBalanceLi: {
+              decrement: batch.totalAmountLi,
+            },
           },
-          frozenBalanceLi: {
-            decrement: batch.totalAmountLi,
+          where: {
+            frozenBalanceLi: {
+              gte: batch.totalAmountLi,
+            },
+            id: batch.ownerId,
           },
-        },
-        where: {
-          frozenBalanceLi: {
-            gte: batch.totalAmountLi,
+        });
+      } else {
+        if (!batch.userId) {
+          throw new BadRequestException('提现批次缺少用户归属，无法关闭批次');
+        }
+        refunded = await tx.userAccount.updateMany({
+          data: {
+            availableBalanceLi: {
+              increment: batch.totalAmountLi,
+            },
+            frozenBalanceLi: {
+              decrement: batch.totalAmountLi,
+            },
           },
-          id: batch.userId,
-        },
-      });
+          where: {
+            frozenBalanceLi: {
+              gte: batch.totalAmountLi,
+            },
+            id: batch.userId,
+          },
+        });
+      }
 
       if (refunded.count !== 1) {
         throw new BadRequestException('冻结余额不足，无法关闭批次');
