@@ -12,6 +12,7 @@
 │   ├── api                 # NestJS API 服务
 │   └── web                 # React + Vite 前端
 ├── docs
+│   ├── api                # 游戏端等外部对接 API 文档
 │   ├── PROJECT_STATUS.zh-CN.md
 │   ├── PROJECT_MAP.zh-CN.md
 │   ├── runbook             # 当前运行和真实联调手册
@@ -143,6 +144,7 @@ pnpm --filter web build
 
 - 当前状态：`docs/PROJECT_STATUS.zh-CN.md`
 - 项目地图：`docs/PROJECT_MAP.zh-CN.md`
+- 游戏端 API：`docs/api/game-client-api.zh-CN.md`
 - 运行环境：`docs/runbook/env-runtime.md`
 - 真实联调：`docs/runbook/real-flow-debugging.zh-CN.md`
 - 历史归档：`docs/archive/README.md`
