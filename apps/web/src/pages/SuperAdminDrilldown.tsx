@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   EcpmRecordTable,
   type EcpmRecordView,
@@ -10,7 +10,11 @@ import type {
   SuperAdminUnderGameResult,
   UserDashboardEcpmRecordsResult,
 } from '../types/api';
-import { RowRefreshButton } from './SuperAdminDashboardPage';
+import {
+  RefreshWindowSelect,
+  RowRefreshButton,
+  type RefreshLookbackHours,
+} from './SuperAdminDashboardPage';
 
 export type DrilldownApi = {
   loadCompanyGames: (companyId: string) => Promise<SuperAdminUnderCompanyResult>;
@@ -18,9 +22,22 @@ export type DrilldownApi = {
   loadUserRecords: (userId: string) => Promise<UserDashboardEcpmRecordsResult>;
   refreshScope: (
     body:
-      | { scope: 'company'; companyId: string }
-      | { scope: 'game'; gameId: string }
-      | { scope: 'user'; gameId: string; userId: string },
+      | {
+          scope: 'company';
+          companyId: string;
+          lookbackHours?: RefreshLookbackHours;
+        }
+      | {
+          scope: 'game';
+          gameId: string;
+          lookbackHours?: RefreshLookbackHours;
+        }
+      | {
+          scope: 'user';
+          gameId: string;
+          userId: string;
+          lookbackHours?: RefreshLookbackHours;
+        },
   ) => Promise<unknown>;
 };
 
@@ -140,6 +157,7 @@ function CompanyLevel(props: {
   onNavigate: (path: DrilldownPath) => void;
 }) {
   const { path, api } = props;
+  const [refreshHours, setRefreshHours] = useState<RefreshLookbackHours>(1);
   const fetchAll = useCallback(
     () => api.loadCompanyGames(path.companyId),
     [api, path.companyId],
@@ -157,7 +175,13 @@ function CompanyLevel(props: {
     <section className="user-dashboard-records">
       <div className="user-dashboard-section-header">
         <h2>{path.companyName} · 游戏列表（按今日 ECPM 条数降序）</h2>
-        <RefreshControls loading={loading} toast={toast} refresh={refresh} />
+        <RefreshControls
+          loading={loading}
+          toast={toast}
+          refresh={refresh}
+          refreshHours={refreshHours}
+          onChangeRefreshHours={setRefreshHours}
+        />
       </div>
       {!data ? (
         <div className="user-dashboard-groups-empty">加载中…</div>
@@ -203,8 +227,13 @@ function CompanyLevel(props: {
                 </td>
                 <td className="user-dashboard-col-num">
                   <RowRefreshButton
+                    hours={refreshHours}
                     onRefresh={async () => {
-                      await api.refreshScope({ scope: 'game', gameId: g.gameId });
+                      await api.refreshScope({
+                        scope: 'game',
+                        gameId: g.gameId,
+                        lookbackHours: refreshHours,
+                      });
                       await refresh();
                     }}
                   />
@@ -224,6 +253,7 @@ function GameLevel(props: {
   onNavigate: (path: DrilldownPath) => void;
 }) {
   const { path, api } = props;
+  const [refreshHours, setRefreshHours] = useState<RefreshLookbackHours>(1);
   const fetchAll = useCallback(
     () => api.loadGameUsers(path.gameId),
     [api, path.gameId],
@@ -239,7 +269,13 @@ function GameLevel(props: {
     <section className="user-dashboard-records">
       <div className="user-dashboard-section-header">
         <h2>{path.gameName} · 用户列表（按今日 ECPM 条数降序）</h2>
-        <RefreshControls loading={loading} toast={toast} refresh={refresh} />
+        <RefreshControls
+          loading={loading}
+          toast={toast}
+          refresh={refresh}
+          refreshHours={refreshHours}
+          onChangeRefreshHours={setRefreshHours}
+        />
       </div>
       {!data ? (
         <div className="user-dashboard-groups-empty">加载中…</div>
@@ -287,11 +323,13 @@ function GameLevel(props: {
                 <td>{u.lastActiveAt ? formatRelative(u.lastActiveAt) : '从未活跃'}</td>
                 <td className="user-dashboard-col-num">
                   <RowRefreshButton
+                    hours={refreshHours}
                     onRefresh={async () => {
                       await api.refreshScope({
                         scope: 'user',
                         gameId: path.gameId,
                         userId: u.userId,
+                        lookbackHours: refreshHours,
                       });
                       await refresh();
                     }}
@@ -353,9 +391,17 @@ function RefreshControls(props: {
   loading: boolean;
   toast: { kind: string; message: string } | null;
   refresh: () => void;
+  refreshHours?: RefreshLookbackHours;
+  onChangeRefreshHours?: (value: RefreshLookbackHours) => void;
 }) {
   return (
     <div className="user-dashboard-records-controls">
+      {props.refreshHours !== undefined && props.onChangeRefreshHours && (
+        <RefreshWindowSelect
+          value={props.refreshHours}
+          onChange={props.onChangeRefreshHours}
+        />
+      )}
       <button
         type="button"
         className="user-dashboard-refresh"

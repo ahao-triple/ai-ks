@@ -39,11 +39,62 @@ export type SuperAdminDashboardApi = {
   ) => Promise<UserDashboardEcpmRecordsResult>;
   refreshSuperAdminScope: (
     body:
-      | { scope: 'company'; companyId: string }
-      | { scope: 'game'; gameId: string }
-      | { scope: 'user'; gameId: string; userId: string },
+      | {
+          scope: 'company';
+          companyId: string;
+          lookbackHours?: RefreshLookbackHours;
+        }
+      | {
+          scope: 'game';
+          gameId: string;
+          lookbackHours?: RefreshLookbackHours;
+        }
+      | {
+          scope: 'user';
+          gameId: string;
+          userId: string;
+          lookbackHours?: RefreshLookbackHours;
+        },
   ) => Promise<unknown>;
 };
+
+export type RefreshLookbackHours = 1 | 3 | 6 | 12 | 24;
+
+export const REFRESH_LOOKBACK_OPTIONS: ReadonlyArray<{
+  hours: RefreshLookbackHours;
+  label: string;
+}> = [
+  { hours: 1, label: '近 1 小时' },
+  { hours: 3, label: '近 3 小时' },
+  { hours: 6, label: '近 6 小时' },
+  { hours: 12, label: '近 12 小时' },
+  { hours: 24, label: '近 24 小时' },
+];
+
+export function RefreshWindowSelect(props: {
+  value: RefreshLookbackHours;
+  onChange: (value: RefreshLookbackHours) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label className="refresh-window-select">
+      刷新窗口
+      <select
+        value={props.value}
+        disabled={props.disabled}
+        onChange={(event) =>
+          props.onChange(Number(event.target.value) as RefreshLookbackHours)
+        }
+      >
+        {REFRESH_LOOKBACK_OPTIONS.map((opt) => (
+          <option key={opt.hours} value={opt.hours}>
+            {opt.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
 
 export type SuperAdminDashboardData = {
   overview: SuperAdminOverview;
@@ -66,6 +117,8 @@ const TIME_FILTERS = [
 export function SuperAdminDashboardPage(props: SuperAdminDashboardPageProps) {
   const { api, date, initialData } = props;
   const [drilldown, setDrilldown] = useState<DrilldownPath | null>(null);
+  const [companyRefreshHours, setCompanyRefreshHours] =
+    useState<RefreshLookbackHours>(1);
 
   const drilldownApi: DrilldownApi = {
     loadCompanyGames: (companyId) =>
@@ -202,10 +255,15 @@ export function SuperAdminDashboardPage(props: SuperAdminDashboardPageProps) {
             <span className="user-dashboard-subtitle">
               点击公司名进入下钻
             </span>
+            <RefreshWindowSelect
+              value={companyRefreshHours}
+              onChange={setCompanyRefreshHours}
+            />
           </div>
         </div>
         <CompanyDistributionTable
           companies={data?.companies ?? []}
+          refreshHours={companyRefreshHours}
           onSelect={(row) =>
             setDrilldown({
               kind: 'company',
@@ -213,6 +271,14 @@ export function SuperAdminDashboardPage(props: SuperAdminDashboardPageProps) {
               companyName: row.companyName,
             })
           }
+          onRefresh={async (row) => {
+            await api.refreshSuperAdminScope({
+              scope: 'company',
+              companyId: row.companyId,
+              lookbackHours: companyRefreshHours,
+            });
+            await refresh();
+          }}
         />
       </section>
     </div>
@@ -282,10 +348,12 @@ function CompanyDistributionTable({
   companies,
   onSelect,
   onRefresh,
+  refreshHours,
 }: {
   companies: SuperAdminCompanyRow[];
   onSelect?: (row: SuperAdminCompanyRow) => void;
   onRefresh?: (row: SuperAdminCompanyRow) => Promise<void>;
+  refreshHours?: RefreshLookbackHours;
 }) {
   if (companies.length === 0) {
     return (
@@ -336,7 +404,10 @@ function CompanyDistributionTable({
             </td>
             {onRefresh && (
               <td className="user-dashboard-col-num">
-                <RowRefreshButton onRefresh={() => onRefresh(row)} />
+                <RowRefreshButton
+                  hours={refreshHours}
+                  onRefresh={() => onRefresh(row)}
+                />
               </td>
             )}
           </tr>
@@ -348,15 +419,17 @@ function CompanyDistributionTable({
 
 export function RowRefreshButton(props: {
   onRefresh: () => Promise<void>;
+  hours?: RefreshLookbackHours;
   label?: string;
 }) {
   const [busy, setBusy] = useState(false);
+  const suffix = props.hours ? ` ${props.hours}h` : '';
   return (
     <button
       type="button"
       className="row-refresh-button"
       disabled={busy}
-      title={props.label ?? '刷新该行 ECPM'}
+      title={props.label ?? `刷新该行 ECPM${suffix ? `（${suffix.trim()}）` : ''}`}
       onClick={async () => {
         setBusy(true);
         try {
@@ -366,7 +439,7 @@ export function RowRefreshButton(props: {
         }
       }}
     >
-      {busy ? '同步中…' : '⟳'}
+      {busy ? `同步中${suffix}…` : `⟳${suffix}`}
     </button>
   );
 }

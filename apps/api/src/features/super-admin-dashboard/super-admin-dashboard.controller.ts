@@ -35,13 +35,27 @@ const userRecordsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(200).optional().default(50),
 });
 
+const lookbackHoursField = z
+  .union([z.literal(1), z.literal(3), z.literal(6), z.literal(12), z.literal(24)])
+  .optional()
+  .default(1);
+
 const refreshScopeSchema = z.union([
-  z.object({ scope: z.literal('company'), companyId: z.string().min(1) }),
-  z.object({ scope: z.literal('game'), gameId: z.string().min(1) }),
+  z.object({
+    scope: z.literal('company'),
+    companyId: z.string().min(1),
+    lookbackHours: lookbackHoursField,
+  }),
+  z.object({
+    scope: z.literal('game'),
+    gameId: z.string().min(1),
+    lookbackHours: lookbackHoursField,
+  }),
   z.object({
     scope: z.literal('user'),
     gameId: z.string().min(1),
     userId: z.string().min(1),
+    lookbackHours: lookbackHoursField,
   }),
 ]);
 
@@ -146,7 +160,7 @@ export class SuperAdminDashboardController {
         actorId: actor.username,
         actorType: actor.role,
         gameAppId,
-        lookbackHours: 1,
+        lookbackHours: input.lookbackHours,
         markTokenError: true,
         openIds,
       });

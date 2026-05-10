@@ -794,9 +794,22 @@ export const aiKsApi = {
   refreshSuperAdminScope(
     adminAccessToken: string,
     body:
-      | { scope: 'company'; companyId: string }
-      | { scope: 'game'; gameId: string }
-      | { scope: 'user'; gameId: string; userId: string },
+      | {
+          scope: 'company';
+          companyId: string;
+          lookbackHours?: 1 | 3 | 6 | 12 | 24;
+        }
+      | {
+          scope: 'game';
+          gameId: string;
+          lookbackHours?: 1 | 3 | 6 | 12 | 24;
+        }
+      | {
+          scope: 'user';
+          gameId: string;
+          userId: string;
+          lookbackHours?: 1 | 3 | 6 | 12 | 24;
+        },
   ) {
     return requestJson<{ results: unknown[] }>(`/admin/dashboard/refresh`, {
       accessToken: adminAccessToken,
