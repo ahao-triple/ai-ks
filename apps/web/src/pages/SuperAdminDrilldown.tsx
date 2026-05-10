@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   EcpmRecordTable,
+  RefreshWindowSelect,
+  RowRefreshButton,
   type EcpmRecordView,
+  type RefreshLookbackHours,
 } from '../components/domain';
 import { formatUserId } from '../lib/idFormat';
 import { useThrottledRefresh } from '../lib/useThrottledRefresh';
@@ -10,11 +13,6 @@ import type {
   SuperAdminUnderGameResult,
   UserDashboardEcpmRecordsResult,
 } from '../types/api';
-import {
-  RefreshWindowSelect,
-  RowRefreshButton,
-  type RefreshLookbackHours,
-} from './SuperAdminDashboardPage';
 
 export type DrilldownApi = {
   loadCompanyGames: (companyId: string) => Promise<SuperAdminUnderCompanyResult>;
