@@ -45,6 +45,9 @@ import type {
   KuaishouTokenStatusResult,
   PlatformConfig,
   PlatformConfigUpdateInput,
+  SuperAdminAnomalies,
+  SuperAdminCompanyRow,
+  SuperAdminOverview,
   UserDashboardEcpmRecordsResult,
   UserDashboardGameGroup,
   UserDashboardOverview,
@@ -737,5 +740,26 @@ export const aiKsApi = {
       `/users/me/dashboard/records${qs ? '?' + qs : ''}`,
       { accessToken },
     );
+  },
+
+  getSuperAdminDashboardOverview(adminAccessToken: string, date?: string) {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return requestJson<SuperAdminOverview>(`/admin/dashboard/overview${qs}`, {
+      accessToken: adminAccessToken,
+    });
+  },
+
+  getSuperAdminDashboardCompanies(adminAccessToken: string, date?: string) {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return requestJson<SuperAdminCompanyRow[]>(
+      `/admin/dashboard/companies${qs}`,
+      { accessToken: adminAccessToken },
+    );
+  },
+
+  getSuperAdminDashboardAnomalies(adminAccessToken: string) {
+    return requestJson<SuperAdminAnomalies>(`/admin/dashboard/anomalies`, {
+      accessToken: adminAccessToken,
+    });
   },
 };

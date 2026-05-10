@@ -629,3 +629,38 @@ export type UserDashboardEcpmRecordsResult = {
   totalToday: number;
   totalAll: number;
 };
+
+export type SuperAdminOverview = {
+  todayCount: number;
+  todayAverageEcpmYuan: number;
+  todayMaxEcpmYuan: number;
+  activeGameCount: number;
+  totalGameCount: number;
+  activeUserCount: number;
+};
+
+export type SuperAdminCompanyRow = {
+  companyId: string;
+  companyName: string;
+  ecpmCount: number;
+  activeGameCount: number;
+  totalGameCount: number;
+  activeUserCount: number;
+  averageEcpmYuan: number;
+  maxEcpmYuan: number;
+};
+
+export type SuperAdminAnomalies = {
+  syncFailures: Array<{
+    gameAppId: string;
+    gameName: string;
+    jobId: string;
+    failedAt: string;
+    errorMessage: string | null;
+  }>;
+  longSilent: Array<{
+    gameId: string;
+    gameName: string;
+    hoursSinceLastEcpm: number;
+  }>;
+};
