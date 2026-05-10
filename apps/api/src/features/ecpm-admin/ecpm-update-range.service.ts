@@ -60,6 +60,9 @@ type ResolvedGameBatch = {
   openIds: ResolvedOpenId[];
 };
 
+const DATA_HOUR_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?\+08:00$/;
+
 @Injectable()
 export class EcpmUpdateRangeService {
   constructor(
@@ -115,26 +118,30 @@ export class EcpmUpdateRangeService {
     const finishedJob = presentEcpmUpdateJob(
       await this.updateJobService.finishJob(aggregateJob.id),
     );
-    await this.auditLogService.record({
-      action: 'ecpm.update_finished',
-      actorId: input.actorId,
-      actorType: input.actorType,
-      metadata: {
-        endedDataHour,
-        failedCount: finishedJob.failedCount,
-        jobId: finishedJob.id,
-        mode: input.mode,
-        requestedGameCount: finishedJob.requestedGameCount,
-        requestedOpenIdCount: finishedJob.requestedOpenIdCount,
-        savedCount: finishedJob.savedCount,
-        scopeId: input.scopeId,
-        scopeType: input.scopeType,
-        skippedCount: finishedJob.skippedCount,
-        startedDataHour,
-      },
-      targetId: finishedJob.id,
-      targetType: 'ecpm_update_job',
-    });
+    try {
+      await this.auditLogService.record({
+        action: 'ecpm.update_finished',
+        actorId: input.actorId,
+        actorType: input.actorType,
+        metadata: {
+          endedDataHour,
+          failedCount: finishedJob.failedCount,
+          jobId: finishedJob.id,
+          mode: input.mode,
+          requestedGameCount: finishedJob.requestedGameCount,
+          requestedOpenIdCount: finishedJob.requestedOpenIdCount,
+          savedCount: finishedJob.savedCount,
+          scopeId: input.scopeId,
+          scopeType: input.scopeType,
+          skippedCount: finishedJob.skippedCount,
+          startedDataHour,
+        },
+        targetId: finishedJob.id,
+        targetType: 'ecpm_update_job',
+      });
+    } catch {
+      // The aggregate work is already finished; preserve that result.
+    }
 
     return finishedJob;
   }
@@ -189,7 +196,7 @@ export class EcpmUpdateRangeService {
         gameId: input.batch.gameId,
         jobId: input.jobId,
         openId: singleOpenId(input.batch),
-        status: 'FAILED',
+        status: isAuditOnlyFailure(error) ? 'SUCCEEDED' : 'FAILED',
         userId: singleUserId(input.batch),
       });
     }
@@ -205,6 +212,8 @@ export class EcpmUpdateRangeService {
         'startedDataHour and endedDataHour are required for range ECPM updates',
       );
     }
+    assertValidChinaDataHour(input.startedDataHour);
+    assertValidChinaDataHour(input.endedDataHour);
 
     return buildDataHoursBetween(input.startedDataHour, input.endedDataHour);
   }
@@ -409,4 +418,43 @@ function resolveSuccessfulItemStatus(status: string) {
 
 function readErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'unknown error';
+}
+
+function assertValidChinaDataHour(value: string) {
+  const match = DATA_HOUR_PATTERN.exec(value);
+  if (!match) {
+    throw new BadRequestException('Invalid ECPM update data-hour range');
+  }
+
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText, ms] =
+    match;
+  if (minuteText !== '00' || secondText !== '00' || Number(ms ?? 0) !== 0) {
+    throw new BadRequestException('Invalid ECPM update data-hour range');
+  }
+
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const date = new Date(Date.UTC(year, month - 1, day, hour));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day ||
+    date.getUTCHours() !== hour
+  ) {
+    throw new BadRequestException('Invalid ECPM update data-hour range');
+  }
+}
+
+function isAuditOnlyFailure(error: unknown) {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+
+  const taggedError = error as { auditOnly?: unknown; code?: unknown };
+
+  return (
+    taggedError.auditOnly === true || taggedError.code === 'AUDIT_LOG_FAILED'
+  );
 }

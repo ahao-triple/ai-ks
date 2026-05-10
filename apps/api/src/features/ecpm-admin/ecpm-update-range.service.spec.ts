@@ -200,6 +200,63 @@ describe('EcpmUpdateRangeService', () => {
     expect(prisma.items).toHaveLength(0);
   });
 
+  it('rejects invalid calendar data-hour range values', async () => {
+    const { prisma, rangeSyncService, service } = createService();
+
+    await expect(
+      service.update({
+        ...baseActor(),
+        endedDataHour: '2026-03-02T01:00:00+08:00',
+        mode: 'range',
+        scopeId: 'game-1',
+        scopeType: 'game',
+        startedDataHour: '2026-02-30T00:00:00+08:00',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(rangeSyncService.refreshRange).not.toHaveBeenCalled();
+    expect(prisma.jobs).toHaveLength(0);
+    expect(prisma.items).toHaveLength(0);
+  });
+
+  it('rejects non-hour data-hour range values', async () => {
+    const { prisma, rangeSyncService, service } = createService();
+
+    await expect(
+      service.update({
+        ...baseActor(),
+        endedDataHour: '2026-05-08T14:00:00+08:00',
+        mode: 'range',
+        scopeId: 'game-1',
+        scopeType: 'game',
+        startedDataHour: '2026-05-08T13:30:00+08:00',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(rangeSyncService.refreshRange).not.toHaveBeenCalled();
+    expect(prisma.jobs).toHaveLength(0);
+    expect(prisma.items).toHaveLength(0);
+  });
+
+  it('rejects non-China-offset data-hour range values', async () => {
+    const { prisma, rangeSyncService, service } = createService();
+
+    await expect(
+      service.update({
+        ...baseActor(),
+        endedDataHour: '2026-05-08T14:00:00+08:00',
+        mode: 'range',
+        scopeId: 'game-1',
+        scopeType: 'game',
+        startedDataHour: '2026-05-08T05:00:00Z',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(rangeSyncService.refreshRange).not.toHaveBeenCalled();
+    expect(prisma.jobs).toHaveLength(0);
+    expect(prisma.items).toHaveLength(0);
+  });
+
   it('finishes a company job as partial when one game refresh fails', async () => {
     const { prisma, rangeSyncService, service } = createService();
     rangeSyncService.refreshRange
@@ -236,6 +293,35 @@ describe('EcpmUpdateRangeService', () => {
     });
   });
 
+  it('does not record a hard failed item for delegated audit-only failures', async () => {
+    const { prisma, rangeSyncService, service } = createService();
+    const error = new Error('kuaishou audit unavailable') as Error & {
+      auditOnly: boolean;
+    };
+    error.auditOnly = true;
+    rangeSyncService.refreshRange.mockRejectedValueOnce(error);
+
+    const job = await service.update({
+      ...baseActor(),
+      mode: 'latest',
+      scopeId: 'game-1',
+      scopeType: 'game',
+    });
+
+    expect(prisma.items).toHaveLength(1);
+    expect(prisma.items[0]).toMatchObject({
+      errorMessage: 'kuaishou audit unavailable',
+      gameId: 'game-1',
+      savedCount: 0,
+      skipReason: null,
+      status: EcpmUpdateJobStatus.SUCCEEDED,
+    });
+    expect(job).toMatchObject({
+      failedCount: 0,
+      status: EcpmUpdateJobStatus.SUCCEEDED,
+    });
+  });
+
   it('records an audit log with scope, hours, counts, and job id', async () => {
     const { auditLogService, service } = createService();
 
@@ -267,6 +353,29 @@ describe('EcpmUpdateRangeService', () => {
       },
       targetId: job.id,
       targetType: 'ecpm_update_job',
+    });
+  });
+
+  it('returns the finished job when final aggregate audit logging fails', async () => {
+    const { auditLogService, service } = createService();
+    auditLogService.record.mockRejectedValueOnce(
+      new Error('audit database unavailable'),
+    );
+
+    const job = await service.update({
+      ...baseActor(),
+      mode: 'latest',
+      scopeId: 'game-1',
+      scopeType: 'game',
+    });
+
+    expect(auditLogService.record).toHaveBeenCalledTimes(1);
+    expect(job).toMatchObject({
+      failedCount: 0,
+      requestedGameCount: 1,
+      requestedOpenIdCount: 2,
+      savedCount: 3,
+      status: EcpmUpdateJobStatus.SUCCEEDED,
     });
   });
 
