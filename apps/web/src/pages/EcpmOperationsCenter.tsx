@@ -1,0 +1,523 @@
+import { useState } from 'react';
+import {
+  Button,
+  DataTable,
+  InputField,
+  Panel,
+  StatusBadge,
+  type DataTableColumn,
+} from '../components/ui';
+import { formatMoney } from '../lib/format';
+import type {
+  AdminCompany,
+  AdminGame,
+  EcpmDashboardRow,
+  EcpmDashboardScope,
+  EcpmUpdateJob,
+  EcpmUpdateJobItem,
+  EcpmUpdateJobStatus,
+  EcpmUpdateMode,
+  EcpmUpdateRequest,
+  EcpmUpdateScopeType,
+} from '../types/api';
+
+export type EcpmOperationsCenterProps = {
+  canUpdate: boolean;
+  companies: AdminCompany[];
+  games: AdminGame[];
+  jobs: EcpmUpdateJob[];
+  loadingAction: '' | 'ecpm-dashboard' | 'ecpm-update' | 'ecpm-jobs';
+  onDashboardQuery(
+    scope: EcpmDashboardScope,
+    query: Record<string, string | undefined>,
+  ): void;
+  onJobSelect(jobId: string): void;
+  onUpdate(request: EcpmUpdateRequest): void;
+  rows: EcpmDashboardRow[];
+  selectedJob?: EcpmUpdateJob;
+};
+
+type TabId = 'dashboard' | 'reports' | 'update';
+
+const dashboardScopes: Array<{ label: string; value: EcpmDashboardScope }> = [
+  { label: '最新数据', value: 'latest' },
+  { label: '公司', value: 'company' },
+  { label: '游戏', value: 'game' },
+  { label: '用户', value: 'user' },
+  { label: 'open_id', value: 'open_id' },
+];
+
+const updateScopes: Array<{ label: string; value: EcpmUpdateScopeType }> = [
+  { label: '公司', value: 'company' },
+  { label: '游戏', value: 'game' },
+  { label: '用户', value: 'user' },
+  { label: 'open_id', value: 'open_id' },
+];
+
+const updateModes: Array<{ label: string; value: EcpmUpdateMode }> = [
+  { label: '最新数据', value: 'latest' },
+  { label: '时间范围', value: 'range' },
+];
+
+const dashboardColumns: Array<DataTableColumn<EcpmDashboardRow>> = [
+  {
+    key: 'dataHour',
+    label: '数据小时',
+  },
+  {
+    key: 'companyName',
+    label: '公司',
+    render: (row) => row.companyName ?? row.companyId ?? '-',
+  },
+  {
+    key: 'gameName',
+    label: '游戏',
+    render: (row) => row.gameName || row.gameAppId,
+  },
+  {
+    key: 'openId',
+    label: 'open_id',
+    render: (row) => row.openId ?? row.openIdRecordId ?? '-',
+  },
+  {
+    key: 'username',
+    label: '用户',
+    render: (row) => row.username ?? row.userReadableId ?? row.userId ?? '-',
+  },
+  {
+    align: 'right',
+    key: 'eventCount',
+    label: '事件',
+    render: (row) => row.eventCount ?? '-',
+  },
+  {
+    align: 'right',
+    key: 'rawCost',
+    label: '原始金额',
+    render: (row) => formatMoney(row.rawCost),
+  },
+  {
+    align: 'right',
+    key: 'displayAmount',
+    label: '展示金额',
+    render: (row) => formatMoney(row.displayAmount),
+  },
+];
+
+const reportColumns: Array<DataTableColumn<EcpmUpdateJobItem>> = [
+  {
+    key: 'dataHour',
+    label: '数据小时',
+  },
+  {
+    key: 'gameAppId',
+    label: '游戏',
+    render: (row) => row.gameAppId ?? row.gameId ?? '-',
+  },
+  {
+    key: 'openId',
+    label: 'open_id',
+    render: (row) => row.openId ?? '-',
+  },
+  {
+    key: 'userId',
+    label: '用户',
+    render: (row) => row.userId ?? '-',
+  },
+  {
+    align: 'right',
+    key: 'savedCount',
+    label: '成功',
+  },
+  {
+    key: 'status',
+    label: '状态',
+    render: (row) => (
+      <StatusBadge tone={updateStatusTone(row.status)}>
+        {updateStatusLabel(row.status)}
+      </StatusBadge>
+    ),
+  },
+  {
+    key: 'skipReason',
+    label: '跳过原因',
+    render: (row) => row.skipReason ?? row.errorMessage ?? '-',
+  },
+];
+
+function buildDashboardQuery(
+  dashboardScope: EcpmDashboardScope,
+  scopeId: string,
+): Record<string, string | undefined> {
+  if (!scopeId) {
+    return {};
+  }
+
+  if (dashboardScope === 'company') {
+    return { companyId: scopeId };
+  }
+
+  if (dashboardScope === 'game') {
+    return { gameId: scopeId };
+  }
+
+  if (dashboardScope === 'user') {
+    return { userId: scopeId };
+  }
+
+  if (dashboardScope === 'open_id') {
+    return { openId: scopeId };
+  }
+
+  return {};
+}
+
+function updateStatusLabel(status: EcpmUpdateJobStatus) {
+  if (status === 'SUCCEEDED') {
+    return '成功';
+  }
+
+  if (status === 'FAILED') {
+    return '失败';
+  }
+
+  if (status === 'PARTIAL') {
+    return '部分';
+  }
+
+  return '运行中';
+}
+
+function updateStatusTone(status: EcpmUpdateJobStatus) {
+  if (status === 'SUCCEEDED') {
+    return 'success';
+  }
+
+  if (status === 'FAILED') {
+    return 'danger';
+  }
+
+  if (status === 'PARTIAL') {
+    return 'warning';
+  }
+
+  return 'info';
+}
+
+function scopeLabel(scope: EcpmUpdateScopeType) {
+  return updateScopes.find((item) => item.value === scope)?.label ?? scope;
+}
+
+function modeLabel(mode: EcpmUpdateMode) {
+  return updateModes.find((item) => item.value === mode)?.label ?? mode;
+}
+
+export function EcpmOperationsCenter({
+  canUpdate,
+  companies,
+  games,
+  jobs,
+  loadingAction,
+  onDashboardQuery,
+  onJobSelect,
+  onUpdate,
+  rows,
+  selectedJob,
+}: EcpmOperationsCenterProps) {
+  const [activeTab, setActiveTab] = useState<TabId>('dashboard');
+  const [dashboardScope, setDashboardScope] =
+    useState<EcpmDashboardScope>('latest');
+  const [updateMode, setUpdateMode] = useState<EcpmUpdateMode>('latest');
+  const [updateScopeType, setUpdateScopeType] =
+    useState<EcpmUpdateScopeType>('game');
+  const [scopeId, setScopeId] = useState('');
+  const [startedDataHour, setStartedDataHour] = useState('');
+  const [endedDataHour, setEndedDataHour] = useState('');
+
+  const dashboardLoading = loadingAction === 'ecpm-dashboard';
+  const updateLoading = loadingAction === 'ecpm-update';
+  const jobsLoading = loadingAction === 'ecpm-jobs';
+  const loading = loadingAction !== '';
+  const trimmedScopeId = scopeId.trim();
+  const reportRows = selectedJob?.items ?? [];
+  const updateDisabled = !canUpdate || loading || !trimmedScopeId;
+
+  const jobColumns: Array<DataTableColumn<EcpmUpdateJob>> = [
+    {
+      key: 'id',
+      label: '任务',
+    },
+    {
+      key: 'scopeType',
+      label: '范围',
+      render: (job) => `${scopeLabel(job.scopeType)} ${job.scopeId}`,
+    },
+    {
+      key: 'mode',
+      label: '模式',
+      render: (job) => modeLabel(job.mode),
+    },
+    {
+      key: 'status',
+      label: '状态',
+      render: (job) => (
+        <StatusBadge tone={updateStatusTone(job.status)}>
+          {updateStatusLabel(job.status)}
+        </StatusBadge>
+      ),
+    },
+    {
+      align: 'right',
+      key: 'savedCount',
+      label: '成功',
+    },
+    {
+      align: 'right',
+      key: 'failedCount',
+      label: '失败',
+    },
+    {
+      align: 'right',
+      key: 'skippedCount',
+      label: '跳过',
+    },
+    {
+      key: 'actions',
+      label: '操作',
+      render: (job) => (
+        <Button
+          compact
+          disabled={jobsLoading}
+          onClick={() => onJobSelect(job.id)}
+          variant={selectedJob?.id === job.id ? 'secondary' : 'ghost'}
+        >
+          查看
+        </Button>
+      ),
+    },
+  ];
+
+  function handleDashboardQuery() {
+    onDashboardQuery(
+      dashboardScope,
+      buildDashboardQuery(dashboardScope, trimmedScopeId),
+    );
+  }
+
+  function handleUpdate() {
+    onUpdate({
+      endedDataHour: updateMode === 'range' ? endedDataHour : null,
+      mode: updateMode,
+      scopeId: trimmedScopeId,
+      scopeType: updateScopeType,
+      startedDataHour: updateMode === 'range' ? startedDataHour : null,
+    });
+  }
+
+  return (
+    <div className="ecpm-center">
+      <div aria-label="ECPM operations" className="ecpm-tabs" role="tablist">
+        <Button
+          aria-selected={activeTab === 'dashboard'}
+          compact
+          onClick={() => setActiveTab('dashboard')}
+          role="tab"
+          variant={activeTab === 'dashboard' ? 'primary' : 'secondary'}
+        >
+          数据
+        </Button>
+        <Button
+          aria-selected={activeTab === 'reports'}
+          compact
+          onClick={() => setActiveTab('reports')}
+          role="tab"
+          variant={activeTab === 'reports' ? 'primary' : 'secondary'}
+        >
+          报告
+        </Button>
+        <Button
+          aria-selected={activeTab === 'update'}
+          compact
+          onClick={() => setActiveTab('update')}
+          role="tab"
+          variant={activeTab === 'update' ? 'primary' : 'secondary'}
+        >
+          更新
+        </Button>
+      </div>
+
+      <div className="ecpm-tab-panel" hidden={activeTab !== 'dashboard'} role="tabpanel">
+        <Panel
+          actions={
+            <Button
+              compact
+              disabled={dashboardLoading}
+              onClick={handleDashboardQuery}
+              variant="secondary"
+            >
+              {dashboardLoading ? '查询中' : '查询'}
+            </Button>
+          }
+          title="ECPM 数据"
+        >
+          <div className="ecpm-controls" role="group">
+            {dashboardScopes.map((scope) => (
+              <Button
+                compact
+                key={scope.value}
+                onClick={() => setDashboardScope(scope.value)}
+                variant={dashboardScope === scope.value ? 'primary' : 'secondary'}
+              >
+                {scope.label}
+              </Button>
+            ))}
+          </div>
+          <InputField
+            id="ecpm-dashboard-scope-id"
+            label="查询 ID"
+            onChange={setScopeId}
+            value={scopeId}
+          />
+          <DataTable
+            columns={dashboardColumns}
+            emptyLabel="暂无数据"
+            getRowKey={(row, index) => row.id ?? `${row.gameId}-${row.openId ?? index}`}
+            rows={rows}
+          />
+        </Panel>
+      </div>
+
+      <div className="ecpm-tab-panel" hidden={activeTab !== 'reports'} role="tabpanel">
+        <Panel
+          actions={
+            <div className="ecpm-report-grid">
+              <StatusBadge tone="success">成功 {selectedJob?.savedCount ?? 0}</StatusBadge>
+              <StatusBadge tone="danger">失败 {selectedJob?.failedCount ?? 0}</StatusBadge>
+              <StatusBadge tone="warning">跳过 {selectedJob?.skippedCount ?? 0}</StatusBadge>
+            </div>
+          }
+          title="更新报告"
+        >
+          <DataTable
+            columns={jobColumns}
+            emptyLabel={jobsLoading ? '加载中' : '暂无任务'}
+            getRowKey={(job) => job.id}
+            rows={jobs}
+          />
+          <DataTable
+            columns={reportColumns}
+            emptyLabel="暂无报告"
+            getRowKey={(item) => item.id}
+            rows={reportRows}
+          />
+        </Panel>
+      </div>
+
+      <div className="ecpm-tab-panel" hidden={activeTab !== 'update'} role="tabpanel">
+        <Panel
+          actions={
+            <Button compact disabled={updateDisabled} onClick={handleUpdate}>
+              {updateLoading ? '更新中' : '更新'}
+            </Button>
+          }
+          title="ECPM 更新"
+        >
+          <div className="ecpm-controls" role="group">
+            {updateModes.map((mode) => (
+              <Button
+                compact
+                key={mode.value}
+                onClick={() => setUpdateMode(mode.value)}
+                variant={updateMode === mode.value ? 'primary' : 'secondary'}
+              >
+                {mode.label}
+              </Button>
+            ))}
+          </div>
+          <div className="ecpm-controls" role="group">
+            {updateScopes.map((scope) => (
+              <Button
+                compact
+                key={scope.value}
+                onClick={() => setUpdateScopeType(scope.value)}
+                variant={updateScopeType === scope.value ? 'primary' : 'secondary'}
+              >
+                {scope.label}
+              </Button>
+            ))}
+          </div>
+          <div className="ecpm-controls">
+            {updateScopeType === 'company' ? (
+              <label className="ecpm-select-field" htmlFor="ecpm-company-scope">
+                <span>公司</span>
+                <select
+                  id="ecpm-company-scope"
+                  onChange={(event) => setScopeId(event.currentTarget.value)}
+                  value={scopeId}
+                >
+                  <option value="">未选择</option>
+                  {companies.map((company) => (
+                    <option key={company.id} value={company.id}>
+                      {company.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {updateScopeType === 'game' ? (
+              <label className="ecpm-select-field" htmlFor="ecpm-game-scope">
+                <span>游戏</span>
+                <select
+                  id="ecpm-game-scope"
+                  onChange={(event) => setScopeId(event.currentTarget.value)}
+                  value={scopeId}
+                >
+                  <option value="">未选择</option>
+                  {games.map((game) => (
+                    <option key={game.id} value={game.id}>
+                      {game.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {updateScopeType === 'user' ? (
+              <InputField
+                id="ecpm-user-scope"
+                label="用户"
+                onChange={setScopeId}
+                value={scopeId}
+              />
+            ) : null}
+            {updateScopeType === 'open_id' ? (
+              <InputField
+                id="ecpm-open-id-scope"
+                label="open_id"
+                onChange={setScopeId}
+                value={scopeId}
+              />
+            ) : null}
+          </div>
+          {updateMode === 'range' ? (
+            <div className="ecpm-controls">
+              <InputField
+                id="ecpm-started-data-hour"
+                label="开始小时"
+                onChange={setStartedDataHour}
+                type="datetime-local"
+                value={startedDataHour}
+              />
+              <InputField
+                id="ecpm-ended-data-hour"
+                label="结束小时"
+                onChange={setEndedDataHour}
+                type="datetime-local"
+                value={endedDataHour}
+              />
+            </div>
+          ) : null}
+        </Panel>
+      </div>
+    </div>
+  );
+}
