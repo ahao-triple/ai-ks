@@ -40,6 +40,7 @@ const operationLabels: Record<string, string> = {
   'company-admin-scopes': '保存公司管理员授权范围',
   'company-admin-update': '保存公司管理员账号',
   'company-admins': '刷新公司管理员账号',
+  'clear-operational-data': '清空业务数据',
   'company-balance': '充值公司余额',
   'company-create': '创建公司',
   'ecpm-dashboard': '查询 ECPM 看板',

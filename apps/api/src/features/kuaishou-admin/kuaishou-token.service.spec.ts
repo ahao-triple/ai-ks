@@ -306,6 +306,17 @@ describe('KuaishouTokenService', () => {
     expect(oauth.lastRefreshInput).toBeUndefined();
   });
 
+  it('returns a debuggable error when report credentials are not configured', async () => {
+    const { service } = createService();
+
+    await expect(service.resolveReportCredentials()).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    await expect(service.resolveReportCredentials()).rejects.toThrow(
+      '快手 access token 未配置',
+    );
+  });
+
   it('reports expired status when the refresh token has expired', async () => {
     const { service } = createService({
       token: activeToken({

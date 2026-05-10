@@ -87,6 +87,10 @@ const allocateGameBudgetSchema = z.object({
   reason: reasonSchema,
 });
 
+const clearOperationalDataSchema = z.object({
+  confirmation: z.literal('CLEAR_OPERATIONAL_DATA'),
+});
+
 @Controller()
 @UseGuards(AdminJwtGuard)
 export class AdminResourcesController {
@@ -317,6 +321,25 @@ export class AdminResourcesController {
     };
   }
 
+  @Post('admin/system/operational-data/clear')
+  @UseGuards(SuperAdminGuard)
+  async clearOperationalData(
+    @CurrentAdmin() admin: AdminPrincipal,
+    @Body() body: unknown,
+  ) {
+    parseBody(
+      clearOperationalDataSchema,
+      body,
+      'Clear confirmation is invalid',
+    );
+    await this.adminResourcesService.clearOperationalData({
+      actor: requireSuperAdminPrincipal(admin),
+    });
+
+    return {
+      success: true,
+    };
+  }
 }
 
 function parseBody<T extends z.ZodTypeAny>(

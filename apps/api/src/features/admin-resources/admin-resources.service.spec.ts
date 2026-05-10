@@ -85,6 +85,30 @@ describe('AdminResourcesService', () => {
     });
   });
 
+  it('clears operational data while preserving companies, games, and admin records', async () => {
+    const prisma = createFakePrisma();
+    const service = new AdminResourcesService(prisma, createAccessControl());
+
+    await service.clearOperationalData({
+      actor: adminActor,
+    });
+
+    expect(prisma.executedSql).toHaveLength(1);
+    expect(prisma.executedSql[0]).toContain('TRUNCATE TABLE');
+    expect(prisma.executedSql[0]).toContain('raw_ecpms');
+    expect(prisma.executedSql[0]).toContain('game_open_ids');
+    expect(prisma.executedSql[0]).toContain('user_accounts');
+    expect(prisma.executedSql[0]).toContain('agents');
+    expect(prisma.executedSql[0]).toContain('platform_configs');
+    expect(prisma.executedSql[0]).toContain('kuaishou_platform_tokens');
+    expect(prisma.executedSql[0]).toContain('ecpm_update_jobs');
+    expect(prisma.executedSql[0]).toContain('RESTART IDENTITY CASCADE');
+    expect(prisma.executedSql[0]).not.toContain('companies');
+    expect(prisma.executedSql[0]).not.toContain('games');
+    expect(prisma.executedSql[0]).not.toContain('company_admin_accounts');
+    expect(prisma.executedSql[0]).not.toContain('company_admin_scopes');
+  });
+
   it('creates a company with zero balance and writes an audit log', async () => {
     const prisma = createFakePrisma();
     const service = new AdminResourcesService(prisma, createAccessControl());

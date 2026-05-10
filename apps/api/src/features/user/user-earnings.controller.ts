@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Query } from '@nestjs/common';
 import { GameDataStore } from '../game-data/game-data.store';
 import { presentEcpmRow, presentMoneyLi } from '../../common/presenters/money-presenter';
 import { resolveChinaDayRange } from './china-day-range';
@@ -13,7 +13,7 @@ export class UserEarningsController {
     @Query('date') date?: string,
   ) {
     if (!identity) {
-      throw new Error('identity is required');
+      throw new BadRequestException('identity 不能为空');
     }
 
     const range = resolveChinaDayRange(date);

@@ -1,7 +1,9 @@
+import { BadRequestException } from '@nestjs/common';
+
 export function resolveChinaDayRange(date?: string) {
   const day = date ?? currentChinaDate();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) {
-    throw new Error('date must use YYYY-MM-DD format');
+    throw new BadRequestException('date 必须使用 YYYY-MM-DD 格式');
   }
 
   const startAt = new Date(`${day}T00:00:00+08:00`);

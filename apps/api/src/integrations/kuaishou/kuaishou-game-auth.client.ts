@@ -1,5 +1,11 @@
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  Inject,
+  Injectable,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { summarizeKuaishouPayload } from './kuaishou-error-message';
 
 type ConfigReader = Pick<ConfigService, 'get'>;
 
@@ -36,7 +42,9 @@ export class KuaishouGameAuthClient {
     const openId = readString(payload, 'open_id') ?? readString(payload, 'openId');
 
     if (!response.ok || !openId) {
-      throw new Error(`Kuaishou code2Session failed: ${JSON.stringify(payload)}`);
+      throw new BadGatewayException(
+        `快手 code2Session 失败：${summarizeKuaishouPayload(payload)}`,
+      );
     }
 
     return {
@@ -50,7 +58,9 @@ export class KuaishouGameAuthClient {
 
   private assertRealMode() {
     if (this.configService.get<string>('KUAISHOU_API_MODE') !== 'real') {
-      throw new Error('KUAISHOU_API_MODE must be real for Kuaishou code2Session');
+      throw new BadRequestException(
+        'KUAISHOU_API_MODE 必须配置为 real 后才能调用快手 code2Session',
+      );
     }
   }
 }

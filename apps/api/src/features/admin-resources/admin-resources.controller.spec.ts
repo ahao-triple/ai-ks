@@ -231,6 +231,32 @@ describe('AdminResourcesController', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('clears operational data when confirmation phrase is provided', async () => {
+    const service = createService();
+    const controller = new AdminResourcesController(service);
+
+    await expect(
+      controller.clearOperationalData(admin, {
+        confirmation: 'CLEAR_OPERATIONAL_DATA',
+      }),
+    ).resolves.toEqual({
+      success: true,
+    });
+    expect(service.lastClearOperationalDataInput).toEqual({
+      actor: admin,
+    });
+  });
+
+  it('rejects operational data clear when confirmation phrase is invalid', async () => {
+    const controller = new AdminResourcesController(createService());
+
+    await expect(
+      controller.clearOperationalData(admin, {
+        confirmation: 'RESET_TEST_DATA',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('direct write method calls still reject company admins', async () => {
     const service = createService();
     const controller = new AdminResourcesController(service);
@@ -269,11 +295,17 @@ describe('AdminResourcesController', () => {
         amountYuan: '1.00',
       }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(
+      controller.clearOperationalData(companyAdmin, {
+        confirmation: 'CLEAR_OPERATIONAL_DATA',
+      }),
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(service.lastCreateCompanyInput).toBeUndefined();
     expect(service.lastCreateGameInput).toBeUndefined();
     expect(service.lastUpdateGameInput).toBeUndefined();
     expect(service.lastAllocateGameBudgetInput).toBeUndefined();
     expect(service.lastAdjustCompanyBalanceInput).toBeUndefined();
+    expect(service.lastClearOperationalDataInput).toBeUndefined();
   });
 });
 
@@ -313,6 +345,7 @@ function createService(options: { game?: Record<string, unknown> } = {}) {
   return {
     lastAdjustCompanyBalanceInput: undefined as unknown,
     lastAllocateGameBudgetInput: undefined as unknown,
+    lastClearOperationalDataInput: undefined as unknown,
     lastCreateCompanyInput: undefined as unknown,
     lastCreateGameInput: undefined as unknown,
     lastListCompaniesInput: undefined as unknown,
@@ -360,6 +393,9 @@ function createService(options: { game?: Record<string, unknown> } = {}) {
         },
         game,
       };
+    },
+    clearOperationalData: async function (input: unknown) {
+      this.lastClearOperationalDataInput = input;
     },
   } as any;
 }

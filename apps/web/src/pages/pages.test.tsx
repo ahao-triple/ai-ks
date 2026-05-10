@@ -332,6 +332,7 @@ function operationsWorkspaceProps(
     onBudgetAmountChange: () => undefined,
     onBudgetGameIdChange: () => undefined,
     onBudgetReasonChange: () => undefined,
+    onClearOperationalData: () => undefined,
     onCloseWithdrawal: () => undefined,
     onConfirmSettlement: () => undefined,
     onCloseGameConfig: () => undefined,

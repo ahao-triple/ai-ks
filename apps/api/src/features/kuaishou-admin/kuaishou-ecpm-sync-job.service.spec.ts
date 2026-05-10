@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { KuaishouEcpmSyncJobStatus } from '@prisma/client';
 import {
   KuaishouEcpmSyncJobService,
@@ -87,7 +88,10 @@ describe('KuaishouEcpmSyncJobService', () => {
     const { service } = createService();
 
     expect(() => service.listJobs({ limit: 20 } as never)).toThrow(
-      'Kuaishou ECPM sync job scope is required',
+      BadRequestException,
+    );
+    expect(() => service.listJobs({ limit: 20 } as never)).toThrow(
+      '缺少快手 ECPM 同步任务查询范围',
     );
   });
 

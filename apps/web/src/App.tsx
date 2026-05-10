@@ -2307,6 +2307,46 @@ export function App() {
     }, 'admin');
   }
 
+  async function clearOperationalData() {
+    if (!adminAccessToken) {
+      reportActionError('clear-operational-data', '请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin('clear-operational-data')) {
+      return;
+    }
+
+    await runAction('clear-operational-data', async (isCurrent) => {
+      await aiKsApi.clearOperationalData(adminAccessToken);
+      if (!isCurrent()) {
+        return;
+      }
+
+      clearKuaishouTokenState();
+      setKuaishouEcpmJobs([]);
+      setConfigKuaishouEcpmJobs([]);
+      setGameSession(undefined);
+      setRefreshResult(undefined);
+      setEcpmDashboardRows([]);
+      setEcpmUpdateJobs([]);
+      setSelectedEcpmUpdateJob(undefined);
+      setSettlementPreview(undefined);
+      setSettlementBatches([]);
+      setSelectedSettlementDetail(undefined);
+      setAdminWithdrawals([]);
+      setAuditLogs([]);
+      setSelectedWithdrawalDetail(undefined);
+      setBusinessClosure(undefined);
+      setJsCode('');
+      await loadAdminResourcesForToken(adminAccessToken, isCurrent);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setNotice('业务数据已清空，公司、游戏和管理员信息已保留');
+    }, 'admin');
+  }
+
   async function createAdminCompany() {
     if (!adminAccessToken) {
       reportActionError('company-create', '请先登录管理员账号');
@@ -3546,6 +3586,7 @@ export function App() {
           onBudgetReasonChange={setBudgetReason}
           onCloseGameConfig={closeGameConfig}
           onCloseWithdrawal={closeAdminWithdrawal}
+          onClearOperationalData={clearOperationalData}
           onConfirmSettlement={confirmSettlement}
           onConfigBudgetAmountChange={setConfigBudgetAmountYuan}
           onConfigBudgetReasonChange={setConfigBudgetReason}
@@ -3718,6 +3759,7 @@ function isOperationsBusyAction(
     case 'company-admin-scopes':
     case 'company-admin-update':
     case 'company-admins':
+    case 'clear-operational-data':
     case 'company-balance':
     case 'company-create':
     case 'ecpm-dashboard':

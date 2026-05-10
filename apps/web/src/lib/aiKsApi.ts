@@ -683,6 +683,16 @@ export const aiKsApi = {
     });
   },
 
+  clearOperationalData(adminAccessToken: string) {
+    return requestJson<{ success: true }>('/admin/system/operational-data/clear', {
+      accessToken: adminAccessToken,
+      body: {
+        confirmation: 'CLEAR_OPERATIONAL_DATA',
+      },
+      method: 'POST',
+    });
+  },
+
   getBusinessClosure(adminAccessToken: string) {
     return requestJson<BusinessClosureReport>('/admin/business-closure', {
       accessToken: adminAccessToken,

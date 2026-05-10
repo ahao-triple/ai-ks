@@ -59,6 +59,7 @@ export type OperationsWorkspaceBusyAction =
   | 'company-admins'
   | 'company-balance'
   | 'company-create'
+  | 'clear-operational-data'
   | 'ecpm-dashboard'
   | 'ecpm-jobs'
   | 'ecpm-update'
@@ -127,6 +128,7 @@ type SuperAdminDialog =
   | 'confirm-settlement'
   | 'create-company'
   | 'create-game'
+  | 'clear-operational-data'
   | 'recharge-company'
   | 'update-company-admin';
 
@@ -198,6 +200,7 @@ export interface OperationsWorkspaceProps {
   onBudgetReasonChange(value: string): void;
   onCloseGameConfig(): void;
   onCloseWithdrawal(batchId: string): void;
+  onClearOperationalData(): void;
   onConfirmSettlement(): void;
   onConfigBudgetAmountChange(value: string): void;
   onConfigBudgetReasonChange(value: string): void;
@@ -458,6 +461,7 @@ export function OperationsWorkspace({
   onBudgetReasonChange,
   onCloseGameConfig,
   onCloseWithdrawal,
+  onClearOperationalData,
   onConfirmSettlement,
   onConfigBudgetAmountChange,
   onConfigBudgetReasonChange,
@@ -595,6 +599,8 @@ export function OperationsWorkspace({
   );
   const [activePane, setActivePane] = useState<OperationsPane>('overview');
   const [activeDialog, setActiveDialog] = useState<SuperAdminDialog>('');
+  const [clearOperationalDataConfirmation, setClearOperationalDataConfirmation] =
+    useState('');
   const [pendingWithdrawalAction, setPendingWithdrawalAction] =
     useState<PendingWithdrawalAction>();
   const [newCompanyAdminUsername, setNewCompanyAdminUsername] = useState('');
@@ -652,6 +658,7 @@ export function OperationsWorkspace({
 
   function closeDialog() {
     setActiveDialog('');
+    setClearOperationalDataConfirmation('');
   }
 
   function openCompanyAdminUpdateDialog(admin: AdminCompanyAdmin) {
@@ -1914,6 +1921,30 @@ export function OperationsWorkspace({
               </Button>
             </div>
           </Panel>
+          <Panel
+            description="保留公司、游戏和管理员账号，只清空联调产生的业务数据"
+            title="数据清理"
+          >
+            <div className="workflow-card">
+              <h3>清空业务数据</h3>
+              <p>
+                删除用户、代理、open_id、ECPM、结算、提现、平台授权、同步任务、平台配置和审计日志。
+              </p>
+              <dl className="workflow-meta">
+                <dt>保留数据</dt>
+                <dd>公司信息、游戏信息、超级管理员和公司管理员信息。</dd>
+              </dl>
+              <Button
+                disabled={workspaceBusy}
+                onClick={() => setActiveDialog('clear-operational-data')}
+                variant="danger"
+              >
+                {busyAction === 'clear-operational-data'
+                  ? '清空中'
+                  : '打开清空弹窗'}
+              </Button>
+            </div>
+          </Panel>
         </section>
       ) : null}
 
@@ -2732,6 +2763,45 @@ export function OperationsWorkspace({
             <p className="overview-empty">暂无公司，请先创建公司和游戏。</p>
           ) : null}
         </div>
+      </Dialog>
+
+      <Dialog
+        description="仅清空联调和业务流水；公司、游戏、超级管理员和公司管理员信息会保留。"
+        footer={
+          <>
+            <Button onClick={closeDialog} variant="ghost">
+              取消
+            </Button>
+            <Button
+              disabled={
+                workspaceBusy ||
+                clearOperationalDataConfirmation.trim() !==
+                  'CLEAR_OPERATIONAL_DATA'
+              }
+              onClick={onClearOperationalData}
+              variant="danger"
+            >
+              {busyAction === 'clear-operational-data' ? '清空中' : '确认清空'}
+            </Button>
+          </>
+        }
+        onClose={closeDialog}
+        open={isSuperAdmin && activeDialog === 'clear-operational-data'}
+        title="清空业务数据"
+      >
+        <StatusBadge tone="danger">
+          将删除用户、代理、open_id、ECPM、结算、提现、平台授权、同步任务、平台配置和审计日志
+        </StatusBadge>
+        <InputField
+          disabled={workspaceBusy}
+          label="确认口令"
+          onChange={setClearOperationalDataConfirmation}
+          placeholder="输入 CLEAR_OPERATIONAL_DATA"
+          value={clearOperationalDataConfirmation}
+        />
+        <p className="field-help">
+          公司、游戏、超级管理员和公司管理员信息会保留；清空后的业务数据不可恢复。
+        </p>
       </Dialog>
 
       {isSuperAdmin ? <SuperAdminGuide /> : null}

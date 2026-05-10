@@ -1,3 +1,4 @@
+import { BadGatewayException, BadRequestException } from '@nestjs/common';
 import { KuaishouEcpmClient } from './kuaishou-ecpm.client';
 
 const originalFetch = globalThis.fetch;
@@ -25,7 +26,7 @@ describe('KuaishouEcpmClient', () => {
         gameAppId: 'game-1',
         openIds: ['open-1'],
       }),
-    ).rejects.toThrow('KUAISHOU_API_MODE must be real');
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(tokenService.resolveReportCredentials).not.toHaveBeenCalled();
     expect(globalThis.fetch).toBe(originalFetch);
   });
@@ -139,6 +140,48 @@ describe('KuaishouEcpmClient', () => {
       }),
     ).rejects.toThrow('Kuaishou access token is not configured');
     expect(globalThis.fetch).toBe(originalFetch);
+  });
+
+  it('returns a debuggable upstream error when Kuaishou refresh fails', async () => {
+    globalThis.fetch = jest.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          code: 401,
+          message: 'access token expired',
+          request_id: 'req-1',
+        }),
+        {
+          headers: { 'content-type': 'application/json' },
+          status: 401,
+        },
+      );
+    }) as typeof fetch;
+    const tokenService = createTokenService({
+      accessToken: 'db-access-token',
+      advertiserId: 'db-advertiser-id',
+      source: 'database',
+    });
+    const client = createClient({
+      config: {
+        KUAISHOU_API_MODE: 'real',
+      },
+      tokenService,
+    });
+
+    await expect(
+      client.refresh({
+        dataHour: '2026-05-08',
+        gameAppId: 'game-1',
+        openIds: ['open-1'],
+      }),
+    ).rejects.toThrow(BadGatewayException);
+    await expect(
+      client.refresh({
+        dataHour: '2026-05-08',
+        gameAppId: 'game-1',
+        openIds: ['open-1'],
+      }),
+    ).rejects.toThrow('快手 ECPM 刷新失败：');
   });
 });
 

@@ -28,6 +28,7 @@ import {
 
 type AdminResourcesPrisma = Pick<
   PrismaService,
+  | '$executeRawUnsafe'
   | '$transaction'
   | 'agent'
   | 'auditLog'
@@ -125,9 +126,31 @@ export type AllocateGameBudgetResult = {
   game: GameWithCompany;
 };
 
+export type ClearOperationalDataInput = {
+  actor: AdminActor;
+};
+
 export const ADMIN_RESOURCES_NOW = Symbol('ADMIN_RESOURCES_NOW');
 
 const ALLOWED_ECPM_SYNC_INTERVAL_HOURS = new Set([1, 3, 6, 12, 24]);
+
+const OPERATIONAL_DATA_TABLE_NAMES = [
+  'settlement_batch_items',
+  'settlement_batches',
+  'withdrawal_details',
+  'withdrawal_batches',
+  'raw_ecpms',
+  'game_open_ids',
+  'user_agent_binding_history',
+  'user_accounts',
+  'agents',
+  'platform_configs',
+  'audit_logs',
+  'kuaishou_platform_tokens',
+  'kuaishou_ecpm_sync_jobs',
+  'ecpm_update_job_items',
+  'ecpm_update_jobs',
+] as const;
 
 @Injectable()
 export class AdminResourcesService {
@@ -597,6 +620,13 @@ export class AdminResourcesService {
         game: updatedGame,
       };
     });
+  }
+
+  async clearOperationalData(_input: ClearOperationalDataInput) {
+    const tables = OPERATIONAL_DATA_TABLE_NAMES.join(', ');
+    await this.prisma.$executeRawUnsafe(
+      `TRUNCATE TABLE ${tables} RESTART IDENTITY CASCADE`,
+    );
   }
 
   private assertPositiveAmount(amountLi: bigint) {

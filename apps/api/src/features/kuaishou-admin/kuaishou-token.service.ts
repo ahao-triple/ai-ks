@@ -195,7 +195,9 @@ export class KuaishouTokenService {
       };
     }
 
-    throw new Error('Kuaishou access token is not configured');
+    throw new BadRequestException(
+      '快手 access token 未配置，请先完成快手授权，或配置 KUAISHOU_ACCESS_TOKEN 和 KUAISHOU_ADVERTISER_ID',
+    );
   }
 
   async markTokenError(message: string) {

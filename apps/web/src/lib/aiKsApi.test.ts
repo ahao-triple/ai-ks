@@ -216,6 +216,8 @@ describe('aiKsApi', () => {
       .returns.resolves.toEqualTypeOf<{ game: AdminGame }>();
     expectTypeOf(aiKsApi.allocateGameBudget)
       .returns.resolves.toEqualTypeOf<AdminGameBudgetAllocationResult>();
+    expectTypeOf(aiKsApi.clearOperationalData)
+      .returns.resolves.toEqualTypeOf<{ success: true }>();
     expectTypeOf(aiKsApi.getBusinessClosure)
       .returns.resolves.toEqualTypeOf<BusinessClosureReport>();
   });
@@ -299,6 +301,26 @@ describe('aiKsApi', () => {
           'Content-Type': 'application/json',
         },
         method: 'GET',
+      },
+    );
+  });
+
+  it('clears operational data with super admin confirmation payload', async () => {
+    mockJsonResponse({ success: true });
+
+    await aiKsApi.clearOperationalData('admin-token');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/system/operational-data/clear`,
+      {
+        body: JSON.stringify({
+          confirmation: 'CLEAR_OPERATIONAL_DATA',
+        }),
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
       },
     );
   });

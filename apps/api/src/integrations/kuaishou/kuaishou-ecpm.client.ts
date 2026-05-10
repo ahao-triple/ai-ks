@@ -1,6 +1,12 @@
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  BadGatewayException,
+  BadRequestException,
+  Inject,
+  Injectable,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { KuaishouTokenService } from '../../features/kuaishou-admin/kuaishou-token.service';
+import { summarizeKuaishouPayload } from './kuaishou-error-message';
 
 type ConfigReader = Pick<ConfigService, 'get'>;
 
@@ -58,7 +64,9 @@ export class KuaishouEcpmClient {
     const payload = (await response.json()) as Record<string, unknown>;
 
     if (!response.ok) {
-      throw new Error(`Kuaishou ECPM refresh failed: ${JSON.stringify(payload)}`);
+      throw new BadGatewayException(
+        `快手 ECPM 刷新失败：${summarizeKuaishouPayload(payload)}`,
+      );
     }
 
     return {
@@ -70,7 +78,9 @@ export class KuaishouEcpmClient {
 
   private assertRealMode() {
     if (this.configService.get<string>('KUAISHOU_API_MODE') !== 'real') {
-      throw new Error('KUAISHOU_API_MODE must be real for Kuaishou ECPM refresh');
+      throw new BadRequestException(
+        'KUAISHOU_API_MODE 必须配置为 real 后才能刷新快手 ECPM',
+      );
     }
   }
 }

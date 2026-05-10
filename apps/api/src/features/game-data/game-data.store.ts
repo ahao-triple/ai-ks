@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { SettlementStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { generateReadableId } from '../../domain/identity/readable-id';
@@ -144,7 +144,7 @@ export class GameDataStore {
   }): Promise<GameDataOpenId> {
     const game = await this.findGameByAppId(input.gameAppId);
     if (!game) {
-      throw new Error(`Game ${input.gameAppId} is not configured`);
+      throw new NotFoundException(`游戏 ${input.gameAppId} 未配置或已删除`);
     }
 
     const readableId = generateReadableId(`${input.gameAppId}:${input.openId}`);
@@ -168,7 +168,7 @@ export class GameDataStore {
   async addEcpmRows(input: { gameAppId: string; rows: EcpmInputRow[] }) {
     const game = await this.findGameByAppId(input.gameAppId);
     if (!game) {
-      throw new Error(`Game ${input.gameAppId} is not configured`);
+      throw new NotFoundException(`游戏 ${input.gameAppId} 未配置或已删除`);
     }
 
     const platformConfig =

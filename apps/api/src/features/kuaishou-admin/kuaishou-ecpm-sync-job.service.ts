@@ -1,4 +1,4 @@
-import { Inject, Injectable, Optional } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Optional } from '@nestjs/common';
 import {
   type KuaishouEcpmSyncJob,
   KuaishouEcpmSyncJobStatus,
@@ -165,7 +165,7 @@ function clampLimit(limit?: number) {
 
 function resolveListJobsWhere(input: ListKuaishouEcpmSyncJobsInput) {
   if (!input || !Object.prototype.hasOwnProperty.call(input, 'gameAppIds')) {
-    throw new Error('Kuaishou ECPM sync job scope is required');
+    throw new BadRequestException('缺少快手 ECPM 同步任务查询范围');
   }
 
   if (input.gameAppIds === undefined) {
