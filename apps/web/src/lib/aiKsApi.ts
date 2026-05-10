@@ -31,7 +31,6 @@ import type {
   AuthResult,
   BusinessClosureReport,
   CurrentAdminResult,
-  DemoGame,
   EcpmDashboardResult,
   EcpmDashboardScope,
   EarningsResult,
@@ -100,12 +99,6 @@ function compactSettlementRange(range: AdminSettlementRange) {
 }
 
 export const aiKsApi = {
-  getDemoContext() {
-    return requestJson<{ games: DemoGame[]; sampleJsCodes: string[] }>(
-      '/demo/test-context',
-    );
-  },
-
   getIntegrationStatus() {
     return requestJson<IntegrationStatus>('/integrations/status');
   },
@@ -687,16 +680,6 @@ export const aiKsApi = {
   getAuditLogs(adminAccessToken: string) {
     return requestJson<AuditLogListResult>('/admin/audit-logs?limit=20', {
       accessToken: adminAccessToken,
-    });
-  },
-
-  resetTestData(adminAccessToken: string) {
-    return requestJson<{ success: true }>('/admin/system/reset-test-data', {
-      accessToken: adminAccessToken,
-      body: {
-        confirmation: 'RESET_TEST_DATA',
-      },
-      method: 'POST',
     });
   },
 

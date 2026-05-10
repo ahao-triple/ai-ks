@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { KeyRound, RefreshCw, Send, Settings, ShieldAlert, X } from 'lucide-react';
+import { KeyRound, RefreshCw, Send, Settings, X } from 'lucide-react';
 import {
   AuditLogTable,
   EcpmTable,
@@ -28,7 +28,6 @@ import type {
   AdminSettlementBatch,
   AdminSettlementDetailResult,
   AdminSettlementPreview,
-  DemoGame,
   BusinessClosureReport,
   BusinessClosureStatus,
   EcpmDashboardRow,
@@ -74,7 +73,6 @@ export type OperationsWorkspaceBusyAction =
   | 'kuaishou-token'
   | 'platform-config'
   | 'refresh'
-  | 'reset-test-data'
   | 'settlement-confirm'
   | 'settlement-preview'
   | 'session'
@@ -130,7 +128,6 @@ type SuperAdminDialog =
   | 'create-company'
   | 'create-game'
   | 'recharge-company'
-  | 'reset-test-data'
   | 'update-company-admin';
 
 type WithdrawalActionKind = 'approve' | 'close' | 'pay-failed' | 'pay-success';
@@ -170,7 +167,7 @@ export interface OperationsWorkspaceProps {
   ecpmJobs?: EcpmUpdateJob[];
   ecpmRows?: EcpmDashboardRow[];
   gameAppId: string;
-  games: DemoGame[];
+  games: AdminGame[];
   jsCode: string;
   isSuperAdmin: boolean;
   kuaishouAppId: string;
@@ -258,7 +255,6 @@ export interface OperationsWorkspaceProps {
   onPayWithdrawal(batchId: string, result: 'failed' | 'success'): void;
   onPlatformConfigDraftChange(patch: Partial<PlatformConfigDraft>): void;
   onPreviewSettlement(): void;
-  onResetTestData(): void;
   onOpenGameConfig(gameId: string): void;
   onRefreshConfigGameEcpm(): void;
   onRefreshEcpm(): void;
@@ -280,12 +276,11 @@ export interface OperationsWorkspaceProps {
     payload: { scopes: Array<{ companyId: string; gameIds: string[] }> },
   ): void;
   refreshResult?: EcpmRefreshResult;
-  sampleJsCodes: string[];
   selectedConfigGame?: AdminGame;
   selectedConfigGameId: string;
   selectedEcpmJob?: EcpmUpdateJob;
   selectedSettlementDetail?: AdminSettlementDetailResult;
-  selectedGame?: DemoGame;
+  selectedGame?: AdminGame;
   selectedWithdrawalDetail?: AdminWithdrawalDetailResult;
   settlementBatches: AdminSettlementBatch[];
   settlementEndDate: string;
@@ -512,7 +507,6 @@ export function OperationsWorkspace({
   onPayWithdrawal,
   onPlatformConfigDraftChange,
   onPreviewSettlement,
-  onResetTestData,
   onOpenGameConfig,
   onRefreshConfigGameEcpm,
   onRefreshEcpm,
@@ -528,7 +522,6 @@ export function OperationsWorkspace({
   onUpdateCompanyAdmin,
   onUpdateCompanyAdminScopes,
   refreshResult,
-  sampleJsCodes,
   selectedConfigGame,
   selectedConfigGameId,
   selectedEcpmJob,
@@ -602,7 +595,6 @@ export function OperationsWorkspace({
   );
   const [activePane, setActivePane] = useState<OperationsPane>('overview');
   const [activeDialog, setActiveDialog] = useState<SuperAdminDialog>('');
-  const [resetConfirmation, setResetConfirmation] = useState('');
   const [pendingWithdrawalAction, setPendingWithdrawalAction] =
     useState<PendingWithdrawalAction>();
   const [newCompanyAdminUsername, setNewCompanyAdminUsername] = useState('');
@@ -649,9 +641,9 @@ export function OperationsWorkspace({
   paneItems.push({ description: '审计追踪', key: 'audit', label: '审计' });
   if (isSuperAdmin) {
     paneItems.push({
-      description: '平台配置/测试维护',
+      description: '平台配置',
       key: 'config',
-      label: '配置/维护',
+      label: '配置',
     });
   }
   const activePaneAvailable = paneItems.some((item) => item.key === activePane);
@@ -660,7 +652,6 @@ export function OperationsWorkspace({
 
   function closeDialog() {
     setActiveDialog('');
-    setResetConfirmation('');
   }
 
   function openCompanyAdminUpdateDialog(admin: AdminCompanyAdmin) {
@@ -864,11 +855,11 @@ export function OperationsWorkspace({
                 </dl>
               </article>
               <article className="workflow-card">
-                <h3>测试环境维护</h3>
-                <p>用于联调回滚，清空业务数据后重新开始整链路测试。</p>
+                <h3>真实数据核对</h3>
+                <p>刷新闭环核对，确认真实公司、游戏、授权、ECPM、结算和提现状态。</p>
                 <dl className="workflow-meta">
                   <dt>前置条件</dt>
-                  <dd>确认当前不需要保留任何测试记录。</dd>
+                  <dd>已完成真实游戏配置和快手授权。</dd>
                 </dl>
               </article>
             </div>
@@ -1247,35 +1238,17 @@ export function OperationsWorkspace({
             <section className="tool-grid">
               <Panel description="code2Session" title="游戏端登录">
                 <div className="query-form">
-                  <label className="ui-input-field">
-                    <span className="ui-input-label">游戏</span>
-                    <span className="ui-input-control">
-                      <select
-                        disabled={workspaceBusy}
-                        onChange={(event) =>
-                          onGameChange(event.currentTarget.value)
-                        }
-                        value={gameAppId}
-                      >
-                        {games.map((game) => (
-                          <option key={game.gameAppId} value={game.gameAppId}>
-                            {game.name} / {game.gameAppId}
-                          </option>
-                        ))}
-                      </select>
-                    </span>
-                  </label>
+                  <InputField
+                    disabled={workspaceBusy}
+                    label="gameAppId"
+                    onChange={onGameChange}
+                    value={gameAppId}
+                  />
                   <InputField
                     label="js_code"
-                    list="sample-js-codes"
                     onChange={onJsCodeChange}
                     value={jsCode}
                   />
-                  <datalist id="sample-js-codes">
-                    {sampleJsCodes.map((code) => (
-                      <option key={code} value={code} />
-                    ))}
-                  </datalist>
                   <Button
                     disabled={!gameAppId || !jsCode || workspaceBusy}
                     icon={<Send size={16} />}
@@ -2249,34 +2222,6 @@ export function OperationsWorkspace({
         </section>
       ) : null}
 
-      {isSuperAdmin ? (
-        <section className={paneClass('config')}>
-          <Panel
-            description="用于联调回滚：清空业务数据并保留超级管理员登录能力"
-            title="测试数据维护"
-          >
-            <div className="workflow-card">
-              <h3>一键清空测试数据</h3>
-              <p>
-                删除联调过程产生的业务数据（公司、游戏、账户、配置、提现、结算、平台授权与审计日志）。
-              </p>
-              <dl className="workflow-meta">
-                <dt>风险提示</dt>
-                <dd>清空后不可恢复，建议在新一轮联调开始前执行。</dd>
-              </dl>
-              <Button
-                disabled={workspaceBusy}
-                icon={<ShieldAlert size={16} />}
-                onClick={() => setActiveDialog('reset-test-data')}
-                variant="danger"
-              >
-                {busyAction === 'reset-test-data' ? '清空中' : '打开清空弹窗'}
-              </Button>
-            </div>
-          </Panel>
-        </section>
-      ) : null}
-
       <Dialog
         description="创建后可关联公司管理员、游戏及预算。"
         footer={
@@ -2857,43 +2802,6 @@ export function OperationsWorkspace({
         </div>
       </Dialog>
 
-      <Dialog
-        description="仅建议在联调重置时执行。输入确认口令后才能触发清空。"
-        footer={
-          <>
-            <Button onClick={closeDialog} variant="ghost">
-              取消
-            </Button>
-            <Button
-              disabled={
-                workspaceBusy || resetConfirmation.trim() !== 'RESET_TEST_DATA'
-              }
-              icon={<ShieldAlert size={16} />}
-              onClick={onResetTestData}
-              variant="danger"
-            >
-              {busyAction === 'reset-test-data' ? '清空中' : '确认清空'}
-            </Button>
-          </>
-        }
-        onClose={closeDialog}
-        open={isSuperAdmin && activeDialog === 'reset-test-data'}
-        title="清空测试数据"
-      >
-        <StatusBadge tone="danger">
-          将删除公司、游戏、用户、平台配置、预算、提现、结算、平台授权、同步任务和审计日志
-        </StatusBadge>
-        <InputField
-          disabled={workspaceBusy}
-          label="确认口令"
-          onChange={setResetConfirmation}
-          placeholder="输入 RESET_TEST_DATA"
-          value={resetConfirmation}
-        />
-        <p className="field-help">
-          执行后仅保留超级管理员登录能力；业务数据不可恢复。
-        </p>
-      </Dialog>
       </div>
     </div>
   );

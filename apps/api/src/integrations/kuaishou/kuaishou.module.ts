@@ -4,8 +4,10 @@ import { KuaishouTokenService } from '../../features/kuaishou-admin/kuaishou-tok
 import { KuaishouEcpmClient } from './kuaishou-ecpm.client';
 import { KuaishouGameAuthClient } from './kuaishou-game-auth.client';
 import { KuaishouOAuthClient } from './kuaishou-oauth.client';
+import { KuaishouStatusController } from './kuaishou-status.controller';
 
 @Module({
+  controllers: [KuaishouStatusController],
   exports: [
     KuaishouEcpmClient,
     KuaishouGameAuthClient,

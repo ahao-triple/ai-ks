@@ -65,7 +65,6 @@ import type {
   AgentUsersResult,
   AuditLogRow,
   BusinessClosureReport,
-  DemoGame,
   EarningsResult,
   EcpmDashboardRow,
   EcpmDashboardScope,
@@ -147,12 +146,12 @@ export function buildSettlementRange({
   };
 }
 
-export function getSettlementGameRowId(games: DemoGame[], gameAppId: string) {
+export function getSettlementGameRowId(games: AdminGame[], gameAppId: string) {
   return games.find((game) => game.gameAppId === gameAppId)?.id ?? '';
 }
 
 export function getAdminEntrySettlementGameRowId(
-  games: DemoGame[],
+  games: AdminGame[],
   gameAppId: string,
 ) {
   return getSettlementGameRowId(games, gameAppId || games[0]?.gameAppId || '');
@@ -304,8 +303,6 @@ export function App() {
   const [appSession, setAppSession] = useState<AppSession>(() =>
     createSignedOutSession(),
   );
-  const [games, setGames] = useState<DemoGame[]>([]);
-  const [sampleJsCodes, setSampleJsCodes] = useState<string[]>([]);
   const [status, setStatus] = useState<IntegrationStatus>();
   const [kuaishouTokenStatus, setKuaishouTokenStatus] =
     useState<KuaishouTokenStatusResult>();
@@ -448,8 +445,8 @@ export function App() {
   const selectedConfigGameIdRef = useRef('');
 
   const selectedGame = useMemo(
-    () => games.find((game) => game.gameAppId === gameAppId),
-    [gameAppId, games],
+    () => adminGames.find((game) => game.gameAppId === gameAppId),
+    [adminGames, gameAppId],
   );
   const selectedConfigGame = useMemo(
     () => adminGames.find((game) => game.id === selectedConfigGameId),
@@ -473,11 +470,9 @@ export function App() {
     ],
   );
   const modeText =
-    status?.kuaishouApiMode === 'mock'
-      ? '快手 Mock'
-      : status?.kuaishouApiMode === 'real'
+    status?.kuaishouApiMode === 'real'
         ? '快手 Real'
-        : '接口状态未知';
+        : '快手未配置';
 
   useEffect(() => {
     applyKuaishouOAuthCallbackFromLocation();
@@ -489,7 +484,10 @@ export function App() {
       return;
     }
 
-    const settlementGameId = getAdminEntrySettlementGameRowId(games, gameAppId);
+    const settlementGameId = getAdminEntrySettlementGameRowId(
+      adminGames,
+      gameAppId,
+    );
     if (!settlementGameId) {
       setSettlementBatches([]);
       return;
@@ -499,7 +497,7 @@ export function App() {
     void loadSettlementBatchesForGame(adminAccessToken, settlementGameId, () =>
       isCurrentSessionVersion(batchSessionVersion),
     );
-  }, [adminAccessToken, appSession.mode, currentAdmin, gameAppId, games]);
+  }, [adminAccessToken, adminGames, appSession.mode, currentAdmin, gameAppId]);
 
   useEffect(() => {
     if (!selectedConfigGameId) {
@@ -568,20 +566,8 @@ export function App() {
     setError('');
 
     try {
-      const [context, integrationStatus] = await Promise.all([
-        aiKsApi.getDemoContext(),
-        aiKsApi.getIntegrationStatus(),
-      ]);
-
-      setGames(context.games);
-      setSampleJsCodes(context.sampleJsCodes);
+      const integrationStatus = await aiKsApi.getIntegrationStatus();
       setStatus(integrationStatus);
-      const restoredGameAppId = gameAppId || context.games[0]?.gameAppId || '';
-      setGameAppId((current) => current || restoredGameAppId);
-      setJsCode(
-        (current) =>
-          current || context.sampleJsCodes[0] || 'mock-js-code-001',
-      );
 
       if (accessToken) {
         try {
@@ -1281,6 +1267,7 @@ export function App() {
       getDefaultAdminCompanyId(companies, current),
     );
     setBudgetGameId((current) => getDefaultAdminGameId(nextAdminGames, current));
+    setGameAppId((current) => current || nextAdminGames[0]?.gameAppId || '');
   }
 
   async function loadAdminResourcesForToken(
@@ -1318,9 +1305,10 @@ export function App() {
         setSelectedEcpmUpdateJob(undefined);
         resetPlatformConfigState();
       }
+      const nextGameAppId = gameAppId || gameResult.games[0]?.gameAppId || '';
       const settlementGameId = getAdminEntrySettlementGameRowId(
-        games,
-        gameAppId,
+        gameResult.games,
+        nextGameAppId,
       );
       await Promise.allSettled([
         loadKuaishouEcpmJobsForToken(token, isCurrent),
@@ -2319,55 +2307,6 @@ export function App() {
     }, 'admin');
   }
 
-  async function resetTestData() {
-    if (!adminAccessToken) {
-      reportActionError('reset-test-data', '请先登录管理员账号');
-      return;
-    }
-    if (!ensureSuperAdmin('reset-test-data')) {
-      return;
-    }
-
-    await runAction('reset-test-data', async (isCurrent) => {
-      await aiKsApi.resetTestData(adminAccessToken);
-      if (!isCurrent()) {
-        return;
-      }
-
-      clearAdminResourceState();
-      clearKuaishouTokenState();
-      setKuaishouEcpmJobs([]);
-      setConfigKuaishouEcpmJobs([]);
-      setGameSession(undefined);
-      setRefreshResult(undefined);
-      setSettlementPreview(undefined);
-      setSettlementBatches([]);
-      setSelectedSettlementDetail(undefined);
-      setAdminWithdrawals([]);
-      setAuditLogs([]);
-      setSelectedWithdrawalDetail(undefined);
-      setGameAppId('');
-      setJsCode('');
-      await reloadDemoContext(isCurrent);
-      if (!isCurrent()) {
-        return;
-      }
-
-      setNotice('测试数据已清空，基础上下文已重新加载，可直接开始下一轮联调');
-    }, 'admin');
-  }
-
-  async function reloadDemoContext(isCurrent = () => true) {
-    const context = await aiKsApi.getDemoContext();
-    if (!isCurrent()) {
-      return;
-    }
-
-    setGames(context.games);
-    setSampleJsCodes(context.sampleJsCodes);
-    setGameAppId((current) => current || context.games[0]?.gameAppId || '');
-  }
-
   async function createAdminCompany() {
     if (!adminAccessToken) {
       reportActionError('company-create', '请先登录管理员账号');
@@ -2464,10 +2403,7 @@ export function App() {
       setNewGameName('');
       setNewGameAppId('');
       setNewGameSecret('');
-      await Promise.all([
-        loadAdminResourcesForToken(adminAccessToken, isCurrent),
-        reloadDemoContext(isCurrent),
-      ]);
+      await loadAdminResourcesForToken(adminAccessToken, isCurrent);
       if (!isCurrent()) {
         return;
       }
@@ -2595,10 +2531,7 @@ export function App() {
         return;
       }
 
-      await Promise.all([
-        loadAdminResourcesForToken(adminAccessToken, isCurrent),
-        reloadDemoContext(isCurrent),
-      ]);
+      await loadAdminResourcesForToken(adminAccessToken, isCurrent);
       if (!isCurrent()) {
         return;
       }
@@ -3032,7 +2965,7 @@ export function App() {
   }
 
   function getSettlementGameId(targetGameAppId = gameAppId) {
-    return getSettlementGameRowId(games, targetGameAppId);
+    return getSettlementGameRowId(adminGames, targetGameAppId);
   }
 
   function canConfirmSettlement() {
@@ -3584,7 +3517,7 @@ export function App() {
           ecpmJobs={isSuperAdmin(currentAdmin) ? ecpmUpdateJobs : []}
           ecpmRows={ecpmDashboardRows}
           gameAppId={gameAppId}
-          games={games}
+          games={adminGames}
           isSuperAdmin={isSuperAdmin(currentAdmin)}
           jsCode={jsCode}
           kuaishouAppId={kuaishouAppId}
@@ -3665,7 +3598,6 @@ export function App() {
           onPayWithdrawal={payAdminWithdrawal}
           onPlatformConfigDraftChange={changePlatformConfigDraft}
           onPreviewSettlement={previewSettlement}
-          onResetTestData={resetTestData}
           onOpenGameConfig={openGameConfig}
           onRefreshConfigGameEcpm={refreshConfigGameEcpm}
           onRefreshEcpm={refreshEcpm}
@@ -3684,7 +3616,6 @@ export function App() {
           platformConfig={platformConfig}
           platformConfigDraft={platformConfigDraft}
           refreshResult={refreshResult}
-          sampleJsCodes={sampleJsCodes}
           selectedConfigGame={selectedConfigGame}
           selectedConfigGameId={selectedConfigGameId}
           selectedEcpmJob={
@@ -3803,7 +3734,6 @@ function isOperationsBusyAction(
     case 'kuaishou-token':
     case 'platform-config':
     case 'refresh':
-    case 'reset-test-data':
     case 'settlement-confirm':
     case 'settlement-preview':
     case 'session':

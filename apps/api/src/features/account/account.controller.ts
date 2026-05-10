@@ -11,7 +11,7 @@ import {
 import { z } from 'zod';
 import { yuanToLi } from '../../domain/money/amount';
 import { AuditLogService } from '../audit/audit-log.service';
-import { presentEcpmRow, presentMoneyLi } from '../demo/money-presenter';
+import { presentEcpmRow, presentMoneyLi } from '../../common/presenters/money-presenter';
 import { resolveChinaDayRange } from '../user/china-day-range';
 import {
   AccountAuthService,

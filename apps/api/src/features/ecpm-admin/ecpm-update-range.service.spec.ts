@@ -483,7 +483,7 @@ function syncResult(jobId = 'sync-job-1', savedCount = 3) {
     requestedOpenIds: [],
     rows: [],
     savedCount,
-    source: 'mock',
+    source: 'kuaishou',
   };
 }
 

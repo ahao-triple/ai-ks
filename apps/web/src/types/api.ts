@@ -3,15 +3,8 @@ export type MoneyValue = {
   yuan: string;
 };
 
-export type DemoGame = {
-  companyName: string;
-  gameAppId: string;
-  id: string;
-  name: string;
-};
-
 export type IntegrationStatus = {
-  kuaishouApiMode: 'mock' | 'real';
+  kuaishouApiMode: 'real' | 'unconfigured';
   requiredForRealMode: {
     kuaishouAccessToken: boolean;
     kuaishouAdvertiserId: boolean;
@@ -64,7 +57,7 @@ export type KuaishouEcpmSyncJob = {
   lookbackHours: number | null;
   requestedOpenIdCount: number;
   savedCount: number;
-  source: 'mock' | 'kuaishou' | null;
+  source: 'kuaishou' | null;
   startedAt: string;
   startedDataHour: string | null;
   status: 'FAILED' | 'RUNNING' | 'SUCCEEDED';
@@ -80,7 +73,7 @@ export type EcpmRefreshResult = {
   requestedOpenIds: string[];
   rows: EcpmRow[];
   savedCount: number;
-  source: 'mock' | 'kuaishou';
+  source: 'kuaishou';
 };
 
 export type EcpmDashboardScope =
@@ -174,7 +167,7 @@ export type EcpmUpdateJob = {
   savedCount: number;
   scopeId: string;
   scopeType: EcpmUpdateScopeType;
-  source?: 'mock' | 'kuaishou' | null;
+  source?: 'kuaishou' | null;
   skippedCount: number;
   startedAt: string;
   startedDataHour: string;

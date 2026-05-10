@@ -18,7 +18,7 @@ import {
 import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 import { CurrentAdmin } from '../admin-auth/current-admin.decorator';
 import { SuperAdminGuard } from '../admin-auth/super-admin.guard';
-import { presentMoneyLi } from '../demo/money-presenter';
+import { presentMoneyLi } from '../../common/presenters/money-presenter';
 import {
   AdminResourcesService,
   type AgentWithdrawalBatch,
@@ -85,10 +85,6 @@ const updateGameSchema = z.object({
 const allocateGameBudgetSchema = z.object({
   amountYuan: amountSchema,
   reason: reasonSchema,
-});
-
-const resetTestDataSchema = z.object({
-  confirmation: z.literal('RESET_TEST_DATA'),
 });
 
 @Controller()
@@ -321,25 +317,6 @@ export class AdminResourcesController {
     };
   }
 
-  @Post('admin/system/reset-test-data')
-  @UseGuards(SuperAdminGuard)
-  async resetTestData(
-    @CurrentAdmin() admin: AdminPrincipal,
-    @Body() body: unknown,
-  ) {
-    parseBody(
-      resetTestDataSchema,
-      body,
-      'Reset confirmation is invalid',
-    );
-    await this.adminResourcesService.resetTestData({
-      actor: requireSuperAdminPrincipal(admin),
-    });
-
-    return {
-      success: true,
-    };
-  }
 }
 
 function parseBody<T extends z.ZodTypeAny>(

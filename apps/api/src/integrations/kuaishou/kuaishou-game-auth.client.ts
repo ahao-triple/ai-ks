@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
@@ -24,9 +23,7 @@ export class KuaishouGameAuthClient {
   async exchangeCode(
     input: KuaishouGameSessionInput,
   ): Promise<KuaishouGameSessionResult> {
-    if (this.getMode() !== 'real') {
-      return this.createMockSession(input);
-    }
+    this.assertRealMode();
 
     const url = new URL('https://open.kuaishou.com/game/minigame/jscode2session');
     url.searchParams.set('app_id', input.gameAppId);
@@ -51,28 +48,10 @@ export class KuaishouGameAuthClient {
     };
   }
 
-  private getMode(): 'mock' | 'real' {
-    return this.configService.get<string>('KUAISHOU_API_MODE') === 'real'
-      ? 'real'
-      : 'mock';
-  }
-
-  private createMockSession(
-    input: KuaishouGameSessionInput,
-  ): KuaishouGameSessionResult {
-    const digest = createHash('sha1')
-      .update(`${input.gameAppId}:${input.jsCode}`)
-      .digest('hex')
-      .slice(0, 16);
-
-    return {
-      openId: `mock_open_${digest}`,
-      sessionKey: `mock_session_${digest.slice(0, 10)}`,
-      raw: {
-        mode: 'mock',
-        js_code: input.jsCode,
-      },
-    };
+  private assertRealMode() {
+    if (this.configService.get<string>('KUAISHOU_API_MODE') !== 'real') {
+      throw new Error('KUAISHOU_API_MODE must be real for Kuaishou code2Session');
+    }
   }
 }
 

@@ -1,11 +1,11 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import { DemoStore } from '../demo/demo-store';
-import { presentEcpmRow, presentMoneyLi } from '../demo/money-presenter';
+import { GameDataStore } from '../game-data/game-data.store';
+import { presentEcpmRow, presentMoneyLi } from '../../common/presenters/money-presenter';
 import { resolveChinaDayRange } from './china-day-range';
 
 @Controller('user')
 export class UserEarningsController {
-  constructor(private readonly demoStore: DemoStore) {}
+  constructor(private readonly gameDataStore: GameDataStore) {}
 
   @Get('earnings')
   async getEarnings(
@@ -17,7 +17,7 @@ export class UserEarningsController {
     }
 
     const range = resolveChinaDayRange(date);
-    const result = await this.demoStore.queryEarnings({
+    const result = await this.gameDataStore.queryEarnings({
       identity,
       startAt: range.startAt,
       endAt: range.endAt,

@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { KuaishouModule } from '../../integrations/kuaishou/kuaishou.module';
-import { DemoModule } from '../demo/demo.module';
+import { GameDataModule } from '../game-data/game-data.module';
 import { GameSessionController } from './game-session.controller';
 import { GameSessionService } from './game-session.service';
 
 @Module({
   controllers: [GameSessionController],
-  imports: [DemoModule, KuaishouModule],
+  imports: [GameDataModule, KuaishouModule],
   providers: [GameSessionService],
 })
 export class GameSessionModule {}

@@ -1,5 +1,5 @@
 import { liToYuan } from '../../domain/money/amount';
-import { DemoEcpmRow } from './demo-store';
+import type { EcpmRow } from '../../features/game-data/game-data.store';
 
 export function presentMoneyLi(value: bigint) {
   return {
@@ -8,7 +8,7 @@ export function presentMoneyLi(value: bigint) {
   };
 }
 
-export function presentEcpmRow(row: DemoEcpmRow) {
+export function presentEcpmRow(row: EcpmRow) {
   return {
     platformEventId: row.platformEventId,
     gameAppId: row.gameAppId,

@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { KuaishouGameAuthClient } from '../../integrations/kuaishou/kuaishou-game-auth.client';
-import { DemoStore } from '../demo/demo-store';
+import { GameDataStore } from '../game-data/game-data.store';
 
 export type CreateGameSessionInput = {
   gameAppId: string;
@@ -13,7 +13,7 @@ export class GameSessionService {
 
   constructor(
     private readonly authClient: KuaishouGameAuthClient,
-    private readonly demoStore: DemoStore,
+    private readonly gameDataStore: GameDataStore,
   ) {}
 
   async createSession(input: CreateGameSessionInput) {
@@ -21,7 +21,7 @@ export class GameSessionService {
       `游戏登录：收到 js_code 换 open_id 请求，gameAppId=${input.gameAppId}。`,
     );
 
-    const game = await this.demoStore.findGameByAppId(input.gameAppId);
+    const game = await this.gameDataStore.findGameByAppId(input.gameAppId);
     if (!game) {
       this.logger.warn(
         `游戏登录：未找到游戏配置，gameAppId=${input.gameAppId}。`,
@@ -43,7 +43,7 @@ export class GameSessionService {
       `游戏登录：快手 code2Session 成功，gameAppId=${game.gameAppId}，openId=${session.openId}。`,
     );
 
-    const openIdRecord = await this.demoStore.upsertOpenId({
+    const openIdRecord = await this.gameDataStore.upsertOpenId({
       gameAppId: game.gameAppId,
       openId: session.openId,
       sessionKey: session.sessionKey,

@@ -1,26 +1,17 @@
 import { KuaishouGameAuthClient } from './kuaishou-game-auth.client';
 
 describe('KuaishouGameAuthClient', () => {
-  it('returns deterministic mock open_id values for local testing', async () => {
+  it('rejects code exchange when real Kuaishou mode is not enabled', async () => {
     const client = new KuaishouGameAuthClient({
-      get: (key: string) => (key === 'KUAISHOU_API_MODE' ? 'mock' : undefined),
+      get: () => undefined,
     });
 
-    const result = await client.exchangeCode({
-      gameAppId: 'demo-game-app',
-      gameSecret: 'demo-secret',
-      jsCode: 'mock-js-code-001',
-    });
-
-    expect(result.openId).toMatch(/^mock_open_/);
-    expect(result.openId).toBe(
-      (
-        await client.exchangeCode({
-          gameAppId: 'demo-game-app',
-          gameSecret: 'demo-secret',
-          jsCode: 'mock-js-code-001',
-        })
-      ).openId,
-    );
+    await expect(
+      client.exchangeCode({
+        gameAppId: 'game-app',
+        gameSecret: 'game-secret',
+        jsCode: 'real-js-code',
+      }),
+    ).rejects.toThrow('KUAISHOU_API_MODE must be real');
   });
 });

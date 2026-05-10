@@ -15,7 +15,7 @@ describe('layouts', () => {
     const html = renderToStaticMarkup(
       <DashboardLayout
         activeView="query"
-        modeText="快手 Mock"
+        modeText="快手 Real"
         onNavigate={() => undefined}
         onSignOut={() => undefined}
         session={createGuestSession()}

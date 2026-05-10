@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { KuaishouTokenService } from '../../features/kuaishou-admin/kuaishou-token.service';
@@ -19,7 +18,7 @@ export type KuaishouEcpmRefreshInput = {
 };
 
 export type KuaishouEcpmRefreshResult = {
-  source: 'mock' | 'kuaishou';
+  source: 'kuaishou';
   rows: KuaishouEcpmRow[];
   raw?: unknown;
 };
@@ -34,9 +33,7 @@ export class KuaishouEcpmClient {
   async refresh(
     input: KuaishouEcpmRefreshInput,
   ): Promise<KuaishouEcpmRefreshResult> {
-    if (this.getMode() !== 'real') {
-      return this.createMockRows(input);
-    }
+    this.assertRealMode();
 
     const credentials = await this.tokenService.resolveReportCredentials();
 
@@ -71,52 +68,11 @@ export class KuaishouEcpmClient {
     };
   }
 
-  private getMode(): 'mock' | 'real' {
-    return this.configService.get<string>('KUAISHOU_API_MODE') === 'real'
-      ? 'real'
-      : 'mock';
+  private assertRealMode() {
+    if (this.configService.get<string>('KUAISHOU_API_MODE') !== 'real') {
+      throw new Error('KUAISHOU_API_MODE must be real for Kuaishou ECPM refresh');
+    }
   }
-
-  private createMockRows(
-    input: KuaishouEcpmRefreshInput,
-  ): KuaishouEcpmRefreshResult {
-    const eventTime = parseDataHour(input.dataHour);
-    const rows = input.openIds.flatMap((openId, openIndex) =>
-      [1800n, 2600n, 4200n].map((rawCostLi, index) => ({
-        platformEventId: createMockEventId(input, openId, index),
-        openId,
-        rawCostLi: rawCostLi + BigInt(openIndex * 300),
-        eventTime: new Date(eventTime.getTime() + index * 12 * 60 * 1000),
-      })),
-    );
-
-    return {
-      source: 'mock',
-      rows,
-      raw: {
-        mode: 'mock',
-      },
-    };
-  }
-}
-
-function createMockEventId(
-  input: KuaishouEcpmRefreshInput,
-  openId: string,
-  index: number,
-) {
-  const digest = createHash('sha1')
-    .update(`${input.gameAppId}:${input.dataHour}:${openId}:${index}`)
-    .digest('hex')
-    .slice(0, 16);
-  return `mock_ecpm_${digest}`;
-}
-
-function parseDataHour(dataHour: string) {
-  const normalized =
-    dataHour.length === 10 ? `${dataHour}T00:00:00+08:00` : dataHour;
-  const parsed = new Date(normalized);
-  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
 }
 
 function extractEcpmRows(payload: Record<string, unknown>): KuaishouEcpmRow[] {

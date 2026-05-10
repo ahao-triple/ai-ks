@@ -59,7 +59,6 @@ const operationLabels: Record<string, string> = {
   query: '游客收益查询',
   refresh: '刷新游戏 ECPM',
   register: '注册账号',
-  'reset-test-data': '清空测试数据',
   session: '换取 open_id',
   'settlement-confirm': '确认结算入账',
   'settlement-preview': '预览结算',

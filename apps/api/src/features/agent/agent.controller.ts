@@ -9,7 +9,7 @@ import {
 } from '@nestjs/common';
 import { z } from 'zod';
 import { yuanToLi } from '../../domain/money/amount';
-import { presentMoneyLi } from '../demo/money-presenter';
+import { presentMoneyLi } from '../../common/presenters/money-presenter';
 import {
   AgentAuthService,
   type AgentPrincipal,

@@ -123,7 +123,7 @@ Content-Type: application/json
 | `game.name` | 后台配置的游戏名称 |
 | `openId` | 快手 open_id，后续收益和结算使用的核心标识 |
 | `readableId` | AI-KS 生成的可读 ID，方便人工排查和页面绑定 |
-| `source` | 快手原始响应；mock 模式下是模拟信息 |
+| `source` | 快手原始响应 |
 
 ## 6. 游戏端示例
 
@@ -162,19 +162,7 @@ ks.login({
 });
 ```
 
-## 7. mock 和 real 模式
-
-### mock 模式
-
-服务器 `.env`：
-
-```env
-KUAISHOU_API_MODE=mock
-```
-
-适合普通接口联调。后端不会请求真实快手接口，会根据 `gameAppId + jsCode` 生成稳定的模拟 `openId`。
-
-### real 模式
+## 7. real 模式
 
 服务器 `.env`：
 
@@ -187,6 +175,8 @@ KUAISHOU_API_MODE=real
 ```text
 https://open.kuaishou.com/game/minigame/jscode2session
 ```
+
+未设置 `KUAISHOU_API_MODE=real` 时，后端会拒绝快手登录和 ECPM 刷新请求，不再生成模拟 open_id 或模拟 ECPM。
 
 此时后台配置的 `game_app_id`、`game_secret` 必须和游戏端拿到的 `js_code` 属于同一个快手小游戏。
 

@@ -1,7 +1,5 @@
 import { Inject, Injectable, Optional } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { SettlementStatus } from '@prisma/client';
-import { hash } from 'bcryptjs';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { generateReadableId } from '../../domain/identity/readable-id';
 import { computeDisplayAmount } from '../../domain/money/display-amount.strategy';
@@ -10,19 +8,10 @@ import {
   PlatformConfigService,
 } from '../platform-config/platform-config.service';
 
-const DEMO_COMPANY_ID = 'demo-company-001';
-const DEMO_GAME_ID = 'demo-game-001';
-const DEMO_GAME_APP_ID = 'demo_ks_game';
-const DEMO_GAME_SECRET = 'demo_ks_secret';
-const DEMO_DEFAULT_AGENT_ID = 'demo-agent-default';
-const DEMO_DEFAULT_AGENT_USERNAME = 'demo_default_agent';
-const DEMO_DEFAULT_AGENT_INVITATION_CODE = 'DEMO_DEFAULT';
-
-type DemoPrisma = Pick<
+type GameDataPrisma = Pick<
   PrismaService,
-  'agent' | 'company' | 'game' | 'gameOpenId' | 'rawEcpm'
+  'game' | 'gameOpenId' | 'rawEcpm'
 >;
-type DemoConfig = Pick<ConfigService, 'get'>;
 
 type GameWithCompany = {
   id: string;
@@ -52,7 +41,7 @@ type RawEcpmRecord = {
   rawCostLi: bigint;
 };
 
-export type DemoGame = {
+export type GameDataGame = {
   id: string;
   companyId: string;
   companyName: string;
@@ -61,7 +50,7 @@ export type DemoGame = {
   name: string;
 };
 
-export type DemoOpenId = {
+export type GameDataOpenId = {
   id: string;
   gameAppId: string;
   openId: string;
@@ -69,14 +58,14 @@ export type DemoOpenId = {
   createdAt: Date;
 };
 
-export type DemoEcpmInputRow = {
+export type EcpmInputRow = {
   platformEventId: string;
   openId: string;
   rawCostLi: bigint;
   eventTime: Date;
 };
 
-export type DemoEcpmRow = DemoEcpmInputRow & {
+export type EcpmRow = EcpmInputRow & {
   gameAppId: string;
   displayAmountLi: bigint;
   configSnapshot: {
@@ -91,10 +80,9 @@ export type QueryEarningsInput = {
 };
 
 @Injectable()
-export class DemoStore {
+export class GameDataStore {
   constructor(
-    @Inject(PrismaService) private readonly prisma: DemoPrisma,
-    @Optional() @Inject(ConfigService) private readonly configService?: DemoConfig,
+    @Inject(PrismaService) private readonly prisma: GameDataPrisma,
     @Optional()
     private readonly platformConfigService?: Pick<
       PlatformConfigService,
@@ -102,70 +90,7 @@ export class DemoStore {
     >,
   ) {}
 
-  async ensureDemoData() {
-    if (!this.shouldAutoSeed()) {
-      return;
-    }
-
-    await this.prisma.company.upsert({
-      create: {
-        id: DEMO_COMPANY_ID,
-        balanceLi: 0n,
-        name: '测试公司',
-      },
-      update: {
-        name: '测试公司',
-      },
-      where: {
-        id: DEMO_COMPANY_ID,
-      },
-    });
-
-    await this.prisma.game.upsert({
-      create: {
-        id: DEMO_GAME_ID,
-        budgetLi: 0n,
-        companyId: DEMO_COMPANY_ID,
-        gameAppId: DEMO_GAME_APP_ID,
-        gameSecret: DEMO_GAME_SECRET,
-        name: '测试游戏',
-      },
-      update: {
-        gameSecret: DEMO_GAME_SECRET,
-        name: '测试游戏',
-      },
-      where: {
-        gameAppId: DEMO_GAME_APP_ID,
-      },
-    });
-
-    await this.prisma.agent.upsert({
-      create: {
-        id: DEMO_DEFAULT_AGENT_ID,
-        invitationCode: DEMO_DEFAULT_AGENT_INVITATION_CODE,
-        passwordHash: await hash('demo-agent-pass', 10),
-        username: DEMO_DEFAULT_AGENT_USERNAME,
-      },
-      update: {
-        deletedAt: null,
-        enabled: true,
-        invitationCode: DEMO_DEFAULT_AGENT_INVITATION_CODE,
-        passwordHash: await hash('demo-agent-pass', 10),
-        username: DEMO_DEFAULT_AGENT_USERNAME,
-      },
-      where: {
-        id: DEMO_DEFAULT_AGENT_ID,
-      },
-    });
-  }
-
-  private shouldAutoSeed() {
-    const raw = this.configService?.get<string>('DEMO_AUTO_SEED');
-    return raw?.trim().toLowerCase() !== 'false';
-  }
-
-  async listGames(): Promise<DemoGame[]> {
-    await this.ensureDemoData();
+  async listGames(): Promise<GameDataGame[]> {
     const games = await this.prisma.game.findMany({
       include: {
         company: true,
@@ -181,8 +106,7 @@ export class DemoStore {
     return games.map((game) => this.presentGame(game));
   }
 
-  async findGameByAppId(gameAppId: string): Promise<DemoGame | undefined> {
-    await this.ensureDemoData();
+  async findGameByAppId(gameAppId: string): Promise<GameDataGame | undefined> {
     const game = await this.prisma.game.findUnique({
       include: {
         company: true,
@@ -192,10 +116,10 @@ export class DemoStore {
       },
     });
 
-    return game ? this.presentGame(game) : undefined;
+    return game && game.deletedAt === null ? this.presentGame(game) : undefined;
   }
 
-  async listOpenIds(gameAppId: string): Promise<DemoOpenId[]> {
+  async listOpenIds(gameAppId: string): Promise<GameDataOpenId[]> {
     const game = await this.findGameByAppId(gameAppId);
     if (!game) {
       return [];
@@ -217,7 +141,7 @@ export class DemoStore {
     gameAppId: string;
     openId: string;
     sessionKey?: string;
-  }): Promise<DemoOpenId> {
+  }): Promise<GameDataOpenId> {
     const game = await this.findGameByAppId(input.gameAppId);
     if (!game) {
       throw new Error(`Game ${input.gameAppId} is not configured`);
@@ -241,7 +165,7 @@ export class DemoStore {
     return this.presentOpenId(record, game.gameAppId);
   }
 
-  async addEcpmRows(input: { gameAppId: string; rows: DemoEcpmInputRow[] }) {
+  async addEcpmRows(input: { gameAppId: string; rows: EcpmInputRow[] }) {
     const game = await this.findGameByAppId(input.gameAppId);
     if (!game) {
       throw new Error(`Game ${input.gameAppId} is not configured`);
@@ -355,7 +279,7 @@ export class DemoStore {
     });
   }
 
-  private presentGame(game: GameWithCompany): DemoGame {
+  private presentGame(game: GameWithCompany): GameDataGame {
     return {
       id: game.id,
       companyId: game.companyId,
@@ -376,10 +300,7 @@ export class DemoStore {
     };
   }
 
-  private presentEcpmRow(
-    row: RawEcpmRecord,
-    gameAppId: string,
-  ): DemoEcpmRow {
+  private presentEcpmRow(row: RawEcpmRecord, gameAppId: string): EcpmRow {
     return {
       displayAmountLi: row.displayAmountLi,
       eventTime: row.eventTime,

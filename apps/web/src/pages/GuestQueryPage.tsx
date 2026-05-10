@@ -2,7 +2,7 @@ import { Search } from 'lucide-react';
 import { EcpmTable, ReadoutGrid } from '../components/domain';
 import { Button, InputField, MetricCard, Panel } from '../components/ui';
 import { formatMoney } from '../lib/format';
-import type { DemoGame, EarningsResult } from '../types/api';
+import type { AdminGame, EarningsResult } from '../types/api';
 
 export interface GuestQueryPageProps {
   busy: boolean;
@@ -10,7 +10,7 @@ export interface GuestQueryPageProps {
   identity: string;
   onIdentityChange(value: string): void;
   onQuery(): void;
-  selectedGame?: DemoGame;
+  selectedGame?: AdminGame;
 }
 
 export function GuestQueryPage({

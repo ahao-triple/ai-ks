@@ -377,7 +377,6 @@ function operationsWorkspaceProps(
     onNewGameSecretChange: () => undefined,
     onPayWithdrawal: () => undefined,
     onPreviewSettlement: () => undefined,
-    onResetTestData: () => undefined,
     onPlatformConfigDraftChange: () => undefined,
     onRefreshEcpm: () => undefined,
     onRefreshConfigGameEcpm: () => undefined,
@@ -393,7 +392,6 @@ function operationsWorkspaceProps(
     onUpdateAgentAlipay: () => undefined,
     onUpdateCompanyAdmin: () => undefined,
     onUpdateCompanyAdminScopes: () => undefined,
-    sampleJsCodes: [],
     selectedConfigGame: undefined,
     selectedConfigGameId: '',
     selectedSettlementDetail: undefined,
@@ -773,7 +771,7 @@ describe('OperationsWorkspace', () => {
       '提现',
       '代理',
       '审计',
-      '配置/维护',
+      '配置',
     ];
     const railPositions = railLabels.map((label) =>
       html.indexOf(`class="operations-feature-nav-label">${label}</span>`),
@@ -792,9 +790,9 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('审计追踪');
     expect(html).toContain('代理管理');
     expect(html).toContain(
-      'class="operations-feature-nav-label">配置/维护</span>',
+      'class="operations-feature-nav-label">配置</span>',
     );
-    expect(html).toContain('平台配置/测试维护');
+    expect(html).toContain('平台配置');
     expect(html).not.toContain(
       'class="operations-feature-nav-label">权限</span>',
     );
@@ -1223,13 +1221,12 @@ describe('OperationsWorkspace', () => {
           busyAction: 'refresh',
           games: [
             {
-              companyName: 'Demo Studio',
+              ...adminGame,
               gameAppId: 'game-1',
               id: 'game-row-1',
-              name: 'Demo Game',
             },
           ],
-          jsCode: 'mock-js-code-001',
+          jsCode: 'real-js-code',
         })}
       />,
     );
@@ -1500,10 +1497,11 @@ describe('settlement range helpers', () => {
     const gameId = getSettlementGameRowId(
       [
         {
-          companyName: 'Demo Studio',
+          ...adminGame,
+          companyName: 'Real Studio',
           gameAppId: 'demo_ks_game',
           id: 'demo-game-001',
-          name: 'Demo Game',
+          name: 'Real Game',
         },
       ],
       'demo_ks_game',
@@ -1517,10 +1515,11 @@ describe('settlement range helpers', () => {
     const gameId = getAdminEntrySettlementGameRowId(
       [
         {
-          companyName: 'Demo Studio',
+          ...adminGame,
+          companyName: 'Real Studio',
           gameAppId: 'demo_ks_game',
           id: 'demo-game-001',
-          name: 'Demo Game',
+          name: 'Real Game',
         },
       ],
       '',

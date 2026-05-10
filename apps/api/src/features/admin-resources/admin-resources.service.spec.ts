@@ -85,21 +85,6 @@ describe('AdminResourcesService', () => {
     });
   });
 
-  it('resets test data with a single truncate statement', async () => {
-    const prisma = createFakePrisma();
-    const service = new AdminResourcesService(prisma, createAccessControl());
-
-    await service.resetTestData({
-      actor: adminActor,
-    });
-
-    expect(prisma.executedSql).toHaveLength(1);
-    expect(prisma.executedSql[0]).toContain('TRUNCATE TABLE');
-    expect(prisma.executedSql[0]).toContain('company_admin_accounts');
-    expect(prisma.executedSql[0]).toContain('platform_configs');
-    expect(prisma.executedSql[0]).toContain('RESTART IDENTITY CASCADE');
-  });
-
   it('creates a company with zero balance and writes an audit log', async () => {
     const prisma = createFakePrisma();
     const service = new AdminResourcesService(prisma, createAccessControl());

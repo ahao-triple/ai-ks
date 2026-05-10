@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 import { KuaishouEcpmClient } from '../../integrations/kuaishou/kuaishou-ecpm.client';
 import { AuditLogService } from '../audit/audit-log.service';
-import { DemoStore, type DemoEcpmInputRow } from '../demo/demo-store';
-import { presentEcpmRow } from '../demo/money-presenter';
+import { GameDataStore, type EcpmInputRow } from '../game-data/game-data.store';
+import { presentEcpmRow } from '../../common/presenters/money-presenter';
 import {
   KuaishouEcpmSyncJobService,
   presentKuaishouEcpmSyncJob,
@@ -35,7 +35,7 @@ const HOUR_MS = 60 * 60 * 1000;
 @Injectable()
 export class KuaishouEcpmRangeSyncService {
   constructor(
-    private readonly demoStore: DemoStore,
+    private readonly gameDataStore: GameDataStore,
     private readonly ecpmClient: KuaishouEcpmClient,
     private readonly auditLogService: AuditLogService,
     private readonly tokenService: KuaishouTokenService,
@@ -58,7 +58,7 @@ export class KuaishouEcpmRangeSyncService {
     const endedDataHour = dataHours[dataHours.length - 1];
     const requestedOpenIds = input.openIds !== undefined
       ? input.openIds
-      : (await this.demoStore.listOpenIds(input.gameAppId)).map(
+      : (await this.gameDataStore.listOpenIds(input.gameAppId)).map(
           (record) => record.openId,
         );
     const job = await this.syncJobService.startJob({
@@ -72,8 +72,7 @@ export class KuaishouEcpmRangeSyncService {
       startedDataHour,
     });
 
-    const refreshRows: DemoEcpmInputRow[] = [];
-    const sources: Array<'mock' | 'kuaishou'> = [];
+    const refreshRows: EcpmInputRow[] = [];
     try {
       for (const dataHour of dataHours) {
         const result = await this.ecpmClient.refresh({
@@ -82,7 +81,6 @@ export class KuaishouEcpmRangeSyncService {
           openIds: requestedOpenIds,
         });
         refreshRows.push(...result.rows);
-        sources.push(result.source);
       }
     } catch (error) {
       await this.recordRefreshFailure({
@@ -98,9 +96,9 @@ export class KuaishouEcpmRangeSyncService {
       throw error;
     }
 
-    let savedRows: Awaited<ReturnType<DemoStore['addEcpmRows']>>;
+    let savedRows: Awaited<ReturnType<GameDataStore['addEcpmRows']>>;
     try {
-      savedRows = await this.demoStore.addEcpmRows({
+      savedRows = await this.gameDataStore.addEcpmRows({
         gameAppId: input.gameAppId,
         rows: refreshRows,
       });
@@ -118,7 +116,7 @@ export class KuaishouEcpmRangeSyncService {
       throw error;
     }
 
-    const source = sources.includes('kuaishou') ? 'kuaishou' : 'mock';
+    const source = 'kuaishou';
     const completedJob = await this.syncJobService.completeJob({
       jobId: job.id,
       savedCount: savedRows.length,
@@ -261,7 +259,7 @@ function tagAuditLogFailure(
   metadata: {
     completedJob: ReturnType<typeof presentKuaishouEcpmSyncJob>;
     savedCount: number;
-    source: 'mock' | 'kuaishou';
+    source: 'kuaishou';
   },
 ) {
   const tagged =
@@ -271,14 +269,14 @@ function tagAuditLogFailure(
           code?: string;
           completedJob?: ReturnType<typeof presentKuaishouEcpmSyncJob>;
           savedCount?: number;
-          source?: 'mock' | 'kuaishou';
+          source?: 'kuaishou';
         })
       : (new Error(readErrorMessage(error)) as Error & {
           auditOnly?: boolean;
           code?: string;
           completedJob?: ReturnType<typeof presentKuaishouEcpmSyncJob>;
           savedCount?: number;
-          source?: 'mock' | 'kuaishou';
+          source?: 'kuaishou';
         });
   tagged.auditOnly = true;
   tagged.code = 'AUDIT_LOG_FAILED';

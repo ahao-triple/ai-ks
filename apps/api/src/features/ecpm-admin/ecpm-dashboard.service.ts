@@ -6,7 +6,7 @@ import {
   type AdminReadScope,
 } from '../admin-auth/admin-access-control.service';
 import type { AdminPrincipal } from '../admin-auth/admin-auth.service';
-import { presentMoneyLi } from '../demo/money-presenter';
+import { presentMoneyLi } from '../../common/presenters/money-presenter';
 
 export type EcpmDashboardScope =
   | 'company'

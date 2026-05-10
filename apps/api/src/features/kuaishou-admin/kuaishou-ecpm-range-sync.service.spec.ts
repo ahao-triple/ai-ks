@@ -410,14 +410,14 @@ describe('KuaishouEcpmRangeSyncService', () => {
       }),
       message: 'audit unavailable',
       savedCount: 3,
-      source: 'mock',
+      source: 'kuaishou',
     });
 
     expect(dependencies.demoStore.addEcpmRows).toHaveBeenCalled();
     expect(dependencies.syncJobService.completeJob).toHaveBeenCalledWith({
       jobId: 'job-1',
       savedCount: 3,
-      source: 'mock',
+      source: 'kuaishou',
     });
     expect(dependencies.syncJobService.failJob).not.toHaveBeenCalled();
     expect(dependencies.tokenService.markTokenError).not.toHaveBeenCalled();
@@ -490,7 +490,7 @@ function createDependencies() {
               rawCostLi: BigInt(2000 + refreshCount),
             },
           ],
-          source: refreshCount === 2 ? ('kuaishou' as const) : ('mock' as const),
+          source: 'kuaishou' as const,
         };
       }),
     },

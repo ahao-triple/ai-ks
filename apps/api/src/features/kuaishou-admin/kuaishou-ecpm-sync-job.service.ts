@@ -25,7 +25,7 @@ export type StartKuaishouEcpmSyncJobInput = {
 export type CompleteKuaishouEcpmSyncJobInput = {
   jobId: string;
   savedCount: number;
-  source: 'mock' | 'kuaishou';
+  source: 'kuaishou';
 };
 
 export type FailKuaishouEcpmSyncJobInput = {
@@ -147,7 +147,7 @@ export function presentKuaishouEcpmSyncJob(job: KuaishouEcpmSyncJob) {
     lookbackHours: job.lookbackHours ?? null,
     requestedOpenIdCount: job.requestedOpenIdCount,
     savedCount: job.savedCount,
-    source: (job.source ?? null) as 'mock' | 'kuaishou' | null,
+    source: (job.source ?? null) as 'kuaishou' | null,
     startedAt: job.startedAt.toISOString(),
     startedDataHour: job.startedDataHour ?? null,
     status: job.status,

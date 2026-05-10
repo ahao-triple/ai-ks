@@ -9,7 +9,6 @@ import { AgentModule } from './features/agent/agent.module';
 import { AuditLogModule } from './features/audit/audit-log.module';
 import { BusinessClosureModule } from './features/business-closure/business-closure.module';
 import { CompanyAdminModule } from './features/company-admin/company-admin.module';
-import { DemoModule } from './features/demo/demo.module';
 import { EcpmAdminModule } from './features/ecpm-admin/ecpm-admin.module';
 import { GameSessionModule } from './features/game/game-session.module';
 import { KuaishouRefreshModule } from './features/kuaishou-admin/kuaishou-refresh.module';
@@ -34,7 +33,6 @@ import { HealthModule } from './health/health.module';
     AccountModule,
     AgentModule,
     BusinessClosureModule,
-    DemoModule,
     EcpmAdminModule,
     GameSessionModule,
     KuaishouRefreshModule,

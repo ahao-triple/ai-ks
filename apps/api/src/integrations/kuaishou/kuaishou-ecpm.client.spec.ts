@@ -8,6 +8,28 @@ afterEach(() => {
 });
 
 describe('KuaishouEcpmClient', () => {
+  it('rejects refreshes when real Kuaishou mode is not enabled', async () => {
+    const tokenService = createTokenService({
+      accessToken: 'db-access-token',
+      advertiserId: 'db-advertiser-id',
+      source: 'database',
+    });
+    const client = createClient({
+      config: {},
+      tokenService,
+    });
+
+    await expect(
+      client.refresh({
+        dataHour: '2026-05-08',
+        gameAppId: 'game-1',
+        openIds: ['open-1'],
+      }),
+    ).rejects.toThrow('KUAISHOU_API_MODE must be real');
+    expect(tokenService.resolveReportCredentials).not.toHaveBeenCalled();
+    expect(globalThis.fetch).toBe(originalFetch);
+  });
+
   it('uses resolved database credentials in real mode', async () => {
     mockEcpmResponse();
     const tokenService = createTokenService({

@@ -18,7 +18,7 @@ import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 import { CurrentAdmin } from '../admin-auth/current-admin.decorator';
 import { SuperAdminGuard } from '../admin-auth/super-admin.guard';
 import { AuditLogService } from '../audit/audit-log.service';
-import { presentMoneyLi } from '../demo/money-presenter';
+import { presentMoneyLi } from '../../common/presenters/money-presenter';
 import {
   type WithdrawalBatchDetailResult,
   WithdrawalDetailService,

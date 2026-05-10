@@ -45,17 +45,17 @@
 
 - `features/admin-auth`：超级管理员和公司管理员登录、JWT、守卫。
 - `features/company-admin`：公司管理员账号和 scope 管理。
-- `features/admin-resources`：公司、游戏、预算、代理、清空测试数据。
+- `features/admin-resources`：公司、游戏、预算、代理。
 - `features/platform-config`：展示金额比例、分账比例、最低提现金额。
 - `features/agent`：代理登录、代理工作台、代理收益、代理提现、名下用户。
 - `features/account`：用户注册登录、open_id 绑定、代理归属、支付宝、提现。
 - `features/game`：游戏端 `js_code` 换取 open_id。
 - `features/kuaishou-admin`：快手授权、token、ECPM 同步、任务历史和重试。
 - `features/settlement-admin`：结算预览、确认、批次和明细。
-- `features/withdrawal-admin`：提现批次、审核、模拟打款、失败关闭。
+- `features/withdrawal-admin`：提现批次、审核、状态流转、失败关闭。
 - `features/audit`：审计日志。
 - `features/business-closure`：真实数据测试前闭环核对。
-- `features/demo`：demo 上下文和测试数据辅助。
+- `features/game-data`：真实游戏、open_id、ECPM 写入和收益查询的数据访问。
 - `features/user`：游客收益查询。
 
 ## 3. 前端地图
