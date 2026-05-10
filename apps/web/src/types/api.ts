@@ -667,6 +667,35 @@ export type AgentDashboardUserRow = {
   lastActiveAt: string | null;
 };
 
+export type SuperAdminGameRow = {
+  gameId: string;
+  gameName: string;
+  ecpmCount: number;
+  activeUserCount: number;
+  averageEcpmYuan: number;
+  maxEcpmYuan: number;
+};
+
+export type SuperAdminUnderCompanyResult = {
+  company: { id: string; name: string };
+  games: SuperAdminGameRow[];
+};
+
+export type SuperAdminUnderGameUserRow = {
+  userId: string;
+  readableId: string;
+  ecpmCount: number;
+  averageEcpmYuan: number;
+  maxEcpmYuan: number;
+  lastActiveAt: string | null;
+};
+
+export type SuperAdminUnderGameResult = {
+  company: { id: string; name: string };
+  game: { id: string; name: string };
+  users: SuperAdminUnderGameUserRow[];
+};
+
 export type SuperAdminAnomalies = {
   syncFailures: Array<{
     gameAppId: string;

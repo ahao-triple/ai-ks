@@ -3574,6 +3574,24 @@ export function App() {
               ),
             getSuperAdminDashboardAnomalies: () =>
               aiKsApi.getSuperAdminDashboardAnomalies(appSession.accessToken),
+            getSuperAdminGamesUnderCompany: (companyId, date) =>
+              aiKsApi.getSuperAdminGamesUnderCompany(
+                appSession.accessToken,
+                companyId,
+                date,
+              ),
+            getSuperAdminUsersUnderGame: (gameId, date) =>
+              aiKsApi.getSuperAdminUsersUnderGame(
+                appSession.accessToken,
+                gameId,
+                date,
+              ),
+            getSuperAdminUserRecords: (userId, input) =>
+              aiKsApi.getSuperAdminUserRecords(
+                appSession.accessToken,
+                userId,
+                input,
+              ),
           }}
         />
       ) : null}

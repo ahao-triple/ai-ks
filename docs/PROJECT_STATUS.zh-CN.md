@@ -27,7 +27,13 @@
 - 后端 `AgentDashboardModule`：提供 `/agents/me/dashboard/{overview,users}` 两个接口。覆盖代理身份卡（邀请码 / 名下用户数 / 名下今日总收益 / 我的分账今日，"我的分账"按 `PlatformConfig.directAgentRatioPercent` 折算）+ 名下用户列表（用户 ID / 今日金额 / 今日 ECPM 条数 / 累计金额 / 注册时间 / 最近活跃）
 - 前端 `AgentDashboardPage`：代理工作台顶部金黄色身份卡 + 名下用户表，**用户 ID 不可点击下钻**（按 spec 隐私要求），列表带搜索与"无名下用户"引导。接入 AgentWorkspace 顶部，旧版工作台收进 details 折叠
 
-下一步（Plan 2C/2D）：公司管理员看板 + 公司/游戏/用户下钻视图 + AppShell 替换 DashboardLayout 完整 IA 切换 + 拆除旧 OperationsWorkspace。
+**Plan 2C（公司/游戏/用户下钻视图）已落地**：
+
+- 后端在 `SuperAdminDashboardController` 加 3 个接口：`/admin/dashboard/companies/:companyId/games`、`/admin/dashboard/games/:gameId/users`、`/admin/dashboard/users/:userId/records`。最后一个直接复用 `UserDashboardService.listEcpmRecords`
+- 前端新增 `SuperAdminDrilldown.tsx`：3 层下钻（公司 → 游戏 → 用户 → 用户详情），每层独立面包屑（可逐级返回）+ 独立刷新（共享 `useThrottledRefresh` 节流）+ 用户详情层复用 `EcpmRecordTable` 组件展示 ECPM 单条记录
+- 顶层公司分布表的公司名变成可点击 ▶ 入口；进入下钻视图时隐藏 KPI/异常/公司表，避免视觉混乱
+
+下一步（Plan 2D）：AppShell 替换 DashboardLayout 完整 IA 切换 + 拆除旧 OperationsWorkspace + 公司管理员看板（如需）。
 
 本文档是当前项目进度的主入口，用于替代早期 `docs/superpowers/specs` 和 `docs/superpowers/plans` 下的阶段性设计文档。旧文档已归档，只作为历史设计记录，不再代表当前实现状态。
 

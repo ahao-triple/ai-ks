@@ -56,6 +56,19 @@ const noopApi = {
   getSuperAdminDashboardOverview: () => Promise.resolve(stubData.overview),
   getSuperAdminDashboardCompanies: () => Promise.resolve(stubData.companies),
   getSuperAdminDashboardAnomalies: () => Promise.resolve(stubData.anomalies),
+  getSuperAdminGamesUnderCompany: () =>
+    Promise.resolve({
+      company: { id: 'c1', name: 'XX 互娱' },
+      games: [],
+    }),
+  getSuperAdminUsersUnderGame: () =>
+    Promise.resolve({
+      company: { id: 'c1', name: 'XX 互娱' },
+      game: { id: 'g1', name: 'G' },
+      users: [],
+    }),
+  getSuperAdminUserRecords: () =>
+    Promise.resolve({ records: [], totalToday: 0, totalAll: 0 }),
 };
 
 describe('SuperAdminDashboardPage SSR', () => {

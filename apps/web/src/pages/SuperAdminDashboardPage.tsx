@@ -1,10 +1,18 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useThrottledRefresh } from '../lib/useThrottledRefresh';
 import type {
   SuperAdminAnomalies,
   SuperAdminCompanyRow,
   SuperAdminOverview,
+  SuperAdminUnderCompanyResult,
+  SuperAdminUnderGameResult,
+  UserDashboardEcpmRecordsResult,
 } from '../types/api';
+import {
+  SuperAdminDrilldown,
+  type DrilldownApi,
+  type DrilldownPath,
+} from './SuperAdminDrilldown';
 
 export type SuperAdminDashboardApi = {
   getSuperAdminDashboardOverview: (date?: string) => Promise<SuperAdminOverview>;
@@ -12,6 +20,23 @@ export type SuperAdminDashboardApi = {
     date?: string,
   ) => Promise<SuperAdminCompanyRow[]>;
   getSuperAdminDashboardAnomalies: () => Promise<SuperAdminAnomalies>;
+  getSuperAdminGamesUnderCompany: (
+    companyId: string,
+    date?: string,
+  ) => Promise<SuperAdminUnderCompanyResult>;
+  getSuperAdminUsersUnderGame: (
+    gameId: string,
+    date?: string,
+  ) => Promise<SuperAdminUnderGameResult>;
+  getSuperAdminUserRecords: (
+    userId: string,
+    input?: {
+      date?: string;
+      gameId?: string;
+      accountId?: string;
+      limit?: number;
+    },
+  ) => Promise<UserDashboardEcpmRecordsResult>;
 };
 
 export type SuperAdminDashboardData = {
@@ -34,6 +59,25 @@ const TIME_FILTERS = [
 
 export function SuperAdminDashboardPage(props: SuperAdminDashboardPageProps) {
   const { api, date, initialData } = props;
+  const [drilldown, setDrilldown] = useState<DrilldownPath | null>(null);
+
+  const drilldownApi: DrilldownApi = {
+    loadCompanyGames: (companyId) =>
+      api.getSuperAdminGamesUnderCompany(companyId, date),
+    loadGameUsers: (gameId) => api.getSuperAdminUsersUnderGame(gameId, date),
+    loadUserRecords: (userId) =>
+      api.getSuperAdminUserRecords(userId, { date, limit: 50 }),
+  };
+
+  if (drilldown) {
+    return (
+      <SuperAdminDrilldown
+        path={drilldown}
+        api={drilldownApi}
+        onNavigate={setDrilldown}
+      />
+    );
+  }
 
   const fetchAll = useCallback(async (): Promise<SuperAdminDashboardData> => {
     const [overview, companies, anomalies] = await Promise.all([
@@ -148,11 +192,20 @@ export function SuperAdminDashboardPage(props: SuperAdminDashboardPageProps) {
           <h2>今日 ECPM 数据（按公司）</h2>
           <div className="user-dashboard-records-controls">
             <span className="user-dashboard-subtitle">
-              点击公司可下钻（Plan 2C）
+              点击公司名进入下钻
             </span>
           </div>
         </div>
-        <CompanyDistributionTable companies={data?.companies ?? []} />
+        <CompanyDistributionTable
+          companies={data?.companies ?? []}
+          onSelect={(row) =>
+            setDrilldown({
+              kind: 'company',
+              companyId: row.companyId,
+              companyName: row.companyName,
+            })
+          }
+        />
       </section>
     </div>
   );
@@ -219,8 +272,10 @@ function Anomalies({ anomalies }: { anomalies?: SuperAdminAnomalies }) {
 
 function CompanyDistributionTable({
   companies,
+  onSelect,
 }: {
   companies: SuperAdminCompanyRow[];
+  onSelect?: (row: SuperAdminCompanyRow) => void;
 }) {
   if (companies.length === 0) {
     return (
@@ -243,7 +298,17 @@ function CompanyDistributionTable({
         {companies.map((row) => (
           <tr key={row.companyId}>
             <td>
-              <strong>{row.companyName}</strong>
+              {onSelect ? (
+                <button
+                  type="button"
+                  className="admin-drilldown-link"
+                  onClick={() => onSelect(row)}
+                >
+                  <strong>{row.companyName}</strong> ▶
+                </button>
+              ) : (
+                <strong>{row.companyName}</strong>
+              )}
             </td>
             <td className="user-dashboard-col-num">{formatInt(row.ecpmCount)}</td>
             <td className="user-dashboard-col-num">

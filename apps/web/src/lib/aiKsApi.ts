@@ -48,6 +48,8 @@ import type {
   PlatformConfig,
   PlatformConfigUpdateInput,
   SuperAdminAnomalies,
+  SuperAdminUnderCompanyResult,
+  SuperAdminUnderGameResult,
   SuperAdminCompanyRow,
   SuperAdminOverview,
   UserDashboardEcpmRecordsResult,
@@ -763,6 +765,52 @@ export const aiKsApi = {
     return requestJson<SuperAdminAnomalies>(`/admin/dashboard/anomalies`, {
       accessToken: adminAccessToken,
     });
+  },
+
+  getSuperAdminGamesUnderCompany(
+    adminAccessToken: string,
+    companyId: string,
+    date?: string,
+  ) {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return requestJson<SuperAdminUnderCompanyResult>(
+      `/admin/dashboard/companies/${encodeURIComponent(companyId)}/games${qs}`,
+      { accessToken: adminAccessToken },
+    );
+  },
+
+  getSuperAdminUsersUnderGame(
+    adminAccessToken: string,
+    gameId: string,
+    date?: string,
+  ) {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return requestJson<SuperAdminUnderGameResult>(
+      `/admin/dashboard/games/${encodeURIComponent(gameId)}/users${qs}`,
+      { accessToken: adminAccessToken },
+    );
+  },
+
+  getSuperAdminUserRecords(
+    adminAccessToken: string,
+    userId: string,
+    input: {
+      date?: string;
+      gameId?: string;
+      accountId?: string;
+      limit?: number;
+    } = {},
+  ) {
+    const params = new URLSearchParams();
+    if (input.date) params.set('date', input.date);
+    if (input.gameId) params.set('gameId', input.gameId);
+    if (input.accountId) params.set('accountId', input.accountId);
+    if (input.limit) params.set('limit', String(input.limit));
+    const qs = params.toString();
+    return requestJson<UserDashboardEcpmRecordsResult>(
+      `/admin/dashboard/users/${encodeURIComponent(userId)}/records${qs ? '?' + qs : ''}`,
+      { accessToken: adminAccessToken },
+    );
   },
 
   getAgentDashboardOverview(agentAccessToken: string, date?: string) {
