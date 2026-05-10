@@ -251,6 +251,45 @@ export function isSuperAdmin(admin?: AdminPrincipal) {
   return admin?.role === 'SUPER_ADMIN';
 }
 
+export function mergeEcpmUpdateJob(
+  currentJob: EcpmUpdateJob | undefined,
+  nextJob: EcpmUpdateJob,
+): EcpmUpdateJob {
+  return {
+    ...currentJob,
+    ...nextJob,
+    items: nextJob.items ?? currentJob?.items,
+  };
+}
+
+export function upsertEcpmUpdateJobList(
+  current: EcpmUpdateJob[],
+  nextJob: EcpmUpdateJob,
+) {
+  const existingIndex = current.findIndex((job) => job.id === nextJob.id);
+  if (existingIndex < 0) {
+    return [nextJob, ...current].slice(0, 20);
+  }
+
+  const merged = [...current];
+  merged[existingIndex] = mergeEcpmUpdateJob(merged[existingIndex], nextJob);
+  return merged;
+}
+
+export function reconcileSelectedEcpmUpdateJob(
+  selectedJob: EcpmUpdateJob | undefined,
+  refreshedJobs: EcpmUpdateJob[],
+) {
+  if (!selectedJob) {
+    return undefined;
+  }
+
+  const refreshedJob = refreshedJobs.find((job) => job.id === selectedJob.id);
+  return refreshedJob
+    ? mergeEcpmUpdateJob(selectedJob, refreshedJob)
+    : undefined;
+}
+
 export function App() {
   const [activeView, setActiveView] = useState<ViewKey>('query');
   const [loginMode, setLoginMode] = useState<LoginMode>('account');
@@ -2046,31 +2085,8 @@ export function App() {
     }, 'admin');
   }
 
-  function mergeEcpmUpdateJob(
-    currentJob: EcpmUpdateJob | undefined,
-    nextJob: EcpmUpdateJob,
-  ): EcpmUpdateJob {
-    return {
-      ...currentJob,
-      ...nextJob,
-      items: nextJob.items ?? currentJob?.items,
-    };
-  }
-
   function upsertEcpmUpdateJob(nextJob: EcpmUpdateJob) {
-    setEcpmUpdateJobs((current) => {
-      const existingIndex = current.findIndex((job) => job.id === nextJob.id);
-      if (existingIndex < 0) {
-        return [nextJob, ...current].slice(0, 20);
-      }
-
-      const merged = [...current];
-      merged[existingIndex] = mergeEcpmUpdateJob(
-        merged[existingIndex],
-        nextJob,
-      );
-      return merged;
-    });
+    setEcpmUpdateJobs((current) => upsertEcpmUpdateJobList(current, nextJob));
   }
 
   async function queryEcpmDashboard(
@@ -2109,7 +2125,10 @@ export function App() {
       }
 
       setEcpmUpdateJobs(result.jobs);
-      return true;
+      setSelectedEcpmUpdateJob((current) =>
+        reconcileSelectedEcpmUpdateJob(current, result.jobs),
+      );
+      return result.jobs;
     } catch (nextError) {
       if (!isCurrent()) {
         return false;
@@ -2192,8 +2211,7 @@ export function App() {
       }
 
       setSelectedEcpmUpdateJob(job);
-      upsertEcpmUpdateJob(job);
-      await Promise.allSettled([
+      const [jobsResult] = await Promise.allSettled([
         loadEcpmUpdateJobsForToken(adminAccessToken, isCurrent, {
           reportError: false,
         }),
@@ -2209,7 +2227,17 @@ export function App() {
         return;
       }
 
-      upsertEcpmUpdateJob(job);
+      const refreshedJobs =
+        jobsResult.status === 'fulfilled' && jobsResult.value !== false
+          ? jobsResult.value
+          : undefined;
+      const refreshedJob = refreshedJobs?.find((row) => row.id === job.id);
+      if (refreshedJob) {
+        setSelectedEcpmUpdateJob(mergeEcpmUpdateJob(job, refreshedJob));
+      } else {
+        setSelectedEcpmUpdateJob(job);
+        upsertEcpmUpdateJob(job);
+      }
       setNotice(`ECPM 更新任务 ${job.id} 已提交，状态 ${job.status}`);
     }, 'admin');
   }
@@ -3583,6 +3611,9 @@ export function App() {
           onEcpmDashboardQuery={queryEcpmDashboard}
           onEcpmJobSelect={
             isSuperAdmin(currentAdmin) ? loadEcpmUpdateJob : undefined
+          }
+          onEcpmJobsRefresh={
+            isSuperAdmin(currentAdmin) ? loadEcpmUpdateJobs : undefined
           }
           onEcpmUpdate={isSuperAdmin(currentAdmin) ? updateEcpm : undefined}
           onGameChange={changeGameAppId}

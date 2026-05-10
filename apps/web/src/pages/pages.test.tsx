@@ -18,7 +18,9 @@ import {
   getAdminEntrySettlementGameRowId,
   getSettlementGameRowId,
   isSuperAdmin,
+  mergeEcpmUpdateJob,
   readKuaishouOAuthCallback,
+  reconcileSelectedEcpmUpdateJob,
   shouldApplySettlementBatchResponse,
 } from '../App';
 import { buildOperationsOverview } from '../lib/operationsOverview';
@@ -31,6 +33,7 @@ import type {
   AdminWithdrawalBatch,
   AdminWithdrawalDetailResult,
   BusinessClosureReport,
+  EcpmUpdateJob,
   KuaishouEcpmSyncJob,
   KuaishouTokenStatusResult,
 } from '../types/api';
@@ -163,6 +166,29 @@ const kuaishouEcpmJob: KuaishouEcpmSyncJob = {
   startedDataHour: '2026-05-08T00:00:00.000Z',
   status: 'SUCCEEDED',
   updatedAt: '2026-05-08T00:01:00.000Z',
+};
+
+const ecpmUpdateJob: EcpmUpdateJob = {
+  actorId: 'admin',
+  actorType: 'SUPER_ADMIN',
+  createdAt: '2026-05-08T00:00:00.000Z',
+  endedDataHour: '2026-05-08T00:00:00.000Z',
+  errorMessage: null,
+  failedCount: 0,
+  finishedAt: null,
+  id: 'ecpm-update-job-1',
+  mode: 'latest',
+  requestedGameCount: 1,
+  requestedOpenIdCount: 2,
+  savedCount: 1,
+  scopeId: 'game-1',
+  scopeType: 'game',
+  source: 'kuaishou',
+  skippedCount: 0,
+  startedAt: '2026-05-08T00:00:00.000Z',
+  startedDataHour: '2026-05-08T00:00:00.000Z',
+  status: 'RUNNING',
+  updatedAt: '2026-05-08T00:00:00.000Z',
 };
 
 const withdrawalBatch = {
@@ -518,6 +544,69 @@ describe('LoginPage', () => {
     expect(html).toContain(
       '<button class="ui-button ui-button-ghost" type="button" disabled="">游客登录</button>',
     );
+  });
+});
+
+describe('ECPM App state helpers', () => {
+  it('merges refreshed ECPM update jobs without dropping loaded detail items', () => {
+    const detailedJob: EcpmUpdateJob = {
+      ...ecpmUpdateJob,
+      items: [
+        {
+          createdAt: '2026-05-08T00:00:00.000Z',
+          dataHour: '2026-05-08T00:00:00.000Z',
+          errorMessage: null,
+          gameAppId: 'ks_game_001',
+          gameId: 'game-1',
+          id: 'ecpm-update-item-1',
+          jobId: ecpmUpdateJob.id,
+          kuaishouSyncJobId: null,
+          openId: 'open-1',
+          savedCount: 1,
+          skipReason: null,
+          status: 'SUCCEEDED',
+          updatedAt: '2026-05-08T00:00:30.000Z',
+          userId: 'user-1',
+        },
+      ],
+    };
+    const refreshedJob: EcpmUpdateJob = {
+      ...ecpmUpdateJob,
+      finishedAt: '2026-05-08T00:01:00.000Z',
+      savedCount: 2,
+      status: 'SUCCEEDED',
+      updatedAt: '2026-05-08T00:01:00.000Z',
+    };
+
+    expect(mergeEcpmUpdateJob(detailedJob, refreshedJob)).toMatchObject({
+      finishedAt: '2026-05-08T00:01:00.000Z',
+      items: detailedJob.items,
+      savedCount: 2,
+      status: 'SUCCEEDED',
+    });
+  });
+
+  it('reconciles selected ECPM update job against refreshed lists', () => {
+    const selectedJob: EcpmUpdateJob = {
+      ...ecpmUpdateJob,
+      items: [],
+      status: 'RUNNING',
+    };
+    const refreshedJob: EcpmUpdateJob = {
+      ...ecpmUpdateJob,
+      finishedAt: '2026-05-08T00:01:00.000Z',
+      status: 'SUCCEEDED',
+      updatedAt: '2026-05-08T00:01:00.000Z',
+    };
+
+    expect(
+      reconcileSelectedEcpmUpdateJob(selectedJob, [refreshedJob]),
+    ).toMatchObject({
+      finishedAt: '2026-05-08T00:01:00.000Z',
+      items: [],
+      status: 'SUCCEEDED',
+    });
+    expect(reconcileSelectedEcpmUpdateJob(selectedJob, [])).toBeUndefined();
   });
 });
 
@@ -881,6 +970,21 @@ describe('OperationsWorkspace', () => {
     expect(html).not.toContain('ECPM 看板等待接入');
   });
 
+  it('shows a super-admin ECPM report refresh action when supplied', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          onEcpmDashboardQuery: () => undefined,
+          onEcpmJobSelect: () => undefined,
+          onEcpmJobsRefresh: () => undefined,
+          onEcpmUpdate: () => undefined,
+        })}
+      />,
+    );
+
+    expect(html).toContain('刷新更新报告');
+  });
+
   it('lets company admins use dashboard-only ECPM wiring with update disabled', () => {
     const html = renderToStaticMarkup(
       <OperationsWorkspace
@@ -894,8 +998,33 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('ECPM 数据');
     expect(html).toContain('更新报告');
     expect(html).not.toContain('ECPM 看板等待接入');
+    expect(html).not.toContain('刷新更新报告');
     expect(html).toContain(
       '<button class="ui-button ui-button-primary ui-button-compact" type="button" disabled="">更新</button>',
+    );
+  });
+
+  it('disables ECPM controls while an unrelated workspace action is busy', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          busyAction: 'admin-resources',
+          onEcpmDashboardQuery: () => undefined,
+          onEcpmJobSelect: () => undefined,
+          onEcpmJobsRefresh: () => undefined,
+          onEcpmUpdate: () => undefined,
+        })}
+      />,
+    );
+
+    expect(html).toContain(
+      '<button class="ui-button ui-button-secondary ui-button-compact" type="button" disabled="">查询中</button>',
+    );
+    expect(html).toContain(
+      '<button class="ui-button ui-button-primary ui-button-compact" type="button" disabled="">更新</button>',
+    );
+    expect(html).toContain(
+      '<button class="ui-button ui-button-secondary ui-button-compact" type="button" disabled="">刷新更新报告</button>',
     );
   });
 

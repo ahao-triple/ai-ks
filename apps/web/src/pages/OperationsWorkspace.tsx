@@ -225,6 +225,7 @@ export interface OperationsWorkspaceProps {
     query: Record<string, string | undefined>,
   ): void;
   onEcpmJobSelect?(jobId: string): void;
+  onEcpmJobsRefresh?(): void;
   onEcpmUpdate?(request: EcpmUpdateRequest): void;
   onGameChange(value: string): void;
   onJsCodeChange(value: string): void;
@@ -478,6 +479,7 @@ export function OperationsWorkspace({
   onCreateSession,
   onEcpmDashboardQuery,
   onEcpmJobSelect,
+  onEcpmJobsRefresh,
   onEcpmUpdate,
   onGameChange,
   onJsCodeChange,
@@ -584,7 +586,9 @@ export function OperationsWorkspace({
     busyAction === 'ecpm-update' ||
     busyAction === 'ecpm-jobs'
       ? busyAction
-      : '';
+      : workspaceBusy
+        ? 'ecpm-dashboard'
+        : '';
   const ecpmOperationsWiring = onEcpmDashboardQuery
     ? {
         onDashboardQuery: onEcpmDashboardQuery,
@@ -1358,18 +1362,32 @@ export function OperationsWorkspace({
 
       <section className={paneClass('ecpm')}>
         {ecpmOperationsWiring ? (
-          <EcpmOperationsCenter
-            canUpdate={canUpdateEcpm}
-            companies={adminCompanies}
-            games={adminGames}
-            jobs={onEcpmJobSelect ? ecpmJobs : []}
-            loadingAction={ecpmLoadingAction}
-            onDashboardQuery={ecpmOperationsWiring.onDashboardQuery}
-            onJobSelect={ecpmOperationsWiring.onJobSelect}
-            onUpdate={ecpmOperationsWiring.onUpdate}
-            rows={ecpmRows}
-            selectedJob={onEcpmJobSelect ? selectedEcpmJob : undefined}
-          />
+          <>
+            {isSuperAdmin && onEcpmJobsRefresh ? (
+              <div className="button-row">
+                <Button
+                  compact
+                  disabled={workspaceBusy}
+                  onClick={onEcpmJobsRefresh}
+                  variant="secondary"
+                >
+                  {busyAction === 'ecpm-jobs' ? '刷新中' : '刷新更新报告'}
+                </Button>
+              </div>
+            ) : null}
+            <EcpmOperationsCenter
+              canUpdate={canUpdateEcpm}
+              companies={adminCompanies}
+              games={adminGames}
+              jobs={onEcpmJobSelect ? ecpmJobs : []}
+              loadingAction={ecpmLoadingAction}
+              onDashboardQuery={ecpmOperationsWiring.onDashboardQuery}
+              onJobSelect={ecpmOperationsWiring.onJobSelect}
+              onUpdate={ecpmOperationsWiring.onUpdate}
+              rows={ecpmRows}
+              selectedJob={onEcpmJobSelect ? selectedEcpmJob : undefined}
+            />
+          </>
         ) : (
           <Panel
             actions={<StatusBadge tone="muted">未接入</StatusBadge>}
