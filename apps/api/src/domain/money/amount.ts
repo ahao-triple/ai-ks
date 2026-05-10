@@ -1,3 +1,5 @@
+export const LI_PER_YUAN = 1000;
+
 export function yuanToLi(value: string): bigint {
   const trimmed = value.trim();
   if (!/^\d+(\.\d{1,3})?$/.test(trimmed)) {
