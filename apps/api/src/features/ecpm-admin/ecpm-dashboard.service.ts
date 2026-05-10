@@ -121,7 +121,7 @@ export class EcpmDashboardService {
   async queryCompany(input: EcpmDashboardQueryInput) {
     const scope = await this.accessControl.resolveReadScope(input.admin);
     if (!hasDataHourRange(input)) {
-      return this.queryLatestCompanyInScope(input, scope);
+      return this.queryLatestCompanyInScope(input, scope, 'company');
     }
 
     return this.queryCompanyInScope(input, scope);
@@ -234,18 +234,23 @@ export class EcpmDashboardService {
   async queryLatest(input: EcpmDashboardQueryInput) {
     const scope = await this.accessControl.resolveReadScope(input.admin);
 
-    return this.queryLatestCompanyInScope(input, scope);
+    return this.queryLatestCompanyInScope(
+      withoutDataHourRange(input),
+      scope,
+      'latest',
+    );
   }
 
   private async queryLatestCompanyInScope(
     input: EcpmDashboardQueryInput,
     scope: AdminReadScope,
+    resultScope: 'company' | 'latest',
   ) {
     const latestWhere = this.buildRawEcpmWhere(input, scope);
     if (latestWhere === false) {
       return {
         rows: [],
-        scope: 'company' as const,
+        scope: resultScope,
       };
     }
 
@@ -263,7 +268,7 @@ export class EcpmDashboardService {
     if (!latest) {
       return {
         rows: [],
-        scope: 'company' as const,
+        scope: resultScope,
       };
     }
 
@@ -272,19 +277,20 @@ export class EcpmDashboardService {
     return this.queryCompanyInScope(input, scope, {
       gte: latestHourStart,
       lt: new Date(latestHourStart.getTime() + HOUR_MS),
-    });
+    }, resultScope);
   }
 
   private async queryCompanyInScope(
     input: EcpmDashboardQueryInput,
     scope: AdminReadScope,
     eventTime?: Prisma.DateTimeFilter,
+    resultScope: 'company' | 'latest' = 'company',
   ) {
     const where = this.buildRawEcpmWhere(input, scope, eventTime);
     if (where === false) {
       return {
         rows: [],
-        scope: 'company' as const,
+        scope: resultScope,
       };
     }
 
@@ -305,7 +311,7 @@ export class EcpmDashboardService {
     if (groupedRows.length === 0) {
       return {
         rows: [],
-        scope: 'company' as const,
+        scope: resultScope,
       };
     }
 
@@ -390,12 +396,24 @@ export class EcpmDashboardService {
           return companyComparison;
         }
 
-        return left.gameName.localeCompare(right.gameName);
+        const companyIdComparison = left.companyId.localeCompare(
+          right.companyId,
+        );
+        if (companyIdComparison !== 0) {
+          return companyIdComparison;
+        }
+
+        const gameNameComparison = left.gameName.localeCompare(right.gameName);
+        if (gameNameComparison !== 0) {
+          return gameNameComparison;
+        }
+
+        return left.gameId.localeCompare(right.gameId);
       });
 
     return {
       rows: paginate(rows, input),
-      scope: 'company' as const,
+      scope: resultScope,
     };
   }
 
@@ -581,6 +599,16 @@ function buildDataHourFilter(input: EcpmDashboardQueryInput) {
 
 function hasDataHourRange(input: EcpmDashboardQueryInput) {
   return Boolean(input.startedDataHour || input.endedDataHour);
+}
+
+function withoutDataHourRange(
+  input: EcpmDashboardQueryInput,
+): EcpmDashboardQueryInput {
+  return {
+    ...input,
+    endedDataHour: undefined,
+    startedDataHour: undefined,
+  };
 }
 
 function parseDataHour(value: string, fieldName: string) {

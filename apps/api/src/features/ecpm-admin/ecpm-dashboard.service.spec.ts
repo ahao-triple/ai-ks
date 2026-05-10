@@ -94,6 +94,169 @@ describe('EcpmDashboardService', () => {
     });
   });
 
+  it('returns latest dashboard scope for latest ECPM summaries', async () => {
+    const latestHour = new Date('2026-05-08T06:00:00.000Z');
+    const prisma = createFakePrisma();
+    prisma.rawEcpm.findMany.mockResolvedValueOnce([{ eventTime: latestHour }]);
+    prisma.rawEcpm.groupBy.mockResolvedValueOnce([
+      {
+        _count: {
+          _all: 1,
+        },
+        _max: {
+          createdAt: new Date('2026-05-08T14:30:00.000Z'),
+        },
+        _sum: {
+          displayAmountLi: 50n,
+          rawCostLi: 100n,
+        },
+        eventTime: latestHour,
+        gameId: 'game-1',
+        openId: 'open-a',
+      },
+    ]);
+    prisma.game.findMany.mockResolvedValueOnce([gameRecord()]);
+    const service = createService(prisma);
+
+    const result = await service.queryLatest({
+      admin: superAdmin,
+    });
+
+    expect(result).toMatchObject({
+      rows: [
+        expect.objectContaining({
+          dataHour: '2026-05-08T14:00:00+08:00',
+          gameId: 'game-1',
+        }),
+      ],
+      scope: 'latest',
+    });
+  });
+
+  it('ignores supplied hour filters when querying latest ECPM summaries', async () => {
+    const latestHour = new Date('2026-05-08T06:00:00.000Z');
+    const prisma = createFakePrisma();
+    prisma.rawEcpm.findMany.mockResolvedValueOnce([{ eventTime: latestHour }]);
+    prisma.rawEcpm.groupBy.mockResolvedValueOnce([
+      {
+        _count: {
+          _all: 1,
+        },
+        _max: {
+          createdAt: new Date('2026-05-08T14:30:00.000Z'),
+        },
+        _sum: {
+          displayAmountLi: 50n,
+          rawCostLi: 100n,
+        },
+        eventTime: latestHour,
+        gameId: 'game-1',
+        openId: 'open-a',
+      },
+    ]);
+    prisma.game.findMany.mockResolvedValueOnce([gameRecord()]);
+    const service = createService(prisma);
+
+    const result = await service.queryLatest({
+      admin: superAdmin,
+      endedDataHour: '2026-05-07T11:00:00+08:00',
+      startedDataHour: '2026-05-07T10:00:00+08:00',
+    });
+
+    expect(prisma.rawEcpm.findMany).toHaveBeenCalledWith({
+      orderBy: {
+        eventTime: 'desc',
+      },
+      select: {
+        eventTime: true,
+      },
+      take: 1,
+      where: {
+        game: {
+          deletedAt: null,
+        },
+      },
+    });
+    expect(prisma.rawEcpm.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          eventTime: {
+            gte: latestHour,
+            lt: new Date('2026-05-08T07:00:00.000Z'),
+          },
+        }),
+      }),
+    );
+    expect(result.scope).toBe('latest');
+  });
+
+  it('selects latest ECPM hour inside company-admin scoped games', async () => {
+    const latestHour = new Date('2026-05-08T06:00:00.000Z');
+    const prisma = createFakePrisma();
+    const accessControl = createAccessControl({
+      companyIds: ['company-1'],
+      gameAppIds: ['game-app-1'],
+      gameIds: ['game-1'],
+      isSuperAdmin: false,
+    });
+    prisma.rawEcpm.findMany.mockResolvedValueOnce([{ eventTime: latestHour }]);
+    prisma.rawEcpm.groupBy.mockResolvedValueOnce([
+      {
+        _count: {
+          _all: 1,
+        },
+        _max: {
+          createdAt: new Date('2026-05-08T14:30:00.000Z'),
+        },
+        _sum: {
+          displayAmountLi: 50n,
+          rawCostLi: 100n,
+        },
+        eventTime: latestHour,
+        gameId: 'game-1',
+        openId: 'open-a',
+      },
+    ]);
+    prisma.game.findMany.mockResolvedValueOnce([gameRecord()]);
+    const service = createService(prisma, accessControl);
+
+    const result = await service.queryLatest({
+      admin: companyAdmin,
+    });
+
+    expect(prisma.rawEcpm.findMany).toHaveBeenCalledWith({
+      orderBy: {
+        eventTime: 'desc',
+      },
+      select: {
+        eventTime: true,
+      },
+      take: 1,
+      where: {
+        game: {
+          deletedAt: null,
+        },
+        gameId: {
+          in: ['game-1'],
+        },
+      },
+    });
+    expect(prisma.rawEcpm.groupBy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          eventTime: {
+            gte: latestHour,
+            lt: new Date('2026-05-08T07:00:00.000Z'),
+          },
+          gameId: {
+            in: ['game-1'],
+          },
+        }),
+      }),
+    );
+    expect(result.scope).toBe('latest');
+  });
+
   it('lists open_id rows for a selected game and hour range', async () => {
     const prisma = createFakePrisma();
     const rawRow = rawEcpmRecord();
