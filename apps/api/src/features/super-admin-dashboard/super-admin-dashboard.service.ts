@@ -42,10 +42,32 @@ export type SuperAdminAnomalies = {
   }>;
 };
 
+export type GameRow = {
+  gameId: string;
+  gameName: string;
+  ecpmCount: number;
+  activeUserCount: number;
+  averageEcpmYuan: number;
+  maxEcpmYuan: number;
+};
+
+export type UnderGameUserRow = {
+  userId: string;
+  readableId: string;
+  ecpmCount: number;
+  averageEcpmYuan: number;
+  maxEcpmYuan: number;
+  lastActiveAt: Date | null;
+};
+
 type DashboardPrisma = {
   rawEcpm: {
     findMany(args: {
-      where?: { eventTime?: { gte: Date; lt: Date } };
+      where?: {
+        gameId?: string | { in: string[] };
+        eventTime?: { gte: Date; lt: Date };
+        openIdRecordId?: { in: string[] };
+      };
       orderBy?: { eventTime: 'asc' | 'desc' };
     }): Promise<
       Array<{
@@ -59,7 +81,7 @@ type DashboardPrisma = {
   };
   game: {
     findMany(args: {
-      where?: { deletedAt: null };
+      where?: { deletedAt: null; companyId?: string };
     }): Promise<
       Array<{
         id: string;
@@ -69,6 +91,12 @@ type DashboardPrisma = {
         deletedAt: Date | null;
       }>
     >;
+    findUnique(args: { where: { id: string } }): Promise<{
+      id: string;
+      companyId: string;
+      gameAppId: string;
+      name: string;
+    } | null>;
   };
   company: {
     findMany(args: {
@@ -76,10 +104,28 @@ type DashboardPrisma = {
     }): Promise<
       Array<{ id: string; name: string; deletedAt: Date | null }>
     >;
+    findUnique(args: { where: { id: string } }): Promise<{
+      id: string;
+      name: string;
+    } | null>;
   };
   gameOpenId: {
-    findMany(args: { where?: object }): Promise<
-      Array<{ id: string; userId: string | null; gameId: string }>
+    findMany(args: {
+      where?: { gameId?: string; userId?: { in: string[] } };
+    }): Promise<
+      Array<{
+        id: string;
+        userId: string | null;
+        gameId: string;
+        readableId: string;
+      }>
+    >;
+  };
+  userAccount: {
+    findMany(args: {
+      where: { id: { in: string[] } };
+    }): Promise<
+      Array<{ id: string; readableId: string }>
     >;
   };
   kuaishouEcpmSyncJob: {
@@ -203,6 +249,151 @@ export class SuperAdminDashboardService {
 
     void gameById;
     return rows.sort((a, b) => b.ecpmCount - a.ecpmCount);
+  }
+
+  async listGamesUnderCompany(input: {
+    companyId: string;
+    range: Range;
+  }): Promise<{
+    company: { id: string; name: string };
+    games: GameRow[];
+  }> {
+    const prisma = this.prisma as unknown as DashboardPrisma;
+    const company = await prisma.company.findUnique({
+      where: { id: input.companyId },
+    });
+    if (!company) {
+      throw new Error(`Company ${input.companyId} not found`);
+    }
+
+    const games = await prisma.game.findMany({
+      where: { deletedAt: null, companyId: input.companyId },
+    });
+    if (games.length === 0) {
+      return { company: { id: company.id, name: company.name }, games: [] };
+    }
+
+    const gameIds = games.map((g) => g.id);
+    const todayRecords = await prisma.rawEcpm.findMany({
+      where: {
+        gameId: { in: gameIds },
+        eventTime: { gte: input.range.startAt, lt: input.range.endAt },
+      },
+    });
+    const allOpenIds = await prisma.gameOpenId.findMany({ where: {} });
+    const openIdById = new Map(allOpenIds.map((o) => [o.id, o]));
+
+    const rows: GameRow[] = games.map((game) => {
+      const gameRecords = todayRecords.filter((r) => r.gameId === game.id);
+      const yuanValues = gameRecords.map(
+        (r) => Number(r.rawCostLi) / LI_PER_YUAN,
+      );
+      const userIds = new Set<string>();
+      for (const r of gameRecords) {
+        if (!r.openIdRecordId) continue;
+        const o = openIdById.get(r.openIdRecordId);
+        if (o?.userId) userIds.add(o.userId);
+      }
+      return {
+        gameId: game.id,
+        gameName: game.name,
+        ecpmCount: gameRecords.length,
+        activeUserCount: userIds.size,
+        averageEcpmYuan: average(yuanValues),
+        maxEcpmYuan: yuanValues.length === 0 ? 0 : Math.max(...yuanValues),
+      };
+    });
+
+    return {
+      company: { id: company.id, name: company.name },
+      games: rows.sort((a, b) => b.ecpmCount - a.ecpmCount),
+    };
+  }
+
+  async listUsersUnderGame(input: {
+    gameId: string;
+    range: Range;
+  }): Promise<{
+    company: { id: string; name: string };
+    game: { id: string; name: string };
+    users: UnderGameUserRow[];
+  }> {
+    const prisma = this.prisma as unknown as DashboardPrisma;
+
+    const game = await prisma.game.findUnique({ where: { id: input.gameId } });
+    if (!game) {
+      throw new Error(`Game ${input.gameId} not found`);
+    }
+    const company = await prisma.company.findUnique({
+      where: { id: game.companyId },
+    });
+    if (!company) {
+      throw new Error(`Company ${game.companyId} not found`);
+    }
+
+    const openIds = await prisma.gameOpenId.findMany({
+      where: { gameId: input.gameId },
+    });
+    if (openIds.length === 0) {
+      return {
+        company: { id: company.id, name: company.name },
+        game: { id: game.id, name: game.name },
+        users: [],
+      };
+    }
+
+    const todayRecords = await prisma.rawEcpm.findMany({
+      where: {
+        gameId: input.gameId,
+        eventTime: { gte: input.range.startAt, lt: input.range.endAt },
+      },
+    });
+    const allRecords = await prisma.rawEcpm.findMany({
+      where: { gameId: input.gameId },
+      orderBy: { eventTime: 'desc' },
+    });
+
+    const userIds = Array.from(
+      new Set(
+        openIds.map((o) => o.userId).filter((x): x is string => Boolean(x)),
+      ),
+    );
+    const users =
+      userIds.length === 0
+        ? []
+        : await prisma.userAccount.findMany({ where: { id: { in: userIds } } });
+    const userById = new Map(users.map((u) => [u.id, u]));
+
+    const userRows: UnderGameUserRow[] = userIds
+      .map((userId) => {
+        const userOpenIdSet = new Set(
+          openIds.filter((o) => o.userId === userId).map((o) => o.id),
+        );
+        const userTodayRecords = todayRecords.filter(
+          (r) => r.openIdRecordId && userOpenIdSet.has(r.openIdRecordId),
+        );
+        const userAllRecords = allRecords.filter(
+          (r) => r.openIdRecordId && userOpenIdSet.has(r.openIdRecordId),
+        );
+        const yuanValues = userTodayRecords.map(
+          (r) => Number(r.rawCostLi) / LI_PER_YUAN,
+        );
+        return {
+          userId,
+          readableId: userById.get(userId)?.readableId ?? '',
+          ecpmCount: userTodayRecords.length,
+          averageEcpmYuan: average(yuanValues),
+          maxEcpmYuan: yuanValues.length === 0 ? 0 : Math.max(...yuanValues),
+          lastActiveAt: userAllRecords[0]?.eventTime ?? null,
+        };
+      })
+      .sort((a, b) => b.ecpmCount - a.ecpmCount);
+
+    return {
+      company: { id: company.id, name: company.name },
+      game: { id: game.id, name: game.name },
+      users: userRows,
+    };
   }
 
   async getAnomalies(): Promise<SuperAdminAnomalies> {

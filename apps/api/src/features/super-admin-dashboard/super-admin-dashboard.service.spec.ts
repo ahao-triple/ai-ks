@@ -24,12 +24,15 @@ type FakeSyncJob = {
   errorMessage: string | null;
 };
 
+type FakeUser = { id: string; readableId: string };
+
 function makeFakePrisma(seed: {
   games: FakeGame[];
   companies: FakeCompany[];
   openIds: FakeOpenId[];
   rawEcpms: FakeRawEcpm[];
   syncJobs?: FakeSyncJob[];
+  users?: FakeUser[];
 }) {
   return {
     rawEcpm: {
@@ -37,10 +40,26 @@ function makeFakePrisma(seed: {
         where,
         orderBy,
       }: {
-        where?: { eventTime?: { gte: Date; lt: Date } };
+        where?: {
+          gameId?: string | { in: string[] };
+          eventTime?: { gte: Date; lt: Date };
+          openIdRecordId?: { in: string[] };
+        };
         orderBy?: { eventTime: 'asc' | 'desc' };
       }) => {
         let rows = seed.rawEcpms.slice();
+        if (where?.gameId) {
+          if (typeof where.gameId === 'string') {
+            rows = rows.filter((r) => r.gameId === where.gameId);
+          } else {
+            const ids = new Set(where.gameId.in);
+            rows = rows.filter((r) => ids.has(r.gameId));
+          }
+        }
+        if (where?.openIdRecordId?.in) {
+          const ids = new Set(where.openIdRecordId.in);
+          rows = rows.filter((r) => r.openIdRecordId && ids.has(r.openIdRecordId));
+        }
         if (where?.eventTime) {
           rows = rows.filter(
             (r) =>
@@ -55,14 +74,43 @@ function makeFakePrisma(seed: {
       },
     },
     game: {
-      findMany: async () => seed.games.filter((g) => g.deletedAt === null),
+      findMany: async ({
+        where,
+      }: { where?: { deletedAt: null; companyId?: string } } = {}) =>
+        seed.games.filter(
+          (g) =>
+            g.deletedAt === null &&
+            (where?.companyId ? g.companyId === where.companyId : true),
+        ),
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        seed.games.find((g) => g.id === where.id) ?? null,
     },
     company: {
       findMany: async () =>
         seed.companies.filter((c) => c.deletedAt === null),
+      findUnique: async ({ where }: { where: { id: string } }) =>
+        seed.companies.find((c) => c.id === where.id) ?? null,
     },
     gameOpenId: {
-      findMany: async () => seed.openIds,
+      findMany: async ({
+        where,
+      }: { where?: { gameId?: string; userId?: { in: string[] } } } = {}) => {
+        let rows = seed.openIds.slice();
+        if (where?.gameId) {
+          rows = rows.filter((o) => o.gameId === where.gameId);
+        }
+        if (where?.userId) {
+          const ids = new Set(where.userId.in);
+          rows = rows.filter((o) => o.userId && ids.has(o.userId));
+        }
+        return rows.map((o) => ({ ...o, readableId: `R-${o.id}` }));
+      },
+    },
+    userAccount: {
+      findMany: async ({ where }: { where: { id: { in: string[] } } }) => {
+        const ids = new Set(where.id.in);
+        return (seed.users ?? []).filter((u) => ids.has(u.id));
+      },
     },
     kuaishouEcpmSyncJob: {
       findMany: async ({
@@ -175,6 +223,61 @@ describe('SuperAdminDashboardService.getCompanyDistribution', () => {
 
     const yy = rows[1];
     expect(yy.ecpmCount).toBe(1);
+  });
+});
+
+describe('SuperAdminDashboardService.listGamesUnderCompany', () => {
+  it('返回某公司下游戏的 ECPM 聚合，按 ECPM 条数降序', async () => {
+    const prisma = makeFakePrisma(baseSeed);
+    const service = new SuperAdminDashboardService(prisma);
+
+    const result = await service.listGamesUnderCompany({
+      companyId: 'c1',
+      range: { startAt: TODAY, endAt: TOMORROW },
+    });
+
+    expect(result.company.name).toBe('XX 互娱');
+    expect(result.games).toHaveLength(2);
+    expect(result.games[0].gameId).toBe('g1');
+    expect(result.games[0].ecpmCount).toBe(2);
+    expect(result.games[0].activeUserCount).toBe(2);
+    expect(result.games[0].averageEcpmYuan).toBeCloseTo(41.6, 1);
+  });
+
+  it('公司不存在时抛错', async () => {
+    const prisma = makeFakePrisma(baseSeed);
+    const service = new SuperAdminDashboardService(prisma);
+    await expect(
+      service.listGamesUnderCompany({
+        companyId: 'nope',
+        range: { startAt: TODAY, endAt: TOMORROW },
+      }),
+    ).rejects.toThrow();
+  });
+});
+
+describe('SuperAdminDashboardService.listUsersUnderGame', () => {
+  it('返回某游戏下用户的 ECPM 聚合', async () => {
+    const seedWithUsers = {
+      ...baseSeed,
+      users: [
+        { id: 'u1', readableId: 'A8F3D2K' },
+        { id: 'u2', readableId: 'B7C2E91' },
+      ],
+    };
+    const prisma = makeFakePrisma(seedWithUsers);
+    const service = new SuperAdminDashboardService(prisma);
+
+    const result = await service.listUsersUnderGame({
+      gameId: 'g1',
+      range: { startAt: TODAY, endAt: TOMORROW },
+    });
+
+    expect(result.game.name).toBe('消消乐');
+    expect(result.company.name).toBe('XX 互娱');
+    expect(result.users).toHaveLength(2);
+    expect(result.users[0].readableId).toBe('A8F3D2K');
+    expect(result.users[0].ecpmCount).toBe(1);
   });
 });
 
