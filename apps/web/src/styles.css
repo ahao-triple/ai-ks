@@ -1735,6 +1735,54 @@ select {
   display: none;
 }
 
+/* ===== SuperAdminDashboardPage 异常区 ===== */
+.admin-dashboard-anomaly {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.admin-dashboard-anomaly-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-dashboard-anomaly-item {
+  border-left: 3px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.admin-dashboard-anomaly-error {
+  background: var(--danger-soft);
+  border-left-color: var(--danger);
+}
+
+.admin-dashboard-anomaly-warn {
+  background: var(--warning-soft);
+  border-left-color: var(--warning);
+}
+
+.admin-dashboard-anomaly-title {
+  font-weight: 600;
+}
+
+.admin-dashboard-anomaly-meta {
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.admin-dashboard-anomaly-empty {
+  font-size: 13px;
+  color: var(--muted-soft);
+  text-align: center;
+  padding: 16px 8px;
+}
+
 /* ===== EcpmRecordTable ===== */
 .ecpm-record-counter {
   font-size: 12px;

@@ -44,6 +44,7 @@ import {
   type PlatformConfigDraft,
   type OperationsWorkspaceBusyAction,
 } from './pages/OperationsWorkspace';
+import { SuperAdminDashboardPage } from './pages/SuperAdminDashboardPage';
 import { UserDashboardPage } from './pages/UserDashboardPage';
 import type {
   AccountEarningsResult,
@@ -3538,6 +3539,24 @@ export function App() {
           users={agentUsers}
           withdrawalAmountYuan={ownAgentWithdrawalAmountYuan}
           withdrawals={agentWithdrawals}
+        />
+      ) : null}
+      {activeView === 'operations' && appSession.mode === 'admin' ? (
+        <SuperAdminDashboardPage
+          api={{
+            getSuperAdminDashboardOverview: (date) =>
+              aiKsApi.getSuperAdminDashboardOverview(
+                appSession.accessToken,
+                date,
+              ),
+            getSuperAdminDashboardCompanies: (date) =>
+              aiKsApi.getSuperAdminDashboardCompanies(
+                appSession.accessToken,
+                date,
+              ),
+            getSuperAdminDashboardAnomalies: () =>
+              aiKsApi.getSuperAdminDashboardAnomalies(appSession.accessToken),
+          }}
         />
       ) : null}
       {activeView === 'operations' && appSession.mode === 'admin' ? (
