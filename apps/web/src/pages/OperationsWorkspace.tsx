@@ -321,6 +321,20 @@ function tokenStatusTone(status?: KuaishouTokenStatusResult['status']) {
   return 'muted';
 }
 
+function tokenStatusText(status?: KuaishouTokenStatusResult['status']) {
+  switch (status) {
+    case 'ACTIVE':
+      return '已授权';
+    case 'EXPIRED':
+      return '已过期';
+    case 'ERROR':
+      return '异常';
+    case 'UNCONFIGURED':
+    default:
+      return '未配置';
+  }
+}
+
 function syncJobTone(status: KuaishouEcpmSyncJob['status']) {
   if (status === 'SUCCEEDED') {
     return 'success';
@@ -1331,7 +1345,7 @@ export function OperationsWorkspace({
       >
         <div className="button-row">
           <StatusBadge tone={tokenStatusTone(kuaishouTokenStatus?.status)}>
-            {kuaishouTokenStatus?.status ?? 'UNCONFIGURED'}
+            {tokenStatusText(kuaishouTokenStatus?.status)}
           </StatusBadge>
           {kuaishouTokenStatus?.lastError ? (
             <StatusBadge tone="danger">{kuaishouTokenStatus.lastError}</StatusBadge>
