@@ -108,7 +108,7 @@ const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
 const DATA_HOUR_PATTERN =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/;
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?\+08:00$/;
 
 @Injectable()
 export class EcpmDashboardService {
@@ -120,6 +120,9 @@ export class EcpmDashboardService {
 
   async queryCompany(input: EcpmDashboardQueryInput) {
     const scope = await this.accessControl.resolveReadScope(input.admin);
+    if (!hasDataHourRange(input)) {
+      return this.queryLatestCompanyInScope(input, scope);
+    }
 
     return this.queryCompanyInScope(input, scope);
   }
@@ -230,6 +233,14 @@ export class EcpmDashboardService {
 
   async queryLatest(input: EcpmDashboardQueryInput) {
     const scope = await this.accessControl.resolveReadScope(input.admin);
+
+    return this.queryLatestCompanyInScope(input, scope);
+  }
+
+  private async queryLatestCompanyInScope(
+    input: EcpmDashboardQueryInput,
+    scope: AdminReadScope,
+  ) {
     const latestWhere = this.buildRawEcpmWhere(input, scope);
     if (latestWhere === false) {
       return {
@@ -405,9 +416,7 @@ export class EcpmDashboardService {
           },
         },
       },
-      orderBy: {
-        eventTime: 'desc',
-      },
+      orderBy: [{ eventTime: 'desc' }, { id: 'desc' }],
       ...paginationArgs(input),
       where,
     })) as DashboardRawEcpmRow[];
@@ -570,20 +579,33 @@ function buildDataHourFilter(input: EcpmDashboardQueryInput) {
   return Object.keys(filter).length > 0 ? filter : undefined;
 }
 
+function hasDataHourRange(input: EcpmDashboardQueryInput) {
+  return Boolean(input.startedDataHour || input.endedDataHour);
+}
+
 function parseDataHour(value: string, fieldName: string) {
   const match = DATA_HOUR_PATTERN.exec(value);
   if (!match) {
     throw new BadRequestException(`Invalid ${fieldName}`);
   }
 
-  const [, yearText, monthText, dayText, hourText, minuteText, secondText] =
-    match;
+  const [
+    ,
+    yearText,
+    monthText,
+    dayText,
+    hourText,
+    minuteText,
+    secondText,
+    millisecondText,
+  ] = match;
   const year = Number(yearText);
   const month = Number(monthText);
   const day = Number(dayText);
   const hour = Number(hourText);
   const minute = Number(minuteText);
   const second = Number(secondText);
+  const millisecond = millisecondText ? Number(millisecondText) : 0;
 
   if (
     month < 1 ||
@@ -591,8 +613,9 @@ function parseDataHour(value: string, fieldName: string) {
     day < 1 ||
     day > daysInMonth(year, month) ||
     hour > 23 ||
-    minute > 59 ||
-    second > 59
+    minute !== 0 ||
+    second !== 0 ||
+    millisecond !== 0
   ) {
     throw new BadRequestException(`Invalid ${fieldName}`);
   }

@@ -43,7 +43,7 @@ describe('EcpmDashboardService', () => {
     prisma.game.findMany.mockResolvedValueOnce([gameRecord()]);
     const service = createService(prisma);
 
-    const result = await service.queryLatest({
+    const result = await service.queryCompany({
       admin: superAdmin,
     });
 
@@ -71,6 +71,9 @@ describe('EcpmDashboardService', () => {
         }),
       }),
     );
+    expect(
+      prisma.rawEcpm.findMany.mock.invocationCallOrder[0],
+    ).toBeLessThan(prisma.rawEcpm.groupBy.mock.invocationCallOrder[0]);
     expect(result).toEqual({
       rows: [
         {
@@ -106,9 +109,7 @@ describe('EcpmDashboardService', () => {
 
     expect(prisma.rawEcpm.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        orderBy: {
-          eventTime: 'desc',
-        },
+        orderBy: [{ eventTime: 'desc' }, { id: 'desc' }],
         where: {
           eventTime: {
             gte: new Date('2026-05-08T06:00:00.000Z'),
@@ -267,6 +268,36 @@ describe('EcpmDashboardService', () => {
         admin: superAdmin,
         gameId: 'game-1',
         startedDataHour: '2026-02-31T00:00:00+08:00',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.rawEcpm.findMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-hour data-hour filters', async () => {
+    const prisma = createFakePrisma();
+    prisma.rawEcpm.findMany.mockResolvedValueOnce([]);
+    const service = createService(prisma);
+
+    await expect(
+      service.queryGame({
+        admin: superAdmin,
+        gameId: 'game-1',
+        startedDataHour: '2026-05-08T14:30:00+08:00',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.rawEcpm.findMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects data-hour filters outside the China timezone offset', async () => {
+    const prisma = createFakePrisma();
+    prisma.rawEcpm.findMany.mockResolvedValueOnce([]);
+    const service = createService(prisma);
+
+    await expect(
+      service.queryGame({
+        admin: superAdmin,
+        gameId: 'game-1',
+        startedDataHour: '2026-05-08T14:00:00Z',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.rawEcpm.findMany).not.toHaveBeenCalled();
