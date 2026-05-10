@@ -1735,6 +1735,48 @@ select {
   display: none;
 }
 
+/* ===== 旧 workspace 折叠按钮 ===== */
+.legacy-workspace-toggle {
+  margin-top: 24px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  padding: 0;
+  background: var(--surface-soft);
+}
+
+.legacy-workspace-toggle > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--muted);
+  user-select: none;
+}
+
+.legacy-workspace-toggle > summary::-webkit-details-marker {
+  display: none;
+}
+
+.legacy-workspace-toggle > summary::before {
+  content: "▸ ";
+  display: inline-block;
+  margin-right: 4px;
+  transition: transform 0.15s;
+}
+
+.legacy-workspace-toggle[open] > summary::before {
+  content: "▾ ";
+}
+
+.legacy-workspace-toggle[open] {
+  background: var(--surface);
+}
+
+.legacy-workspace-toggle > *:not(summary) {
+  padding: 14px;
+  border-top: 1px dashed var(--border);
+}
+
 /* ===== SuperAdminDashboardPage 异常区 ===== */
 .admin-dashboard-anomaly {
   background: var(--surface);

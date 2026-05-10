@@ -3497,6 +3497,8 @@ export function App() {
         />
       ) : null}
       {activeView === 'account' && appSession.mode === 'account' ? (
+        <details className="legacy-workspace-toggle">
+          <summary>展开旧版账号控制台（提现 / 资料 / 绑定）</summary>
         <AccountWorkspace
           account={account}
           accountEarnings={accountEarnings}
@@ -3519,6 +3521,7 @@ export function App() {
           withdrawal={withdrawal}
           withdrawalAmountYuan={withdrawalAmountYuan}
         />
+        </details>
       ) : null}
       {activeView === 'agent' && appSession.mode === 'agent' ? (
         <AgentWorkspace
@@ -3560,6 +3563,8 @@ export function App() {
         />
       ) : null}
       {activeView === 'operations' && appSession.mode === 'admin' ? (
+        <details className="legacy-workspace-toggle">
+          <summary>展开旧版运营管理（公司 / 游戏 / 提现 / 结算 等 10 个 tab）</summary>
         <OperationsWorkspace
           adminCompanies={adminCompanies}
           adminGames={adminGames}
@@ -3705,6 +3710,7 @@ export function App() {
           settlementUserId={settlementUserId}
           session={gameSession}
         />
+        </details>
       ) : null}
     </DashboardLayout>
   );
