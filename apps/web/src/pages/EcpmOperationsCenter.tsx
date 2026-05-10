@@ -212,6 +212,33 @@ function modeLabel(mode: EcpmUpdateMode) {
   return updateModes.find((item) => item.value === mode)?.label ?? mode;
 }
 
+function normalizeChinaDataHour(value: string) {
+  const match = value
+    .trim()
+    .match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):00(?::00)?$/);
+  if (!match) {
+    return null;
+  }
+
+  const [, yearText, monthText, dayText, hourText] = match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const date = new Date(Date.UTC(year, month - 1, day, hour));
+
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day ||
+    date.getUTCHours() !== hour
+  ) {
+    return null;
+  }
+
+  return `${yearText}-${monthText}-${dayText}T${hourText}:00:00+08:00`;
+}
+
 export function EcpmOperationsCenter({
   canUpdate,
   companies,
@@ -230,7 +257,8 @@ export function EcpmOperationsCenter({
   const [updateMode, setUpdateMode] = useState<EcpmUpdateMode>('latest');
   const [updateScopeType, setUpdateScopeType] =
     useState<EcpmUpdateScopeType>('game');
-  const [scopeId, setScopeId] = useState('');
+  const [dashboardScopeId, setDashboardScopeId] = useState('');
+  const [updateScopeId, setUpdateScopeId] = useState('');
   const [startedDataHour, setStartedDataHour] = useState('');
   const [endedDataHour, setEndedDataHour] = useState('');
 
@@ -238,9 +266,16 @@ export function EcpmOperationsCenter({
   const updateLoading = loadingAction === 'ecpm-update';
   const jobsLoading = loadingAction === 'ecpm-jobs';
   const loading = loadingAction !== '';
-  const trimmedScopeId = scopeId.trim();
+  const trimmedDashboardScopeId = dashboardScopeId.trim();
+  const trimmedUpdateScopeId = updateScopeId.trim();
+  const normalizedStartedDataHour = normalizeChinaDataHour(startedDataHour);
+  const normalizedEndedDataHour = normalizeChinaDataHour(endedDataHour);
+  const rangeUpdateInvalid =
+    updateMode === 'range' &&
+    (!normalizedStartedDataHour || !normalizedEndedDataHour);
   const reportRows = selectedJob?.items ?? [];
-  const updateDisabled = !canUpdate || loading || !trimmedScopeId;
+  const updateDisabled =
+    !canUpdate || loading || !trimmedUpdateScopeId || rangeUpdateInvalid;
 
   const jobColumns: Array<DataTableColumn<EcpmUpdateJob>> = [
     {
@@ -300,17 +335,26 @@ export function EcpmOperationsCenter({
   function handleDashboardQuery() {
     onDashboardQuery(
       dashboardScope,
-      buildDashboardQuery(dashboardScope, trimmedScopeId),
+      buildDashboardQuery(dashboardScope, trimmedDashboardScopeId),
     );
   }
 
+  function handleUpdateScopeTypeChange(scopeType: EcpmUpdateScopeType) {
+    setUpdateScopeType(scopeType);
+    setUpdateScopeId('');
+  }
+
   function handleUpdate() {
+    if (updateDisabled) {
+      return;
+    }
+
     onUpdate({
-      endedDataHour: updateMode === 'range' ? endedDataHour : null,
+      endedDataHour: updateMode === 'range' ? normalizedEndedDataHour : null,
       mode: updateMode,
-      scopeId: trimmedScopeId,
+      scopeId: trimmedUpdateScopeId,
       scopeType: updateScopeType,
-      startedDataHour: updateMode === 'range' ? startedDataHour : null,
+      startedDataHour: updateMode === 'range' ? normalizedStartedDataHour : null,
     });
   }
 
@@ -363,6 +407,7 @@ export function EcpmOperationsCenter({
           <div className="ecpm-controls" role="group">
             {dashboardScopes.map((scope) => (
               <Button
+                aria-pressed={dashboardScope === scope.value}
                 compact
                 key={scope.value}
                 onClick={() => setDashboardScope(scope.value)}
@@ -375,8 +420,8 @@ export function EcpmOperationsCenter({
           <InputField
             id="ecpm-dashboard-scope-id"
             label="查询 ID"
-            onChange={setScopeId}
-            value={scopeId}
+            onChange={setDashboardScopeId}
+            value={dashboardScopeId}
           />
           <DataTable
             columns={dashboardColumns}
@@ -425,6 +470,7 @@ export function EcpmOperationsCenter({
           <div className="ecpm-controls" role="group">
             {updateModes.map((mode) => (
               <Button
+                aria-pressed={updateMode === mode.value}
                 compact
                 key={mode.value}
                 onClick={() => setUpdateMode(mode.value)}
@@ -437,9 +483,10 @@ export function EcpmOperationsCenter({
           <div className="ecpm-controls" role="group">
             {updateScopes.map((scope) => (
               <Button
+                aria-pressed={updateScopeType === scope.value}
                 compact
                 key={scope.value}
-                onClick={() => setUpdateScopeType(scope.value)}
+                onClick={() => handleUpdateScopeTypeChange(scope.value)}
                 variant={updateScopeType === scope.value ? 'primary' : 'secondary'}
               >
                 {scope.label}
@@ -452,8 +499,8 @@ export function EcpmOperationsCenter({
                 <span>公司</span>
                 <select
                   id="ecpm-company-scope"
-                  onChange={(event) => setScopeId(event.currentTarget.value)}
-                  value={scopeId}
+                  onChange={(event) => setUpdateScopeId(event.currentTarget.value)}
+                  value={updateScopeId}
                 >
                   <option value="">未选择</option>
                   {companies.map((company) => (
@@ -469,8 +516,8 @@ export function EcpmOperationsCenter({
                 <span>游戏</span>
                 <select
                   id="ecpm-game-scope"
-                  onChange={(event) => setScopeId(event.currentTarget.value)}
-                  value={scopeId}
+                  onChange={(event) => setUpdateScopeId(event.currentTarget.value)}
+                  value={updateScopeId}
                 >
                   <option value="">未选择</option>
                   {games.map((game) => (
@@ -485,16 +532,16 @@ export function EcpmOperationsCenter({
               <InputField
                 id="ecpm-user-scope"
                 label="用户"
-                onChange={setScopeId}
-                value={scopeId}
+                onChange={setUpdateScopeId}
+                value={updateScopeId}
               />
             ) : null}
             {updateScopeType === 'open_id' ? (
               <InputField
                 id="ecpm-open-id-scope"
                 label="open_id"
-                onChange={setScopeId}
-                value={scopeId}
+                onChange={setUpdateScopeId}
+                value={updateScopeId}
               />
             ) : null}
           </div>
@@ -504,6 +551,7 @@ export function EcpmOperationsCenter({
                 id="ecpm-started-data-hour"
                 label="开始小时"
                 onChange={setStartedDataHour}
+                step={3600}
                 type="datetime-local"
                 value={startedDataHour}
               />
@@ -511,6 +559,7 @@ export function EcpmOperationsCenter({
                 id="ecpm-ended-data-hour"
                 label="结束小时"
                 onChange={setEndedDataHour}
+                step={3600}
                 type="datetime-local"
                 value={endedDataHour}
               />
