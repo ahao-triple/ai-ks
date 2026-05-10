@@ -143,7 +143,11 @@ export class KuaishouEcpmRangeSyncService {
         targetType: 'kuaishou_ecpm_refresh',
       });
     } catch (error) {
-      throw tagAuditLogFailure(error);
+      throw tagAuditLogFailure(error, {
+        completedJob: presentKuaishouEcpmSyncJob(completedJob),
+        savedCount: savedRows.length,
+        source,
+      });
     }
 
     return {
@@ -252,16 +256,35 @@ function readErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'unknown error';
 }
 
-function tagAuditLogFailure(error: unknown) {
+function tagAuditLogFailure(
+  error: unknown,
+  metadata: {
+    completedJob: ReturnType<typeof presentKuaishouEcpmSyncJob>;
+    savedCount: number;
+    source: 'mock' | 'kuaishou';
+  },
+) {
   const tagged =
     error instanceof Error
-      ? (error as Error & { auditOnly?: boolean; code?: string })
+      ? (error as Error & {
+          auditOnly?: boolean;
+          code?: string;
+          completedJob?: ReturnType<typeof presentKuaishouEcpmSyncJob>;
+          savedCount?: number;
+          source?: 'mock' | 'kuaishou';
+        })
       : (new Error(readErrorMessage(error)) as Error & {
           auditOnly?: boolean;
           code?: string;
+          completedJob?: ReturnType<typeof presentKuaishouEcpmSyncJob>;
+          savedCount?: number;
+          source?: 'mock' | 'kuaishou';
         });
   tagged.auditOnly = true;
   tagged.code = 'AUDIT_LOG_FAILED';
+  tagged.completedJob = metadata.completedJob;
+  tagged.savedCount = metadata.savedCount;
+  tagged.source = metadata.source;
 
   return tagged;
 }

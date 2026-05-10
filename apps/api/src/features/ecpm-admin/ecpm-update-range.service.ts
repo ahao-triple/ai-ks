@@ -195,8 +195,12 @@ export class EcpmUpdateRangeService {
         gameAppId: input.batch.gameAppId,
         gameId: input.batch.gameId,
         jobId: input.jobId,
+        kuaishouSyncJobId: readAuditOnlySyncJobId(error),
         openId: singleOpenId(input.batch),
-        status: isAuditOnlyFailure(error) ? 'SUCCEEDED' : 'FAILED',
+        savedCount: readAuditOnlySavedCount(error),
+        status: isAuditOnlyFailure(error)
+          ? readAuditOnlyItemStatus(error)
+          : 'FAILED',
         userId: singleUserId(input.batch),
       });
     }
@@ -455,6 +459,40 @@ function isAuditOnlyFailure(error: unknown) {
   const taggedError = error as { auditOnly?: unknown; code?: unknown };
 
   return (
-    taggedError.auditOnly === true || taggedError.code === 'AUDIT_LOG_FAILED'
+    taggedError.auditOnly === true && taggedError.code === 'AUDIT_LOG_FAILED'
   );
+}
+
+function readAuditOnlySyncJobId(error: unknown) {
+  if (!isAuditOnlyFailure(error)) {
+    return undefined;
+  }
+
+  const completedJob = (error as { completedJob?: { id?: unknown } })
+    .completedJob;
+
+  return typeof completedJob?.id === 'string' ? completedJob.id : undefined;
+}
+
+function readAuditOnlySavedCount(error: unknown) {
+  if (!isAuditOnlyFailure(error)) {
+    return undefined;
+  }
+
+  const savedCount = (error as { savedCount?: unknown }).savedCount;
+
+  return typeof savedCount === 'number' ? savedCount : 0;
+}
+
+function readAuditOnlyItemStatus(error: unknown) {
+  if (!isAuditOnlyFailure(error)) {
+    return 'FAILED';
+  }
+
+  const status = (error as { completedJob?: { status?: unknown } })
+    .completedJob?.status;
+
+  return typeof status === 'string'
+    ? resolveSuccessfulItemStatus(status)
+    : 'SUCCEEDED';
 }

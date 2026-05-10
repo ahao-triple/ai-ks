@@ -403,7 +403,14 @@ describe('KuaishouEcpmRangeSyncService', () => {
     await expect(refresh).rejects.toMatchObject({
       auditOnly: true,
       code: 'AUDIT_LOG_FAILED',
+      completedJob: expect.objectContaining({
+        id: 'job-1',
+        savedCount: 3,
+        status: 'SUCCEEDED',
+      }),
       message: 'audit unavailable',
+      savedCount: 3,
+      source: 'mock',
     });
 
     expect(dependencies.demoStore.addEcpmRows).toHaveBeenCalled();

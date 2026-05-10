@@ -298,9 +298,16 @@ describe('EcpmUpdateRangeService', () => {
     const error = new Error('kuaishou audit unavailable') as Error & {
       auditOnly: boolean;
       code: string;
+      completedJob: { id: string; status: string };
+      savedCount: number;
     };
     error.auditOnly = true;
     error.code = 'AUDIT_LOG_FAILED';
+    error.completedJob = {
+      id: 'sync-job-audit',
+      status: 'SUCCEEDED',
+    };
+    error.savedCount = 7;
     rangeSyncService.refreshRange.mockRejectedValueOnce(error);
 
     const job = await service.update({
@@ -314,7 +321,8 @@ describe('EcpmUpdateRangeService', () => {
     expect(prisma.items[0]).toMatchObject({
       errorMessage: 'kuaishou audit unavailable',
       gameId: 'game-1',
-      savedCount: 0,
+      kuaishouSyncJobId: 'sync-job-audit',
+      savedCount: 7,
       skipReason: null,
       status: EcpmUpdateJobStatus.SUCCEEDED,
     });
