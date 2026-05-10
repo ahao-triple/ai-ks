@@ -60,20 +60,25 @@ export function UserDashboardPage(props: UserDashboardPageProps) {
     return { overview, groups, records };
   }, [api, date, filter]);
 
-  const refresher = useThrottledRefresh<UserDashboardData>(fetchAll, {
-    windowMs: 5000,
-  });
-  const data = refresher.data ?? initialData ?? null;
+  const {
+    data: liveData,
+    loading,
+    toast,
+    refresh,
+    startAuto,
+    stopAuto,
+  } = useThrottledRefresh<UserDashboardData>(fetchAll, { windowMs: 5000 });
+  const data = liveData ?? initialData ?? null;
 
   useEffect(() => {
-    void refresher.refresh();
-  }, [refresher]);
+    void refresh();
+  }, [refresh]);
 
   useEffect(() => {
-    if (autoRefreshOn) refresher.startAuto(autoIntervalMs);
-    else refresher.stopAuto();
-    return () => refresher.stopAuto();
-  }, [autoRefreshOn, autoIntervalMs, refresher]);
+    if (autoRefreshOn) startAuto(autoIntervalMs);
+    else stopAuto();
+    return () => stopAuto();
+  }, [autoRefreshOn, autoIntervalMs, startAuto, stopAuto]);
 
   const recordViews: EcpmRecordView[] = useMemo(
     () =>
@@ -120,14 +125,14 @@ export function UserDashboardPage(props: UserDashboardPageProps) {
           <button
             type="button"
             className="user-dashboard-refresh"
-            onClick={() => void refresher.refresh()}
-            disabled={refresher.loading}
+            onClick={() => void refresh()}
+            disabled={loading}
           >
             ⟳ 立即刷新
           </button>
-          {refresher.toast && (
-            <span className={`user-dashboard-toast user-dashboard-toast-${refresher.toast.kind}`}>
-              {refresher.toast.message}
+          {toast && (
+            <span className={`user-dashboard-toast user-dashboard-toast-${toast.kind}`}>
+              {toast.message}
             </span>
           )}
         </div>
@@ -218,7 +223,7 @@ export function UserDashboardPage(props: UserDashboardPageProps) {
         </div>
         <EcpmRecordTable
           rows={recordViews}
-          loading={refresher.loading && !data}
+          loading={loading && !data}
           totalToday={data?.records.totalToday ?? 0}
           totalAll={data?.records.totalAll ?? 0}
           extraColumns={extraColumns}

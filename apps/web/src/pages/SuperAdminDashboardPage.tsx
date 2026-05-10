@@ -44,14 +44,19 @@ export function SuperAdminDashboardPage(props: SuperAdminDashboardPageProps) {
     return { overview, companies, anomalies };
   }, [api, date]);
 
-  const refresher = useThrottledRefresh<SuperAdminDashboardData>(fetchAll, {
+  const {
+    data: liveData,
+    loading,
+    toast,
+    refresh,
+  } = useThrottledRefresh<SuperAdminDashboardData>(fetchAll, {
     windowMs: 5000,
   });
-  const data = refresher.data ?? initialData ?? null;
+  const data = liveData ?? initialData ?? null;
 
   useEffect(() => {
-    void refresher.refresh();
-  }, [refresher]);
+    void refresh();
+  }, [refresh]);
 
   return (
     <div className="user-dashboard admin-dashboard">
@@ -83,14 +88,14 @@ export function SuperAdminDashboardPage(props: SuperAdminDashboardPageProps) {
           <button
             type="button"
             className="user-dashboard-refresh"
-            onClick={() => void refresher.refresh()}
-            disabled={refresher.loading}
+            onClick={() => void refresh()}
+            disabled={loading}
           >
             ⟳ 立即刷新
           </button>
-          {refresher.toast && (
-            <span className={`user-dashboard-toast user-dashboard-toast-${refresher.toast.kind}`}>
-              {refresher.toast.message}
+          {toast && (
+            <span className={`user-dashboard-toast user-dashboard-toast-${toast.kind}`}>
+              {toast.message}
             </span>
           )}
         </div>
