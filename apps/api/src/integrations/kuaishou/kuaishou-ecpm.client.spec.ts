@@ -213,6 +213,76 @@ describe('KuaishouEcpmClient', () => {
     expect(result.rows).toHaveLength(500 + 495 + 3);
   });
 
+  it('normalizes ISO+timezone dataHour into "yyyy-MM-dd HH:00:00" and casts numeric advertiser_id', async () => {
+    mockEcpmResponse();
+    const tokenService = createTokenService({
+      accessToken: 'tk',
+      advertiserId: '65777275',
+      source: 'database',
+    });
+    const client = createClient({
+      config: { KUAISHOU_API_MODE: 'real' },
+      tokenService,
+    });
+
+    await client.refresh({
+      dataHour: '2026-05-10T06:00:00+08:00',
+      gameAppId: 'ks693554344267236216',
+      openIds: [],
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: JSON.stringify({
+          advertiser_id: 65777275,
+          app_id: 'ks693554344267236216',
+          data_hour: '2026-05-10 06:00:00',
+          page: 1,
+          page_size: 500,
+        }),
+      }),
+    );
+  });
+
+  it('parses kuaishou event_time without timezone as Beijing time (+08:00)', async () => {
+    globalThis.fetch = jest.fn(async () => {
+      return new Response(
+        JSON.stringify({
+          data: {
+            details: [
+              {
+                cost: '800',
+                event_time: '2026-05-10 06:21:34',
+                id: 'event-1',
+                open_id: 'open-1',
+              },
+            ],
+          },
+        }),
+        { headers: { 'content-type': 'application/json' }, status: 200 },
+      );
+    }) as typeof fetch;
+    const tokenService = createTokenService({
+      accessToken: 'tk',
+      advertiserId: '65777275',
+      source: 'database',
+    });
+    const client = createClient({
+      config: { KUAISHOU_API_MODE: 'real' },
+      tokenService,
+    });
+
+    const result = await client.refresh({
+      dataHour: '2026-05-10T06:00:00+08:00',
+      gameAppId: 'ks693554344267236216',
+      openIds: [],
+    });
+
+    // 2026-05-10 06:21:34 +08:00 == 2026-05-09T22:21:34Z
+    expect(result.rows[0].eventTime.toISOString()).toBe('2026-05-09T22:21:34.000Z');
+  });
+
   it('returns a debuggable upstream error when Kuaishou refresh fails', async () => {
     globalThis.fetch = jest.fn(async () => {
       return new Response(

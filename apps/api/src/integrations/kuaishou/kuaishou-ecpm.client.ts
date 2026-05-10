@@ -51,9 +51,9 @@ export class KuaishouEcpmClient {
 
     for (let page = 1; page <= ECPM_MAX_PAGES; page += 1) {
       const requestBody: Record<string, unknown> = {
-        advertiser_id: credentials.advertiserId,
+        advertiser_id: parseAdvertiserId(credentials.advertiserId),
         app_id: input.gameAppId,
-        data_hour: input.dataHour,
+        data_hour: formatKuaishouDataHour(input.dataHour),
         ...(input.openIds && input.openIds.length > 0
           ? { open_id: input.openIds }
           : {}),
@@ -166,7 +166,33 @@ function readDate(payload: Record<string, unknown>, key: string) {
     return undefined;
   }
 
-  const normalized = value.includes('T') ? value : value.replace(' ', 'T');
+  // 快手 ECPM 接口的 event_time 形如 "2026-05-10 06:21:34"（北京时间，不带时区）。
+  // 这里把无时区字符串按 +08:00 解析，避免在 UTC 服务器上被当作 UTC 而漂移 8 小时。
+  let normalized: string;
+  if (value.includes('T')) {
+    normalized = value;
+  } else if (/[+-]\d{2}:?\d{2}$|Z$/.test(value)) {
+    normalized = value.replace(' ', 'T');
+  } else {
+    normalized = `${value.replace(' ', 'T')}+08:00`;
+  }
   const parsed = new Date(normalized);
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
+}
+
+// 我们内部的 dataHour 形如 "2026-05-08T14:00:00+08:00"（ISO + 时区），
+// 但快手 ECPM 接口只接受 "2026-05-08 14:00:00"（空格分隔，无时区）。
+function formatKuaishouDataHour(input: string): string {
+  if (!input.includes('T')) {
+    return input;
+  }
+  return input.replace('T', ' ').replace(/[+-]\d{2}:?\d{2}$|Z$/, '');
+}
+
+// 快手 ECPM 接口要求 advertiser_id 是 number。
+// 我们历史上把它当 string 存（甚至存成 "0"），下游传给接口前 normalize。
+function parseAdvertiserId(value: string | undefined): number | string | undefined {
+  if (!value) return undefined;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : value;
 }

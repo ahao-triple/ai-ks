@@ -83,10 +83,14 @@ async function requestToken(
     throw new Error('Kuaishou OAuth response missing token fields');
   }
 
-  const advertiserId = data
+  // 快手 OAuth 偶尔会在 advertiser_id 上返 0（IAA 类应用无 DSP 账户绑定），
+  // 这种值传给 ECPM 接口会被拒（"advertiser_id 或 agent_id 缺失"），按未提供处理。
+  const rawAdvertiserId = data
     ? readString(data, 'advertiser_id') ??
       readNumber(data, 'advertiser_id')?.toString()
     : undefined;
+  const advertiserId =
+    rawAdvertiserId && rawAdvertiserId !== '0' ? rawAdvertiserId : undefined;
 
   return {
     accessToken,
