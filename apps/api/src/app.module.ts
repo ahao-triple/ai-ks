@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { resolveWorkspaceEnvPath } from './common/env/workspace-env';
 import { PrismaModule } from './common/prisma/prisma.module';
+import { RateLimitModule } from './common/rate-limit/rate-limit.module';
 import { AdminAuthModule } from './features/admin-auth/admin-auth.module';
 import { AdminResourcesModule } from './features/admin-resources/admin-resources.module';
 import { AccountModule } from './features/account/account.module';
@@ -25,6 +26,7 @@ import { HealthModule } from './health/health.module';
       isGlobal: true,
     }),
     PrismaModule,
+    RateLimitModule,
     HealthModule,
     AdminAuthModule,
     AdminResourcesModule,
