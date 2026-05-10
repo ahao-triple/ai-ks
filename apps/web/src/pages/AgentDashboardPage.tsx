@@ -1,4 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
+import {
+  DashboardRangeTabs,
+  type DashboardRangeKey,
+} from '../components/domain';
 import { formatAgentInvitationCode, formatUserId } from '../lib/idFormat';
 import { useThrottledRefresh } from '../lib/useThrottledRefresh';
 import type {
@@ -7,8 +11,12 @@ import type {
 } from '../types/api';
 
 export type AgentDashboardApi = {
-  getAgentDashboardOverview: (date?: string) => Promise<AgentDashboardOverview>;
-  getAgentDashboardUsers: (date?: string) => Promise<AgentDashboardUserRow[]>;
+  getAgentDashboardOverview: (
+    range?: DashboardRangeKey,
+  ) => Promise<AgentDashboardOverview>;
+  getAgentDashboardUsers: (
+    range?: DashboardRangeKey,
+  ) => Promise<AgentDashboardUserRow[]>;
 };
 
 export type AgentDashboardData = {
@@ -19,21 +27,21 @@ export type AgentDashboardData = {
 export type AgentDashboardPageProps = {
   api: AgentDashboardApi;
   agentName: string;
-  date?: string;
   initialData?: AgentDashboardData;
 };
 
 export function AgentDashboardPage(props: AgentDashboardPageProps) {
-  const { api, agentName, date, initialData } = props;
+  const { api, agentName, initialData } = props;
+  const [rangeKey, setRangeKey] = useState<DashboardRangeKey>('today');
   const [search, setSearch] = useState('');
 
   const fetchAll = useCallback(async (): Promise<AgentDashboardData> => {
     const [overview, users] = await Promise.all([
-      api.getAgentDashboardOverview(date),
-      api.getAgentDashboardUsers(date),
+      api.getAgentDashboardOverview(rangeKey),
+      api.getAgentDashboardUsers(rangeKey),
     ]);
     return { overview, users };
-  }, [api, date]);
+  }, [api, rangeKey]);
 
   const {
     data: liveData,
@@ -63,7 +71,7 @@ export function AgentDashboardPage(props: AgentDashboardPageProps) {
           <div className="user-dashboard-subtitle">代理工作台</div>
         </div>
         <div className="user-dashboard-time-filters">
-          <span className="user-dashboard-time user-dashboard-time-active">今天</span>
+          <DashboardRangeTabs value={rangeKey} onChange={setRangeKey} />
           <button
             type="button"
             className="user-dashboard-refresh"

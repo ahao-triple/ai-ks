@@ -9,13 +9,18 @@ import { z } from 'zod';
 import { type AgentPrincipal } from '../agent/agent-auth.service';
 import { AgentJwtGuard } from '../agent/agent-jwt.guard';
 import { CurrentAgent } from '../agent/current-agent.decorator';
-import { resolveChinaDayRange } from '../user/china-day-range';
+import { resolveDashboardRange } from '../user/china-day-range';
 import { CachedResponseInterceptor } from '../../common/rate-limit/cached-response.interceptor';
 import { RateLimitGuard } from '../../common/rate-limit/rate-limit.guard';
 import { Throttle } from '../../common/rate-limit/throttle.decorator';
 import { AgentDashboardService } from './agent-dashboard.service';
 
-const dateOnly = z.object({ date: z.string().optional() });
+const querySchema = z.object({
+  range: z
+    .enum(['today', 'yesterday', 'last3', 'last7'])
+    .optional()
+    .default('today'),
+});
 
 const STANDARD_THROTTLE = {
   windowMs: 5_000,
@@ -35,10 +40,10 @@ export class AgentDashboardController {
     @CurrentAgent() agent: AgentPrincipal,
     @Query() query: unknown,
   ) {
-    const { date } = dateOnly.parse(query ?? {});
+    const { range } = querySchema.parse(query ?? {});
     return this.service.getOverview({
       agentId: agent.id,
-      range: resolveChinaDayRange(date),
+      range: resolveDashboardRange(range),
     });
   }
 
@@ -48,10 +53,10 @@ export class AgentDashboardController {
     @CurrentAgent() agent: AgentPrincipal,
     @Query() query: unknown,
   ) {
-    const { date } = dateOnly.parse(query ?? {});
+    const { range } = querySchema.parse(query ?? {});
     return this.service.listUnderUsers({
       agentId: agent.id,
-      range: resolveChinaDayRange(date),
+      range: resolveDashboardRange(range),
     });
   }
 }

@@ -1,4 +1,5 @@
 import { requestJson } from './api';
+import type { DashboardRangeKey } from '../components/domain';
 import type {
   AccountAgentBindingResult,
   AccountEarningsResult,
@@ -709,16 +710,16 @@ export const aiKsApi = {
     });
   },
 
-  getUserDashboardOverview(accessToken: string, date?: string) {
-    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+  getUserDashboardOverview(accessToken: string, range?: DashboardRangeKey) {
+    const qs = range ? `?range=${range}` : '';
     return requestJson<UserDashboardOverview>(
       `/users/me/dashboard/overview${qs}`,
       { accessToken },
     );
   },
 
-  getUserDashboardGroups(accessToken: string, date?: string) {
-    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+  getUserDashboardGroups(accessToken: string, range?: DashboardRangeKey) {
+    const qs = range ? `?range=${range}` : '';
     return requestJson<UserDashboardGameGroup[]>(
       `/users/me/dashboard/groups${qs}`,
       { accessToken },
@@ -728,14 +729,14 @@ export const aiKsApi = {
   getUserDashboardRecords(
     accessToken: string,
     input: {
-      date?: string;
+      range?: DashboardRangeKey;
       gameId?: string;
       accountId?: string;
       limit?: number;
     } = {},
   ) {
     const params = new URLSearchParams();
-    if (input.date) params.set('date', input.date);
+    if (input.range) params.set('range', input.range);
     if (input.gameId) params.set('gameId', input.gameId);
     if (input.accountId) params.set('accountId', input.accountId);
     if (input.limit) params.set('limit', String(input.limit));
@@ -746,15 +747,21 @@ export const aiKsApi = {
     );
   },
 
-  getSuperAdminDashboardOverview(adminAccessToken: string, date?: string) {
-    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+  getSuperAdminDashboardOverview(
+    adminAccessToken: string,
+    range?: DashboardRangeKey,
+  ) {
+    const qs = range ? `?range=${range}` : '';
     return requestJson<SuperAdminOverview>(`/admin/dashboard/overview${qs}`, {
       accessToken: adminAccessToken,
     });
   },
 
-  getSuperAdminDashboardCompanies(adminAccessToken: string, date?: string) {
-    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+  getSuperAdminDashboardCompanies(
+    adminAccessToken: string,
+    range?: DashboardRangeKey,
+  ) {
+    const qs = range ? `?range=${range}` : '';
     return requestJson<SuperAdminCompanyRow[]>(
       `/admin/dashboard/companies${qs}`,
       { accessToken: adminAccessToken },
@@ -770,9 +777,9 @@ export const aiKsApi = {
   getSuperAdminGamesUnderCompany(
     adminAccessToken: string,
     companyId: string,
-    date?: string,
+    range?: DashboardRangeKey,
   ) {
-    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    const qs = range ? `?range=${range}` : '';
     return requestJson<SuperAdminUnderCompanyResult>(
       `/admin/dashboard/companies/${encodeURIComponent(companyId)}/games${qs}`,
       { accessToken: adminAccessToken },
@@ -782,9 +789,9 @@ export const aiKsApi = {
   getSuperAdminUsersUnderGame(
     adminAccessToken: string,
     gameId: string,
-    date?: string,
+    range?: DashboardRangeKey,
   ) {
-    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    const qs = range ? `?range=${range}` : '';
     return requestJson<SuperAdminUnderGameResult>(
       `/admin/dashboard/games/${encodeURIComponent(gameId)}/users${qs}`,
       { accessToken: adminAccessToken },
@@ -840,16 +847,22 @@ export const aiKsApi = {
     );
   },
 
-  getAgentDashboardOverview(agentAccessToken: string, date?: string) {
-    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+  getAgentDashboardOverview(
+    agentAccessToken: string,
+    range?: DashboardRangeKey,
+  ) {
+    const qs = range ? `?range=${range}` : '';
     return requestJson<AgentDashboardOverview>(
       `/agents/me/dashboard/overview${qs}`,
       { accessToken: agentAccessToken },
     );
   },
 
-  getAgentDashboardUsers(agentAccessToken: string, date?: string) {
-    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+  getAgentDashboardUsers(
+    agentAccessToken: string,
+    range?: DashboardRangeKey,
+  ) {
+    const qs = range ? `?range=${range}` : '';
     return requestJson<AgentDashboardUserRow[]>(
       `/agents/me/dashboard/users${qs}`,
       { accessToken: agentAccessToken },

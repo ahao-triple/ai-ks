@@ -15,7 +15,9 @@ import type {
 } from '../types/api';
 
 export type DrilldownApi = {
-  loadCompanyGames: (companyId: string) => Promise<SuperAdminUnderCompanyResult>;
+  loadCompanyGames: (
+    companyId: string,
+  ) => Promise<SuperAdminUnderCompanyResult>;
   loadGameUsers: (gameId: string) => Promise<SuperAdminUnderGameResult>;
   loadUserRecords: (userId: string) => Promise<UserDashboardEcpmRecordsResult>;
   refreshScope: (

@@ -18,3 +18,8 @@ export {
   RowRefreshButton,
 } from './RefreshControls';
 export type { RefreshLookbackHours } from './RefreshControls';
+export {
+  DASHBOARD_RANGE_OPTIONS,
+  DashboardRangeTabs,
+} from './DashboardRangeTabs';
+export type { DashboardRangeKey } from './DashboardRangeTabs';

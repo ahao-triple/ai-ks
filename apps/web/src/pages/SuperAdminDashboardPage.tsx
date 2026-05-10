@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  DashboardRangeTabs,
   RefreshWindowSelect,
   RowRefreshButton,
+  type DashboardRangeKey,
   type RefreshLookbackHours,
 } from '../components/domain';
 import { useThrottledRefresh } from '../lib/useThrottledRefresh';
@@ -20,23 +22,25 @@ import {
 } from './SuperAdminDrilldown';
 
 export type SuperAdminDashboardApi = {
-  getSuperAdminDashboardOverview: (date?: string) => Promise<SuperAdminOverview>;
+  getSuperAdminDashboardOverview: (
+    range?: DashboardRangeKey,
+  ) => Promise<SuperAdminOverview>;
   getSuperAdminDashboardCompanies: (
-    date?: string,
+    range?: DashboardRangeKey,
   ) => Promise<SuperAdminCompanyRow[]>;
   getSuperAdminDashboardAnomalies: () => Promise<SuperAdminAnomalies>;
   getSuperAdminGamesUnderCompany: (
     companyId: string,
-    date?: string,
+    range?: DashboardRangeKey,
   ) => Promise<SuperAdminUnderCompanyResult>;
   getSuperAdminUsersUnderGame: (
     gameId: string,
-    date?: string,
+    range?: DashboardRangeKey,
   ) => Promise<SuperAdminUnderGameResult>;
   getSuperAdminUserRecords: (
     userId: string,
     input?: {
-      date?: string;
+      range?: DashboardRangeKey;
       gameId?: string;
       accountId?: string;
       limit?: number;
@@ -71,39 +75,34 @@ export type SuperAdminDashboardData = {
 
 export type SuperAdminDashboardPageProps = {
   api: SuperAdminDashboardApi;
-  date?: string;
   initialData?: SuperAdminDashboardData;
 };
 
-const TIME_FILTERS = [
-  { key: 'today', label: '今天' },
-  { key: 'last7', label: '最近 7 天' },
-  { key: 'last30', label: '最近 30 天' },
-] as const;
-
 export function SuperAdminDashboardPage(props: SuperAdminDashboardPageProps) {
-  const { api, date, initialData } = props;
+  const { api, initialData } = props;
+  const [rangeKey, setRangeKey] = useState<DashboardRangeKey>('today');
   const [drilldown, setDrilldown] = useState<DrilldownPath | null>(null);
   const [companyRefreshHours, setCompanyRefreshHours] =
     useState<RefreshLookbackHours>(1);
 
   const drilldownApi: DrilldownApi = {
     loadCompanyGames: (companyId) =>
-      api.getSuperAdminGamesUnderCompany(companyId, date),
-    loadGameUsers: (gameId) => api.getSuperAdminUsersUnderGame(gameId, date),
+      api.getSuperAdminGamesUnderCompany(companyId, rangeKey),
+    loadGameUsers: (gameId) =>
+      api.getSuperAdminUsersUnderGame(gameId, rangeKey),
     loadUserRecords: (userId) =>
-      api.getSuperAdminUserRecords(userId, { date, limit: 50 }),
+      api.getSuperAdminUserRecords(userId, { range: rangeKey, limit: 50 }),
     refreshScope: (body) => api.refreshSuperAdminScope(body),
   };
 
   const fetchAll = useCallback(async (): Promise<SuperAdminDashboardData> => {
     const [overview, companies, anomalies] = await Promise.all([
-      api.getSuperAdminDashboardOverview(date),
-      api.getSuperAdminDashboardCompanies(date),
+      api.getSuperAdminDashboardOverview(rangeKey),
+      api.getSuperAdminDashboardCompanies(rangeKey),
       api.getSuperAdminDashboardAnomalies(),
     ]);
     return { overview, companies, anomalies };
-  }, [api, date]);
+  }, [api, rangeKey]);
 
   const {
     data: liveData,
@@ -142,21 +141,7 @@ export function SuperAdminDashboardPage(props: SuperAdminDashboardPageProps) {
           </div>
         </div>
         <div className="user-dashboard-time-filters">
-          {TIME_FILTERS.map((f, idx) => (
-            <button
-              key={f.key}
-              type="button"
-              className={
-                idx === 0
-                  ? 'user-dashboard-time user-dashboard-time-active'
-                  : 'user-dashboard-time'
-              }
-              disabled={idx !== 0}
-              title={idx === 0 ? '当前时间窗口' : '后续版本接入'}
-            >
-              {f.label}
-            </button>
-          ))}
+          <DashboardRangeTabs value={rangeKey} onChange={setRangeKey} />
           <button
             type="button"
             className="user-dashboard-refresh"

@@ -45,7 +45,12 @@ export class CachedResponseInterceptor implements NestInterceptor {
       req?.ip ??
       'anon';
     const route = req?.route?.path ?? req?.url ?? 'unknown';
-    const key = `${principalId}:${route}:${req?.method ?? 'GET'}`;
+    // cache key 必须区分 query，否则不同筛选条件会互相命中彼此的缓存
+    const queryStr =
+      typeof req?.url === 'string' && req.url.includes('?')
+        ? req.url.slice(req.url.indexOf('?'))
+        : '';
+    const key = `${principalId}:${route}:${req?.method ?? 'GET'}${queryStr}`;
     const now = Date.now();
 
     if (req.rateLimitHit) {

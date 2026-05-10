@@ -20,20 +20,37 @@ import { CurrentAdmin } from '../admin-auth/current-admin.decorator';
 import { SuperAdminGuard } from '../admin-auth/super-admin.guard';
 import { KuaishouEcpmRangeSyncService } from '../kuaishou-admin/kuaishou-ecpm-range-sync.service';
 import { UserDashboardService } from '../user-dashboard/user-dashboard.service';
-import { resolveChinaDayRange } from '../user/china-day-range';
+import {
+  resolveChinaDayRange,
+  resolveDashboardRange,
+  type DashboardRangeKey,
+} from '../user/china-day-range';
 import { CachedResponseInterceptor } from '../../common/rate-limit/cached-response.interceptor';
 import { RateLimitGuard } from '../../common/rate-limit/rate-limit.guard';
 import { Throttle } from '../../common/rate-limit/throttle.decorator';
 import { SuperAdminDashboardService } from './super-admin-dashboard.service';
 
-const dateOnly = z.object({ date: z.string().optional() });
+const rangeKeySchema = z
+  .enum(['today', 'yesterday', 'last3', 'last7'])
+  .optional()
+  .default('today');
+
+const dashboardQuerySchema = z.object({
+  range: rangeKeySchema,
+});
 
 const userRecordsQuerySchema = z.object({
   date: z.string().optional(),
+  range: rangeKeySchema,
   gameId: z.string().optional(),
   accountId: z.string().optional(),
   limit: z.coerce.number().int().positive().max(200).optional().default(50),
 });
+
+function parseDashboardRange(query: unknown) {
+  const { range } = dashboardQuerySchema.parse(query ?? {});
+  return resolveDashboardRange(range as DashboardRangeKey);
+}
 
 const lookbackHoursField = z
   .union([
@@ -85,16 +102,14 @@ export class SuperAdminDashboardController {
   @Get('overview')
   @Throttle(STANDARD_THROTTLE)
   async overview(@Query() query: unknown) {
-    const { date } = dateOnly.parse(query ?? {});
-    return this.service.getOverview({ range: resolveChinaDayRange(date) });
+    return this.service.getOverview({ range: parseDashboardRange(query) });
   }
 
   @Get('companies')
   @Throttle(STANDARD_THROTTLE)
   async companies(@Query() query: unknown) {
-    const { date } = dateOnly.parse(query ?? {});
     return this.service.getCompanyDistribution({
-      range: resolveChinaDayRange(date),
+      range: parseDashboardRange(query),
     });
   }
 
@@ -110,10 +125,9 @@ export class SuperAdminDashboardController {
     @Param('companyId') companyId: string,
     @Query() query: unknown,
   ) {
-    const { date } = dateOnly.parse(query ?? {});
     return this.service.listGamesUnderCompany({
       companyId,
-      range: resolveChinaDayRange(date),
+      range: parseDashboardRange(query),
     });
   }
 
@@ -123,10 +137,9 @@ export class SuperAdminDashboardController {
     @Param('gameId') gameId: string,
     @Query() query: unknown,
   ) {
-    const { date } = dateOnly.parse(query ?? {});
     return this.service.listUsersUnderGame({
       gameId,
-      range: resolveChinaDayRange(date),
+      range: parseDashboardRange(query),
     });
   }
 
@@ -136,12 +149,15 @@ export class SuperAdminDashboardController {
     @Param('userId') userId: string,
     @Query() query: unknown,
   ) {
-    const { date, gameId, accountId, limit } = userRecordsQuerySchema.parse(
-      query ?? {},
-    );
+    const { date, range, gameId, accountId, limit } =
+      userRecordsQuerySchema.parse(query ?? {});
+    // 用户详情记录列表：兼容旧的单日 date 参数（如果传），否则用 range
+    const resolvedRange = date
+      ? resolveChinaDayRange(date)
+      : resolveDashboardRange(range as DashboardRangeKey);
     return this.userDashboardService.listEcpmRecords({
       userId,
-      range: resolveChinaDayRange(date),
+      range: resolvedRange,
       gameId,
       accountId,
       limit,

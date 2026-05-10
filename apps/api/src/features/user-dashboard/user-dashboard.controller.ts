@@ -9,7 +9,11 @@ import { z } from 'zod';
 import { type AccountPrincipal } from '../account/account-auth.service';
 import { AccountJwtGuard } from '../account/account-jwt.guard';
 import { CurrentAccount } from '../account/current-account.decorator';
-import { resolveChinaDayRange } from '../user/china-day-range';
+import {
+  resolveChinaDayRange,
+  resolveDashboardRange,
+  type DashboardRangeKey,
+} from '../user/china-day-range';
 import { CachedResponseInterceptor } from '../../common/rate-limit/cached-response.interceptor';
 import { RateLimitGuard } from '../../common/rate-limit/rate-limit.guard';
 import { Throttle } from '../../common/rate-limit/throttle.decorator';
@@ -17,10 +21,21 @@ import { UserDashboardService } from './user-dashboard.service';
 
 const querySchema = z.object({
   date: z.string().optional(),
+  range: z
+    .enum(['today', 'yesterday', 'last3', 'last7'])
+    .optional()
+    .default('today'),
   gameId: z.string().optional(),
   accountId: z.string().optional(),
   limit: z.coerce.number().int().positive().max(200).optional().default(50),
 });
+
+// 兼容旧的单日 date 参数（如果传），否则用 range tab
+function resolveQueryRange(input: { date?: string; range: DashboardRangeKey }) {
+  return input.date
+    ? resolveChinaDayRange(input.date)
+    : resolveDashboardRange(input.range);
+}
 
 const STANDARD_THROTTLE = {
   windowMs: 5_000,
@@ -40,10 +55,10 @@ export class UserDashboardController {
     @CurrentAccount() account: AccountPrincipal,
     @Query() query: unknown,
   ) {
-    const { date } = querySchema.parse(query ?? {});
+    const { date, range } = querySchema.parse(query ?? {});
     return this.service.getOverview({
       userId: account.id,
-      range: resolveChinaDayRange(date),
+      range: resolveQueryRange({ date, range }),
     });
   }
 
@@ -53,10 +68,10 @@ export class UserDashboardController {
     @CurrentAccount() account: AccountPrincipal,
     @Query() query: unknown,
   ) {
-    const { date } = querySchema.parse(query ?? {});
+    const { date, range } = querySchema.parse(query ?? {});
     return this.service.getGameAccountGroups({
       userId: account.id,
-      range: resolveChinaDayRange(date),
+      range: resolveQueryRange({ date, range }),
     });
   }
 
@@ -66,10 +81,12 @@ export class UserDashboardController {
     @CurrentAccount() account: AccountPrincipal,
     @Query() query: unknown,
   ) {
-    const { date, gameId, accountId, limit } = querySchema.parse(query ?? {});
+    const { date, range, gameId, accountId, limit } = querySchema.parse(
+      query ?? {},
+    );
     return this.service.listEcpmRecords({
       userId: account.id,
-      range: resolveChinaDayRange(date),
+      range: resolveQueryRange({ date, range }),
       gameId,
       accountId,
       limit,

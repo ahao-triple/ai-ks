@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  DashboardRangeTabs,
   EcpmRecordTable,
+  type DashboardRangeKey,
   type EcpmRecordExtraColumn,
   type EcpmRecordView,
 } from '../components/domain';
@@ -13,10 +15,14 @@ import type {
 } from '../types/api';
 
 export type UserDashboardApi = {
-  getUserDashboardOverview: (date?: string) => Promise<UserDashboardOverview>;
-  getUserDashboardGroups: (date?: string) => Promise<UserDashboardGameGroup[]>;
+  getUserDashboardOverview: (
+    range?: DashboardRangeKey,
+  ) => Promise<UserDashboardOverview>;
+  getUserDashboardGroups: (
+    range?: DashboardRangeKey,
+  ) => Promise<UserDashboardGameGroup[]>;
   getUserDashboardRecords: (input: {
-    date?: string;
+    range?: DashboardRangeKey;
     gameId?: string;
     accountId?: string;
     limit?: number;
@@ -32,18 +38,12 @@ export type UserDashboardData = {
 export type UserDashboardPageProps = {
   api: UserDashboardApi;
   userReadableId: string;
-  date?: string;
   initialData?: UserDashboardData;
 };
 
-const TIME_FILTERS = [
-  { key: 'today', label: '今天' },
-  { key: 'last7', label: '最近 7 天' },
-  { key: 'last30', label: '最近 30 天' },
-] as const;
-
 export function UserDashboardPage(props: UserDashboardPageProps) {
-  const { api, userReadableId, date, initialData } = props;
+  const { api, userReadableId, initialData } = props;
+  const [rangeKey, setRangeKey] = useState<DashboardRangeKey>('today');
   const [selectedGameId, setSelectedGameId] = useState<string | undefined>();
   const [extraColumns, setExtraColumns] = useState<EcpmRecordExtraColumn[]>([]);
   const [autoRefreshOn, setAutoRefreshOn] = useState(false);
@@ -51,16 +51,16 @@ export function UserDashboardPage(props: UserDashboardPageProps) {
 
   const fetchAll = useCallback(async (): Promise<UserDashboardData> => {
     const [overview, groups, records] = await Promise.all([
-      api.getUserDashboardOverview(date),
-      api.getUserDashboardGroups(date),
+      api.getUserDashboardOverview(rangeKey),
+      api.getUserDashboardGroups(rangeKey),
       api.getUserDashboardRecords({
-        date,
+        range: rangeKey,
         gameId: selectedGameId,
         limit: 50,
       }),
     ]);
     return { overview, groups, records };
-  }, [api, date, selectedGameId]);
+  }, [api, rangeKey, selectedGameId]);
 
   const {
     data: liveData,
@@ -137,21 +137,7 @@ export function UserDashboardPage(props: UserDashboardPageProps) {
           )}
         </div>
         <div className="user-dashboard-time-filters">
-          {TIME_FILTERS.map((f, idx) => (
-            <button
-              key={f.key}
-              type="button"
-              className={
-                idx === 0
-                  ? 'user-dashboard-time user-dashboard-time-active'
-                  : 'user-dashboard-time'
-              }
-              disabled={idx !== 0}
-              title={idx === 0 ? '当前时间窗口' : '后续版本接入'}
-            >
-              {f.label}
-            </button>
-          ))}
+          <DashboardRangeTabs value={rangeKey} onChange={setRangeKey} />
           <button
             type="button"
             className="user-dashboard-refresh"

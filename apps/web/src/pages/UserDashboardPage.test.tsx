@@ -125,8 +125,9 @@ describe('UserDashboardPage SSR', () => {
       />,
     );
     expect(markup).toContain('今天');
-    expect(markup).toContain('最近 7 天');
-    expect(markup).toContain('最近 30 天');
+    expect(markup).toContain('昨天');
+    expect(markup).toContain('三天总');
+    expect(markup).toContain('七天总');
     expect(markup).toContain('立即刷新');
   });
 });
