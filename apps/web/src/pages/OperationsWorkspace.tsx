@@ -823,50 +823,6 @@ export function OperationsWorkspace({
 
       <div className="operations-workspace-body">
 
-      {isSuperAdmin ? (
-        <section className="super-admin-guide">
-          <Panel
-            description="主页面展示状态与结果，具体写操作统一在弹窗中执行并附带说明。"
-            title="超级管理员操作说明"
-          >
-            <div className="workflow-grid">
-              <article className="workflow-card">
-                <h3>预算与组织</h3>
-                <p>创建公司、创建游戏、充值公司余额、分配游戏预算。</p>
-                <dl className="workflow-meta">
-                  <dt>前置条件</dt>
-                  <dd>已登录超级管理员，且资源关系已确认。</dd>
-                </dl>
-              </article>
-              <article className="workflow-card">
-                <h3>快手授权与同步</h3>
-                <p>管理平台授权、token 刷新、同步任务排查。</p>
-                <dl className="workflow-meta">
-                  <dt>前置条件</dt>
-                  <dd>已获取平台 app_id / secret / auth_code。</dd>
-                </dl>
-              </article>
-              <article className="workflow-card">
-                <h3>结算与提现</h3>
-                <p>先预览结算结果，再确认入账；提现按状态逐批处理。</p>
-                <dl className="workflow-meta">
-                  <dt>前置条件</dt>
-                  <dd>预算充足且同步数据完整。</dd>
-                </dl>
-              </article>
-              <article className="workflow-card">
-                <h3>真实数据核对</h3>
-                <p>刷新闭环核对，确认真实公司、游戏、授权、ECPM、结算和提现状态。</p>
-                <dl className="workflow-meta">
-                  <dt>前置条件</dt>
-                  <dd>已完成真实游戏配置和快手授权。</dd>
-                </dl>
-              </article>
-            </div>
-          </Panel>
-        </section>
-      ) : null}
-
       <section className={paneClass('overview')}>
         <Panel
           description="预算、结算与同步异常聚合视图"
@@ -1193,30 +1149,6 @@ export function OperationsWorkspace({
 
         {isSuperAdmin ? (
           <>
-            <Panel
-              description="联调页用于验证游戏登录换取 open_id 与 ECPM 明细写入链路。"
-              title="联调操作说明"
-            >
-              <div className="workflow-grid">
-                <article className="workflow-card">
-                  <h3>换取 open_id</h3>
-                  <p>输入 js_code 并选择游戏，调用 code2Session 生成可读 ID。</p>
-                  <dl className="workflow-meta">
-                    <dt>按钮说明</dt>
-                    <dd>“换取 open_id”：验证游戏登录链路是否可用。</dd>
-                  </dl>
-                </article>
-                <article className="workflow-card">
-                  <h3>刷新游戏 ECPM</h3>
-                  <p>按当前游戏触发 ECPM 拉取，检查写入数量与来源状态。</p>
-                  <dl className="workflow-meta">
-                    <dt>按钮说明</dt>
-                    <dd>“刷新游戏 ECPM”：手动触发一次同步检查。</dd>
-                  </dl>
-                </article>
-              </div>
-            </Panel>
-
             <section className="metric-grid" aria-label="联调状态">
               <MetricCard
                 detail={gameAppId || '-'}
@@ -2802,8 +2734,55 @@ export function OperationsWorkspace({
         </div>
       </Dialog>
 
+      {isSuperAdmin ? <SuperAdminGuide /> : null}
       </div>
     </div>
+  );
+}
+
+function SuperAdminGuide() {
+  return (
+    <section className="super-admin-guide">
+      <Panel
+        description="主页面展示状态与结果，具体写操作统一在弹窗中执行并附带说明。"
+        title="超级管理员操作说明"
+      >
+        <div className="workflow-grid">
+          <article className="workflow-card">
+            <h3>预算与组织</h3>
+            <p>创建公司、创建游戏、充值公司余额、分配游戏预算。</p>
+            <dl className="workflow-meta">
+              <dt>前置条件</dt>
+              <dd>已登录超级管理员，且资源关系已确认。</dd>
+            </dl>
+          </article>
+          <article className="workflow-card">
+            <h3>快手授权与同步</h3>
+            <p>管理平台授权、token 刷新、同步任务排查。</p>
+            <dl className="workflow-meta">
+              <dt>前置条件</dt>
+              <dd>已获取平台 app_id / secret / auth_code。</dd>
+            </dl>
+          </article>
+          <article className="workflow-card">
+            <h3>结算与提现</h3>
+            <p>先预览结算结果，再确认入账；提现按状态逐批处理。</p>
+            <dl className="workflow-meta">
+              <dt>前置条件</dt>
+              <dd>预算充足且同步数据完整。</dd>
+            </dl>
+          </article>
+          <article className="workflow-card">
+            <h3>真实数据核对</h3>
+            <p>刷新闭环核对，确认真实公司、游戏、授权、ECPM、结算和提现状态。</p>
+            <dl className="workflow-meta">
+              <dt>前置条件</dt>
+              <dd>已完成真实游戏配置和快手授权。</dd>
+            </dl>
+          </article>
+        </div>
+      </Panel>
+    </section>
   );
 }
 
