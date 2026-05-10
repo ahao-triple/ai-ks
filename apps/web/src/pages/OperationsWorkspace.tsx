@@ -631,25 +631,30 @@ export function OperationsWorkspace({
     key: OperationsPane;
     label: string;
   }> = [
-    { key: 'overview', label: '总览' },
+    { description: '运营概览', key: 'overview', label: '总览' },
     { description: '公司相关操作', key: 'company', label: '公司' },
     { description: '游戏相关操作', key: 'game', label: '游戏' },
     { description: '查询/更新/报告', key: 'ecpm', label: 'ECPM 看板' },
     { description: '授权/同步', key: 'kuaishou', label: '快手' },
-    { key: 'settlement', label: '结算' },
-    { key: 'withdrawal', label: '提现' },
-    { key: 'audit', label: '审计' },
+    { description: '结算确认', key: 'settlement', label: '结算' },
+    { description: '提现审核', key: 'withdrawal', label: '提现' },
+    { description: '审计追踪', key: 'audit', label: '审计' },
   ];
   if (isSuperAdmin) {
     paneItems.push({ description: '平台配置', key: 'config', label: '配置' });
-    paneItems.push({ key: 'agents', label: '代理' });
-    paneItems.push({ key: 'company-admins', label: '权限' });
+    paneItems.push({ description: '代理管理', key: 'agents', label: '代理' });
+    paneItems.push({
+      description: '账号权限',
+      key: 'company-admins',
+      label: '权限',
+    });
     paneItems.push({
       description: '测试维护',
       key: 'maintenance',
       label: '维护',
     });
   }
+  const activePaneAvailable = paneItems.some((item) => item.key === activePane);
   const paneClass = (pane: OperationsPane) =>
     activePane === pane ? 'operations-pane operations-pane-active' : 'operations-pane';
 
@@ -701,7 +706,6 @@ export function OperationsWorkspace({
 
   function requestApproveWithdrawal(batchId: string) {
     if (!isSuperAdmin) {
-      onApproveWithdrawal(batchId);
       return;
     }
 
@@ -710,7 +714,6 @@ export function OperationsWorkspace({
 
   function requestCloseWithdrawal(batchId: string) {
     if (!isSuperAdmin) {
-      onCloseWithdrawal(batchId);
       return;
     }
 
@@ -719,7 +722,6 @@ export function OperationsWorkspace({
 
   function requestPayWithdrawal(batchId: string, result: 'failed' | 'success') {
     if (!isSuperAdmin) {
-      onPayWithdrawal(batchId, result);
       return;
     }
 
@@ -762,6 +764,12 @@ export function OperationsWorkspace({
       setActivePane('game');
     }
   }, [selectedConfigGame]);
+
+  useEffect(() => {
+    if (!activePaneAvailable) {
+      setActivePane('overview');
+    }
+  }, [activePaneAvailable]);
 
   useEffect(() => {
     if (selectedWithdrawalDetail) {
@@ -1193,127 +1201,140 @@ export function OperationsWorkspace({
         </Panel>
 
         {isSuperAdmin ? (
-          <Panel
-            description="联调页用于验证游戏登录换取 open_id 与 ECPM 明细写入链路。"
-            title="联调操作说明"
-          >
-            <div className="workflow-grid">
-              <article className="workflow-card">
-                <h3>换取 open_id</h3>
-                <p>输入 js_code 并选择游戏，调用 code2Session 生成可读 ID。</p>
-                <dl className="workflow-meta">
-                  <dt>按钮说明</dt>
-                  <dd>“换取 open_id”：验证游戏登录链路是否可用。</dd>
-                </dl>
-              </article>
-              <article className="workflow-card">
-                <h3>刷新游戏 ECPM</h3>
-                <p>按当前游戏触发 ECPM 拉取，检查写入数量与来源状态。</p>
-                <dl className="workflow-meta">
-                  <dt>按钮说明</dt>
-                  <dd>“刷新游戏 ECPM”：手动触发一次同步检查。</dd>
-                </dl>
-              </article>
-            </div>
-          </Panel>
-        ) : null}
+          <>
+            <Panel
+              description="联调页用于验证游戏登录换取 open_id 与 ECPM 明细写入链路。"
+              title="联调操作说明"
+            >
+              <div className="workflow-grid">
+                <article className="workflow-card">
+                  <h3>换取 open_id</h3>
+                  <p>输入 js_code 并选择游戏，调用 code2Session 生成可读 ID。</p>
+                  <dl className="workflow-meta">
+                    <dt>按钮说明</dt>
+                    <dd>“换取 open_id”：验证游戏登录链路是否可用。</dd>
+                  </dl>
+                </article>
+                <article className="workflow-card">
+                  <h3>刷新游戏 ECPM</h3>
+                  <p>按当前游戏触发 ECPM 拉取，检查写入数量与来源状态。</p>
+                  <dl className="workflow-meta">
+                    <dt>按钮说明</dt>
+                    <dd>“刷新游戏 ECPM”：手动触发一次同步检查。</dd>
+                  </dl>
+                </article>
+              </div>
+            </Panel>
 
-        <section className="metric-grid" aria-label="联调状态">
-          <MetricCard
-            detail={gameAppId || '-'}
-            label="测试游戏"
-            value={selectedGame?.name ?? '-'}
-          />
-          <MetricCard
-            detail={session?.openId ?? '等待游戏登录'}
-            label="最新可读 ID"
-            value={session?.readableId ?? '-'}
-          />
-          <MetricCard
-            detail={`${refreshResult?.requestedOpenIds.length ?? 0} 个 open_id`}
-            label="最近写入"
-            value={`${refreshResult?.savedCount ?? 0} 条`}
-          />
-        </section>
+            <section className="metric-grid" aria-label="联调状态">
+              <MetricCard
+                detail={gameAppId || '-'}
+                label="测试游戏"
+                value={selectedGame?.name ?? '-'}
+              />
+              <MetricCard
+                detail={session?.openId ?? '等待游戏登录'}
+                label="最新可读 ID"
+                value={session?.readableId ?? '-'}
+              />
+              <MetricCard
+                detail={`${refreshResult?.requestedOpenIds.length ?? 0} 个 open_id`}
+                label="最近写入"
+                value={`${refreshResult?.savedCount ?? 0} 条`}
+              />
+            </section>
 
-        <section className="tool-grid">
-          <Panel description="code2Session" title="游戏端登录">
-            <div className="query-form">
-              <label className="ui-input-field">
-                <span className="ui-input-label">游戏</span>
-                <span className="ui-input-control">
-                  <select
-                    disabled={workspaceBusy}
-                    onChange={(event) => onGameChange(event.currentTarget.value)}
-                    value={gameAppId}
-                  >
-                    {games.map((game) => (
-                      <option key={game.gameAppId} value={game.gameAppId}>
-                        {game.name} / {game.gameAppId}
-                      </option>
+            <section className="tool-grid">
+              <Panel description="code2Session" title="游戏端登录">
+                <div className="query-form">
+                  <label className="ui-input-field">
+                    <span className="ui-input-label">游戏</span>
+                    <span className="ui-input-control">
+                      <select
+                        disabled={workspaceBusy}
+                        onChange={(event) =>
+                          onGameChange(event.currentTarget.value)
+                        }
+                        value={gameAppId}
+                      >
+                        {games.map((game) => (
+                          <option key={game.gameAppId} value={game.gameAppId}>
+                            {game.name} / {game.gameAppId}
+                          </option>
+                        ))}
+                      </select>
+                    </span>
+                  </label>
+                  <InputField
+                    label="js_code"
+                    list="sample-js-codes"
+                    onChange={onJsCodeChange}
+                    value={jsCode}
+                  />
+                  <datalist id="sample-js-codes">
+                    {sampleJsCodes.map((code) => (
+                      <option key={code} value={code} />
                     ))}
-                  </select>
-                </span>
-              </label>
-              <InputField
-                label="js_code"
-                list="sample-js-codes"
-                onChange={onJsCodeChange}
-                value={jsCode}
-              />
-              <datalist id="sample-js-codes">
-                {sampleJsCodes.map((code) => (
-                  <option key={code} value={code} />
-                ))}
-              </datalist>
-              <Button
-                disabled={!gameAppId || !jsCode || workspaceBusy}
-                icon={<Send size={16} />}
-                onClick={onCreateSession}
-              >
-                {busyAction === 'session' ? '获取中' : '换取 open_id'}
-              </Button>
-            </div>
-          </Panel>
+                  </datalist>
+                  <Button
+                    disabled={!gameAppId || !jsCode || workspaceBusy}
+                    icon={<Send size={16} />}
+                    onClick={onCreateSession}
+                  >
+                    {busyAction === 'session' ? '获取中' : '换取 open_id'}
+                  </Button>
+                </div>
+              </Panel>
 
-          <Panel
-            description={adminName ? `管理员 ${adminName}` : '管理员未登录'}
-            title="快手 ECPM"
-          >
-            <div className="query-form">
-              <ReadoutGrid
-                items={[
-                  { label: '游戏 AppID', value: gameAppId || '-' },
-                  { label: '刷新来源', value: refreshResult?.source ?? '等待刷新' },
-                ]}
-              />
-              <Button
-                disabled={!gameAppId || workspaceBusy}
-                icon={<RefreshCw size={16} />}
-                onClick={onRefreshEcpm}
+              <Panel
+                description={adminName ? `管理员 ${adminName}` : '管理员未登录'}
+                title="快手 ECPM"
               >
-                {busyAction === 'refresh' ? '刷新中' : '刷新游戏 ECPM'}
-              </Button>
-            </div>
-          </Panel>
+                <div className="query-form">
+                  <ReadoutGrid
+                    items={[
+                      { label: '游戏 AppID', value: gameAppId || '-' },
+                      {
+                        label: '刷新来源',
+                        value: refreshResult?.source ?? '等待刷新',
+                      },
+                    ]}
+                  />
+                  <Button
+                    disabled={!gameAppId || workspaceBusy}
+                    icon={<RefreshCw size={16} />}
+                    onClick={onRefreshEcpm}
+                  >
+                    {busyAction === 'refresh' ? '刷新中' : '刷新游戏 ECPM'}
+                  </Button>
+                </div>
+              </Panel>
 
-          <Panel description={session?.game.name ?? '未获取'} title="最新 open_id">
-            <ReadoutGrid
-              items={[
-                { label: '可读 ID', value: session?.readableId ?? '-' },
-                { label: 'open_id', value: session?.openId ?? '-' },
-                { label: '写入明细', value: `${refreshResult?.savedCount ?? 0} 条` },
-              ]}
+              <Panel
+                description={session?.game.name ?? '未获取'}
+                title="最新 open_id"
+              >
+                <ReadoutGrid
+                  items={[
+                    { label: '可读 ID', value: session?.readableId ?? '-' },
+                    { label: 'open_id', value: session?.openId ?? '-' },
+                    {
+                      label: '写入明细',
+                      value: `${refreshResult?.savedCount ?? 0} 条`,
+                    },
+                  ]}
+                />
+              </Panel>
+            </section>
+
+            <EcpmTable
+              emptyLabel="暂无刷新明细"
+              meta={`${refreshResult?.requestedOpenIds.length ?? 0} 个 open_id`}
+              rows={refreshResult?.rows ?? []}
+              title="刷新明细"
             />
-          </Panel>
-        </section>
-
-        <EcpmTable
-          emptyLabel="暂无刷新明细"
-          meta={`${refreshResult?.requestedOpenIds.length ?? 0} 个 open_id`}
-          rows={refreshResult?.rows ?? []}
-          title="刷新明细"
-        />
+          </>
+        ) : null}
 
         {isSuperAdmin && selectedConfigGame && configGameDraft ? (
           <GameConfigView
@@ -1719,41 +1740,50 @@ export function OperationsWorkspace({
 
         <Panel
         actions={
-          <div className="button-row">
-            <Button
-              disabled={workspaceBusy}
-              onClick={() => onLoadWithdrawals('PENDING_REVIEW')}
-              variant="secondary"
-            >
-              待审核
-            </Button>
-            <Button
-              disabled={workspaceBusy}
-              onClick={() => onLoadWithdrawals('APPROVED')}
-              variant="secondary"
-            >
-              已审核
-            </Button>
-            <Button
-              disabled={workspaceBusy}
-              onClick={() => onLoadWithdrawals('FAILED')}
-              variant="secondary"
-            >
-              失败
-            </Button>
-          </div>
+          isSuperAdmin ? (
+            <div className="button-row">
+              <Button
+                disabled={workspaceBusy}
+                onClick={() => onLoadWithdrawals('PENDING_REVIEW')}
+                variant="secondary"
+              >
+                待审核
+              </Button>
+              <Button
+                disabled={workspaceBusy}
+                onClick={() => onLoadWithdrawals('APPROVED')}
+                variant="secondary"
+              >
+                已审核
+              </Button>
+              <Button
+                disabled={workspaceBusy}
+                onClick={() => onLoadWithdrawals('FAILED')}
+                variant="secondary"
+              >
+                失败
+              </Button>
+            </div>
+          ) : undefined
         }
         description={adminWithdrawalStatus}
         title="提现审核"
       >
-        <WithdrawalBatchTable
-          busyAction={busyAction}
-          onApprove={requestApproveWithdrawal}
-          onClose={requestCloseWithdrawal}
-          onDetail={onLoadWithdrawalDetail}
-          onPay={requestPayWithdrawal}
-          rows={adminWithdrawals}
-        />
+        {isSuperAdmin ? (
+          <WithdrawalBatchTable
+            busyAction={busyAction}
+            onApprove={requestApproveWithdrawal}
+            onClose={requestCloseWithdrawal}
+            onDetail={onLoadWithdrawalDetail}
+            onPay={requestPayWithdrawal}
+            rows={adminWithdrawals}
+          />
+        ) : (
+          <ReadonlyWithdrawalBatchTable
+            onDetail={onLoadWithdrawalDetail}
+            rows={adminWithdrawals}
+          />
+        )}
         </Panel>
 
         {selectedWithdrawalDetail ? (
@@ -3260,6 +3290,64 @@ function SettlementDetailPanel({
         </table>
       </div>
     </Panel>
+  );
+}
+
+function ReadonlyWithdrawalBatchTable({
+  onDetail,
+  rows,
+}: {
+  onDetail(batchId: string): void;
+  rows: AdminWithdrawalBatch[];
+}) {
+  return (
+    <div className="data-table-wrap">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>批次</th>
+            <th>归属</th>
+            <th>金额</th>
+            <th>收款人</th>
+            <th>状态</th>
+            <th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.id}>
+              <td>{row.id}</td>
+              <td>
+                {row.ownerType === 'AGENT'
+                  ? `代理 ${row.ownerId ?? '-'}`
+                  : `用户 ${row.userId ?? row.ownerId ?? '-'}`}
+              </td>
+              <td>{formatMoney(row.totalAmount)}</td>
+              <td>{row.details[0]?.recipientName ?? '-'}</td>
+              <td>
+                <StatusBadge tone={statusTone(row.status)}>
+                  {row.status}
+                </StatusBadge>
+              </td>
+              <td>
+                <Button
+                  compact
+                  onClick={() => onDetail(row.id)}
+                  variant="secondary"
+                >
+                  详情
+                </Button>
+              </td>
+            </tr>
+          ))}
+          {rows.length === 0 ? (
+            <tr>
+              <td colSpan={6}>暂无提现批次</td>
+            </tr>
+          ) : null}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

@@ -28,6 +28,7 @@ import type {
   AdminSettlementBatch,
   AdminSettlementDetailResult,
   AdminSettlementPreview,
+  AdminWithdrawalBatch,
   BusinessClosureReport,
   KuaishouEcpmSyncJob,
   KuaishouTokenStatusResult,
@@ -162,6 +163,26 @@ const kuaishouEcpmJob: KuaishouEcpmSyncJob = {
   status: 'SUCCEEDED',
   updatedAt: '2026-05-08T00:01:00.000Z',
 };
+
+const withdrawalBatch = {
+  createdAt: '2026-05-08T04:00:00.000Z',
+  details: [
+    {
+      amount: { li: '1200', yuan: '12.00' },
+      recipientAlipay: 'user@example.com',
+      recipientName: 'Demo User',
+      status: 'PENDING_REVIEW',
+      type: 'USER',
+    },
+  ],
+  id: 'withdrawal-batch-1',
+  ownerId: 'user-1',
+  ownerType: 'USER',
+  status: 'PENDING_REVIEW',
+  totalAmount: { li: '1200', yuan: '12.00' },
+  updatedAt: '2026-05-08T04:30:00.000Z',
+  userId: 'user-1',
+} satisfies AdminWithdrawalBatch;
 
 const businessClosureReport: BusinessClosureReport = {
   checks: [
@@ -648,6 +669,11 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('class="operations-feature-nav-label">ECPM 看板</span>');
     expect(html).toContain('查询/更新/报告');
     expect(html).toContain('授权/同步');
+    expect(html).toContain('结算确认');
+    expect(html).toContain('提现审核');
+    expect(html).toContain('审计追踪');
+    expect(html).toContain('代理管理');
+    expect(html).toContain('账号权限');
     expect(html).toContain('平台配置');
     expect(html).toContain('测试维护');
     expect(html).not.toContain('operations-nav');
@@ -699,6 +725,8 @@ describe('OperationsWorkspace', () => {
     expect(html).not.toContain('保存配置');
     expect(html).not.toContain('分配预算');
     expect(html).not.toContain('手动刷新 ECPM');
+    expect(html).not.toContain('换取 open_id');
+    expect(html).not.toContain('刷新游戏 ECPM');
     expect(html).not.toContain('创建公司');
     expect(html).not.toContain('充值公司余额');
     expect(html).not.toContain('创建游戏');
@@ -723,6 +751,36 @@ describe('OperationsWorkspace', () => {
     expect(html).not.toContain('提交授权');
     expect(html).not.toContain('刷新 token');
     expect(html).not.toContain('确认结算');
+  });
+
+  it('keeps company admins read-only for withdrawal batches', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          adminWithdrawals: [
+            withdrawalBatch,
+            {
+              ...withdrawalBatch,
+              id: 'withdrawal-batch-2',
+              status: 'APPROVED',
+            },
+            {
+              ...withdrawalBatch,
+              id: 'withdrawal-batch-3',
+              status: 'FAILED',
+            },
+          ],
+          isSuperAdmin: false,
+        })}
+      />,
+    );
+
+    expect(html).toContain('withdrawal-batch-1');
+    expect(html).toContain('详情');
+    expect(html).not.toMatch(/<button\b[^>]*>通过<\/button>/);
+    expect(html).not.toMatch(/<button\b[^>]*>打款<\/button>/);
+    expect(html).not.toMatch(/<button\b[^>]*>失败<\/button>/);
+    expect(html).not.toMatch(/<button\b[^>]*>关闭<\/button>/);
   });
 
   it('keeps game integration in the game pane and Kuaishou focused on authorization and sync', () => {
