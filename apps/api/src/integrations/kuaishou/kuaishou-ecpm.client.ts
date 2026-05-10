@@ -29,6 +29,10 @@ export type KuaishouEcpmRefreshResult = {
   raw?: unknown;
 };
 
+const ECPM_PAGE_SIZE = 500;
+const ECPM_PAGE_CONTINUE_THRESHOLD = 490;
+const ECPM_MAX_PAGES = 50;
+
 @Injectable()
 export class KuaishouEcpmClient {
   constructor(
@@ -42,37 +46,51 @@ export class KuaishouEcpmClient {
     this.assertRealMode();
 
     const credentials = await this.tokenService.resolveReportCredentials();
+    const allRows: KuaishouEcpmRow[] = [];
+    let lastPayload: Record<string, unknown> | undefined;
 
-    const response = await fetch(
-      'https://ad.e.kuaishou.com/rest/openapi/gw/dsp/v1/report/ecpm_report',
-      {
-        body: JSON.stringify({
-          advertiser_id: credentials.advertiserId,
-          app_id: input.gameAppId,
-          data_hour: input.dataHour,
-          open_id: input.openIds,
-          page: 1,
-          page_size: 500,
-        }),
-        headers: {
-          'Access-Token': credentials.accessToken,
-          'Content-Type': 'application/json',
+    for (let page = 1; page <= ECPM_MAX_PAGES; page += 1) {
+      const requestBody: Record<string, unknown> = {
+        advertiser_id: credentials.advertiserId,
+        app_id: input.gameAppId,
+        data_hour: input.dataHour,
+        ...(input.openIds && input.openIds.length > 0
+          ? { open_id: input.openIds }
+          : {}),
+        page,
+        page_size: ECPM_PAGE_SIZE,
+      };
+
+      const response = await fetch(
+        'https://ad.e.kuaishou.com/rest/openapi/gw/dsp/v1/report/ecpm_report',
+        {
+          body: JSON.stringify(requestBody),
+          headers: {
+            'Access-Token': credentials.accessToken,
+            'Content-Type': 'application/json',
+          },
+          method: 'POST',
         },
-        method: 'POST',
-      },
-    );
-    const payload = (await response.json()) as Record<string, unknown>;
-
-    if (!response.ok) {
-      throw new BadGatewayException(
-        `快手 ECPM 刷新失败：${summarizeKuaishouPayload(payload)}`,
       );
+      const payload = (await response.json()) as Record<string, unknown>;
+      if (!response.ok) {
+        throw new BadGatewayException(
+          `快手 ECPM 刷新失败：${summarizeKuaishouPayload(payload)}`,
+        );
+      }
+      lastPayload = payload;
+
+      const details = extractDetails(payload);
+      allRows.push(...details.flatMap(detailToRow));
+      if (details.length < ECPM_PAGE_CONTINUE_THRESHOLD) {
+        break;
+      }
     }
 
     return {
       source: 'kuaishou',
-      rows: extractEcpmRows(payload),
-      raw: payload,
+      rows: allRows,
+      raw: lastPayload,
     };
   }
 
@@ -85,34 +103,34 @@ export class KuaishouEcpmClient {
   }
 }
 
-function extractEcpmRows(payload: Record<string, unknown>): KuaishouEcpmRow[] {
+function extractDetails(payload: Record<string, unknown>): unknown[] {
   const data = asRecord(payload.data);
-  const details = asArray(data?.details) ?? asArray(payload.details) ?? [];
+  return asArray(data?.details) ?? asArray(payload.details) ?? [];
+}
 
-  return details.flatMap((item) => {
-    const row = asRecord(item);
-    if (!row) {
-      return [];
-    }
+function detailToRow(item: unknown): KuaishouEcpmRow[] {
+  const row = asRecord(item);
+  if (!row) {
+    return [];
+  }
 
-    const openId = readString(row, 'open_id');
-    const platformEventId = readString(row, 'id');
-    const rawCostLi = readBigInt(row.cost);
-    const eventTime = readDate(row, 'event_time');
+  const openId = readString(row, 'open_id');
+  const platformEventId = readString(row, 'id');
+  const rawCostLi = readBigInt(row.cost);
+  const eventTime = readDate(row, 'event_time');
 
-    if (!openId || !platformEventId || rawCostLi === undefined || !eventTime) {
-      return [];
-    }
+  if (!openId || !platformEventId || rawCostLi === undefined || !eventTime) {
+    return [];
+  }
 
-    return [
-      {
-        platformEventId,
-        openId,
-        rawCostLi,
-        eventTime,
-      },
-    ];
-  });
+  return [
+    {
+      platformEventId,
+      openId,
+      rawCostLi,
+      eventTime,
+    },
+  ];
 }
 
 function asRecord(value: unknown) {

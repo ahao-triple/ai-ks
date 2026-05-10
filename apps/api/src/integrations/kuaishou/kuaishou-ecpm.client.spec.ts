@@ -142,6 +142,77 @@ describe('KuaishouEcpmClient', () => {
     expect(globalThis.fetch).toBe(originalFetch);
   });
 
+  it('omits open_id from the request body when no openIds are provided (full-game refresh)', async () => {
+    mockEcpmResponse();
+    const tokenService = createTokenService({
+      accessToken: 'db-access-token',
+      advertiserId: 'db-advertiser-id',
+      source: 'database',
+    });
+    const client = createClient({
+      config: { KUAISHOU_API_MODE: 'real' },
+      tokenService,
+    });
+
+    await client.refresh({
+      dataHour: '2026-05-08',
+      gameAppId: 'game-1',
+      openIds: [],
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        body: JSON.stringify({
+          advertiser_id: 'db-advertiser-id',
+          app_id: 'game-1',
+          data_hour: '2026-05-08',
+          page: 1,
+          page_size: 500,
+        }),
+      }),
+    );
+  });
+
+  it('continues paging while details reach the 490 threshold and stops below it', async () => {
+    const pageDetails: Record<number, unknown[]> = {
+      1: buildDetails(500, 0),
+      2: buildDetails(495, 500),
+      3: buildDetails(3, 995),
+    };
+    const fetchMock = jest.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(init?.body as string) as { page: number };
+      return new Response(
+        JSON.stringify({ data: { details: pageDetails[body.page] ?? [] } }),
+        { headers: { 'content-type': 'application/json' }, status: 200 },
+      );
+    });
+    globalThis.fetch = fetchMock as typeof fetch;
+
+    const tokenService = createTokenService({
+      accessToken: 'tk',
+      advertiserId: 'ad-1',
+      source: 'database',
+    });
+    const client = createClient({
+      config: { KUAISHOU_API_MODE: 'real' },
+      tokenService,
+    });
+
+    const result = await client.refresh({
+      dataHour: '2026-05-08',
+      gameAppId: 'game-1',
+      openIds: [],
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    // 验证 page 单调递增
+    expect(JSON.parse((fetchMock.mock.calls[0][1] as any).body).page).toBe(1);
+    expect(JSON.parse((fetchMock.mock.calls[1][1] as any).body).page).toBe(2);
+    expect(JSON.parse((fetchMock.mock.calls[2][1] as any).body).page).toBe(3);
+    expect(result.rows).toHaveLength(500 + 495 + 3);
+  });
+
   it('returns a debuggable upstream error when Kuaishou refresh fails', async () => {
     globalThis.fetch = jest.fn(async () => {
       return new Response(
@@ -205,6 +276,18 @@ function createTokenService(credentials: {
   return {
     resolveReportCredentials: jest.fn(async () => credentials),
   };
+}
+
+function buildDetails(count: number, startIndex: number): unknown[] {
+  return Array.from({ length: count }, (_, i) => {
+    const n = startIndex + i + 1;
+    return {
+      cost: String(1000 + n),
+      event_time: '2026-05-08T01:00:00.000Z',
+      id: `event-${n}`,
+      open_id: 'open-1',
+    };
+  });
 }
 
 function mockEcpmResponse() {

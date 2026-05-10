@@ -5,7 +5,7 @@ import {
 } from './kuaishou-ecpm-range-sync.service';
 
 describe('KuaishouEcpmRangeSyncService', () => {
-  it('splits lookback 5 into hourly China dataHour points and saves combined rows', async () => {
+  it('splits lookback 5 into hourly China dataHour points and refreshes the entire game (no open_id filter)', async () => {
     const dependencies = createDependencies();
     const service = createService(dependencies);
 
@@ -25,12 +25,14 @@ describe('KuaishouEcpmRangeSyncService', () => {
       '2026-05-08T14:00:00+08:00',
     ];
     expect(buildRecentDataHours(5, now)).toEqual(dataHours);
+    // openIds 未传 → 整游戏刷新，不应回库查 open_id
+    expect(dependencies.demoStore.listOpenIds).not.toHaveBeenCalled();
     expect(dependencies.ecpmClient.refresh).toHaveBeenCalledTimes(5);
     dataHours.forEach((dataHour, index) => {
       expect(dependencies.ecpmClient.refresh).toHaveBeenNthCalledWith(index + 1, {
         dataHour,
         gameAppId: 'game-1',
-        openIds: ['open-1'],
+        openIds: [],
       });
     });
     expect(dependencies.syncJobService.startJob).toHaveBeenCalledWith({
@@ -40,7 +42,7 @@ describe('KuaishouEcpmRangeSyncService', () => {
       endedDataHour: dataHours[4],
       gameAppId: 'game-1',
       lookbackHours: 5,
-      requestedOpenIdCount: 1,
+      requestedOpenIdCount: 0,
       startedDataHour: dataHours[0],
     });
     expect(dependencies.demoStore.addEcpmRows).toHaveBeenCalledWith({
@@ -68,7 +70,7 @@ describe('KuaishouEcpmRangeSyncService', () => {
         endedDataHour: dataHours[4],
         lookbackHours: 5,
         jobId: 'job-1',
-        requestedOpenIds: ['open-1'],
+        requestedOpenIds: [],
         savedCount: 3,
         source: 'kuaishou',
       },
@@ -81,7 +83,7 @@ describe('KuaishouEcpmRangeSyncService', () => {
         savedCount: 3,
         status: 'SUCCEEDED',
       }),
-      requestedOpenIds: ['open-1'],
+      requestedOpenIds: [],
       savedCount: 3,
       source: 'kuaishou',
     });
@@ -126,16 +128,18 @@ describe('KuaishouEcpmRangeSyncService', () => {
       markTokenError: true,
     });
 
+    // 没传 openIds → 整游戏刷新（不按 open_id 过滤），client 收到空数组
+    expect(dependencies.demoStore.listOpenIds).not.toHaveBeenCalled();
     expect(dependencies.ecpmClient.refresh).toHaveBeenCalledTimes(2);
     expect(dependencies.ecpmClient.refresh).toHaveBeenNthCalledWith(1, {
       dataHour: dataHours[0],
       gameAppId: 'game-1',
-      openIds: ['open-1'],
+      openIds: [],
     });
     expect(dependencies.ecpmClient.refresh).toHaveBeenNthCalledWith(2, {
       dataHour: dataHours[1],
       gameAppId: 'game-1',
-      openIds: ['open-1'],
+      openIds: [],
     });
     expect(dependencies.syncJobService.startJob).toHaveBeenCalledWith({
       actorId: 'admin',
@@ -144,7 +148,7 @@ describe('KuaishouEcpmRangeSyncService', () => {
       endedDataHour: dataHours[1],
       gameAppId: 'game-1',
       lookbackHours: 5,
-      requestedOpenIdCount: 1,
+      requestedOpenIdCount: 0,
       startedDataHour: dataHours[0],
     });
     expect(dependencies.auditLogService.record).toHaveBeenCalledWith(
@@ -236,7 +240,7 @@ describe('KuaishouEcpmRangeSyncService', () => {
         dataHours: ['2026-05-08T14:00:00+08:00'],
         error: 'token expired',
         jobId: 'job-1',
-        requestedOpenIds: ['open-1'],
+        requestedOpenIds: [],
       }),
       targetId: 'game-1',
       targetType: 'kuaishou_ecpm_refresh',
@@ -273,7 +277,7 @@ describe('KuaishouEcpmRangeSyncService', () => {
         dataHours: ['2026-05-08T14:00:00+08:00'],
         error: 'token expired',
         jobId: 'job-1',
-        requestedOpenIds: ['open-1'],
+        requestedOpenIds: [],
       }),
       targetId: 'game-1',
       targetType: 'kuaishou_ecpm_refresh',
@@ -310,7 +314,7 @@ describe('KuaishouEcpmRangeSyncService', () => {
         dataHours: ['2026-05-08T14:00:00+08:00'],
         error: 'database unavailable',
         jobId: 'job-1',
-        requestedOpenIds: ['open-1'],
+        requestedOpenIds: [],
       }),
       targetId: 'game-1',
       targetType: 'kuaishou_ecpm_refresh',
@@ -347,7 +351,7 @@ describe('KuaishouEcpmRangeSyncService', () => {
         dataHours: ['2026-05-08T14:00:00+08:00'],
         error: 'database unavailable',
         jobId: 'job-1',
-        requestedOpenIds: ['open-1'],
+        requestedOpenIds: [],
       }),
       targetId: 'game-1',
       targetType: 'kuaishou_ecpm_refresh',

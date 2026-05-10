@@ -56,11 +56,8 @@ export class KuaishouEcpmRangeSyncService {
         : buildRecentDataHours(input.lookbackHours, this.now());
     const startedDataHour = dataHours[0];
     const endedDataHour = dataHours[dataHours.length - 1];
-    const requestedOpenIds = input.openIds !== undefined
-      ? input.openIds
-      : (await this.gameDataStore.listOpenIds(input.gameAppId)).map(
-          (record) => record.openId,
-        );
+    // openIds undefined / [] => 全游戏（不按 open_id 过滤）
+    const requestedOpenIds = input.openIds ?? [];
     const job = await this.syncJobService.startJob({
       actorId: input.actorId,
       actorType: input.actorType,
