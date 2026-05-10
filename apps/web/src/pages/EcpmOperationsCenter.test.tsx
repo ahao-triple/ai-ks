@@ -122,7 +122,9 @@ const row: EcpmDashboardRow = {
   rawCost: { li: '1000', yuan: '10.00' },
   readableId: 'readable-1',
   status: 'SUCCEEDED',
+  updatedAt: '2026-05-08T01:10:00.000Z',
   userId: 'user-1',
+  userReadableId: 'user-readable-1',
   username: 'User A',
 };
 
@@ -395,6 +397,20 @@ describe('EcpmOperationsCenter', () => {
     expect(markup).toContain('跳过');
   });
 
+  it('renders dashboard spec columns when optional row fields are available', () => {
+    const markup = renderCenter();
+
+    expect(markup).toContain('open_id 数');
+    expect(markup).toContain('可读 ID');
+    expect(markup).toContain('结算状态');
+    expect(markup).toContain('更新时间');
+    expect(markup).toContain('1');
+    expect(markup).toContain('readable-1');
+    expect(markup).toContain('user-readable-1');
+    expect(markup).toContain('SUCCEEDED');
+    expect(markup).toContain('2026-05-08T01:10:00.000Z');
+  });
+
   it('disables the update button when updates are not allowed', () => {
     const markup = renderCenter(false);
 
@@ -411,10 +427,27 @@ describe('EcpmOperationsCenter', () => {
     expect(markup).toContain('数据 2026-05-08T01:00:00.000Z - 2026-05-08T03:00:00.000Z');
     expect(markup).toContain('请求游戏 1');
     expect(markup).toContain('open_id 3');
+    expect(markup).toContain('来源 -');
+    expect(markup).toContain('请求数 3');
     expect(markup).toContain('job level warning');
     expect(markup).toContain(
       '覆盖小时 2026-05-08T01:00:00.000Z / 2026-05-08T02:00:00.000Z / 2026-05-08T03:00:00.000Z',
     );
+  });
+
+  it('renders optional report source and request count when present', () => {
+    const markup = renderToStaticMarkup(
+      buildCenter({
+        selectedJob: {
+          ...job,
+          requestCount: 7,
+          source: 'kuaishou',
+        } as EcpmUpdateJob,
+      }),
+    );
+
+    expect(markup).toContain('来源 kuaishou');
+    expect(markup).toContain('请求数 7');
   });
 
   it('normalizes dashboard hour range filters before querying', () => {
@@ -501,6 +534,26 @@ describe('EcpmOperationsCenter', () => {
     expect(queryButton(harness).props.disabled).toBe(true);
   });
 
+  it('clears dashboard id when changing scopes so stale user id cannot query open_id', () => {
+    const onDashboardQuery = vi.fn();
+    const harness = renderInteractive({ onDashboardQuery });
+
+    click(harness, buttonByText(harness, '用户'));
+    change(harness, nodeById(harness, 'ecpm-dashboard-scope-id'), 'user-1');
+    click(harness, queryButton(harness));
+
+    expect(onDashboardQuery).toHaveBeenCalledWith('user', { userId: 'user-1' });
+
+    click(harness, buttonByText(harness, 'open_id'));
+
+    expect(nodeById(harness, 'ecpm-dashboard-scope-id').props.value).toBe('');
+    expect(queryButton(harness).props.disabled).toBe(true);
+
+    click(harness, queryButton(harness));
+
+    expect(onDashboardQuery).toHaveBeenCalledTimes(1);
+  });
+
   it('normalizes range update hours before calling onUpdate', () => {
     const onUpdate = vi.fn();
     const harness = renderInteractive({ onUpdate });
@@ -560,6 +613,22 @@ describe('EcpmOperationsCenter', () => {
     expect(onUpdate).not.toHaveBeenCalled();
   });
 
+  it('disables range update when the inclusive window exceeds 24 hours', () => {
+    const onUpdate = vi.fn();
+    const harness = renderInteractive({ onUpdate });
+
+    selectGameScope(harness);
+    click(harness, buttonByText(harness, '时间范围'));
+    change(harness, nodeById(harness, 'ecpm-started-data-hour'), '2026-05-08T00:00');
+    change(harness, nodeById(harness, 'ecpm-ended-data-hour'), '2026-05-09T00:00');
+
+    expect(updateButton(harness).props.disabled).toBe(true);
+
+    click(harness, updateButton(harness));
+
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
   it('does not let dashboard query id enable the update action', () => {
     const harness = renderInteractive();
 
@@ -579,6 +648,16 @@ describe('EcpmOperationsCenter', () => {
 
     expect(nodeById(harness, 'ecpm-user-scope').props.value).toBe('');
     expect(updateButton(harness).props.disabled).toBe(true);
+  });
+
+  it('keeps update scope id when clicking the already-selected update scope', () => {
+    const harness = renderInteractive();
+
+    selectGameScope(harness);
+    click(harness, buttonByText(harness, '游戏', 1));
+
+    expect(nodeById(harness, 'ecpm-game-scope').props.value).toBe('game-1');
+    expect(updateButton(harness).props.disabled).toBe(false);
   });
 
   it('disables the actual update button when updates are not allowed', () => {

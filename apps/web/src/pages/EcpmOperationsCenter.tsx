@@ -39,6 +39,11 @@ export type EcpmOperationsCenterProps = {
 
 type TabId = 'dashboard' | 'reports' | 'update';
 
+type EcpmUpdateJobWithMetadata = EcpmUpdateJob & {
+  requestCount?: number | null;
+  source?: string | null;
+};
+
 const dashboardScopes: Array<{ label: string; value: EcpmDashboardScope }> = [
   { label: '最新数据', value: 'latest' },
   { label: '公司', value: 'company' },
@@ -80,9 +85,26 @@ const dashboardColumns: Array<DataTableColumn<EcpmDashboardRow>> = [
     render: (row) => row.openId ?? row.openIdRecordId ?? '-',
   },
   {
+    align: 'right',
+    key: 'openIdCount',
+    label: 'open_id 数',
+    render: (row) => row.openIdCount ?? '-',
+  },
+  {
+    key: 'readableId',
+    label: '可读 ID',
+    render: (row) =>
+      [row.readableId, row.userReadableId].filter(Boolean).join(' / ') || '-',
+  },
+  {
     key: 'username',
     label: '用户',
     render: (row) => row.username ?? row.userReadableId ?? row.userId ?? '-',
+  },
+  {
+    key: 'status',
+    label: '结算状态',
+    render: (row) => row.status ?? '-',
   },
   {
     align: 'right',
@@ -101,6 +123,11 @@ const dashboardColumns: Array<DataTableColumn<EcpmDashboardRow>> = [
     key: 'displayAmount',
     label: '展示金额',
     render: (row) => formatMoney(row.displayAmount),
+  },
+  {
+    key: 'updatedAt',
+    label: '更新时间',
+    render: (row) => row.updatedAt ?? row.createdAt ?? row.eventTime ?? '-',
   },
 ];
 
@@ -258,6 +285,31 @@ function isReversedDataHourRange(
   );
 }
 
+function dataHourRangeCount(
+  startedDataHour: string | null,
+  endedDataHour: string | null,
+) {
+  if (!startedDataHour || !endedDataHour) {
+    return null;
+  }
+
+  const startedAt = Date.parse(startedDataHour);
+  const endedAt = Date.parse(endedDataHour);
+  if (Number.isNaN(startedAt) || Number.isNaN(endedAt) || endedAt < startedAt) {
+    return null;
+  }
+
+  return Math.floor((endedAt - startedAt) / 3_600_000) + 1;
+}
+
+function isDataHourRangeTooLong(
+  startedDataHour: string | null,
+  endedDataHour: string | null,
+) {
+  const count = dataHourRangeCount(startedDataHour, endedDataHour);
+  return count !== null && count > 24;
+}
+
 export function EcpmOperationsCenter({
   canUpdate,
   companies,
@@ -315,7 +367,8 @@ export function EcpmOperationsCenter({
     updateMode === 'range' &&
     (!normalizedStartedDataHour ||
       !normalizedEndedDataHour ||
-      isReversedDataHourRange(normalizedStartedDataHour, normalizedEndedDataHour));
+      isReversedDataHourRange(normalizedStartedDataHour, normalizedEndedDataHour) ||
+      isDataHourRangeTooLong(normalizedStartedDataHour, normalizedEndedDataHour));
   const updateScopeExists =
     updateScopeType === 'company'
       ? companies.some((company) => company.id === trimmedUpdateScopeId)
@@ -323,6 +376,9 @@ export function EcpmOperationsCenter({
         ? games.some((game) => game.id === trimmedUpdateScopeId)
         : true;
   const reportRows = selectedJob?.items ?? [];
+  const selectedJobMetadata = selectedJob as EcpmUpdateJobWithMetadata | undefined;
+  const reportRequestCount =
+    selectedJobMetadata?.requestCount ?? selectedJob?.itemCount ?? reportRows.length;
   const coveredDataHours = Array.from(
     new Set(reportRows.map((item) => item.dataHour)),
   ).sort();
@@ -404,7 +460,20 @@ export function EcpmOperationsCenter({
     );
   }
 
+  function handleDashboardScopeChange(scope: EcpmDashboardScope) {
+    if (scope === dashboardScope) {
+      return;
+    }
+
+    setDashboardScope(scope);
+    setDashboardScopeId('');
+  }
+
   function handleUpdateScopeTypeChange(scopeType: EcpmUpdateScopeType) {
+    if (scopeType === updateScopeType) {
+      return;
+    }
+
     setUpdateScopeType(scopeType);
     setUpdateScopeId('');
   }
@@ -475,7 +544,7 @@ export function EcpmOperationsCenter({
                 aria-pressed={dashboardScope === scope.value}
                 compact
                 key={scope.value}
-                onClick={() => setDashboardScope(scope.value)}
+                onClick={() => handleDashboardScopeChange(scope.value)}
                 variant={dashboardScope === scope.value ? 'primary' : 'secondary'}
               >
                 {scope.label}
@@ -539,6 +608,8 @@ export function EcpmOperationsCenter({
               </span>
               <span>请求游戏 {selectedJob.requestedGameCount}</span>
               <span>open_id {selectedJob.requestedOpenIdCount}</span>
+              <span>来源 {selectedJobMetadata?.source ?? '-'}</span>
+              <span>请求数 {reportRequestCount}</span>
               {selectedJob.errorMessage ? (
                 <StatusBadge tone="danger">{selectedJob.errorMessage}</StatusBadge>
               ) : null}
