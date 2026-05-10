@@ -4,7 +4,10 @@ import { isValidElement } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { EcpmOperationsCenter } from './EcpmOperationsCenter';
 import type {
+  AdminCompany,
+  AdminGame,
   EcpmDashboardRow,
+  EcpmDashboardScope,
   EcpmUpdateJob,
   EcpmUpdateRequest,
 } from '../types/api';
@@ -37,7 +40,7 @@ const job: EcpmUpdateJob = {
   actorType: 'SUPER_ADMIN',
   createdAt: '2026-05-08T00:00:00.000Z',
   endedDataHour: '2026-05-08T03:00:00.000Z',
-  errorMessage: null,
+  errorMessage: 'job level warning',
   failedCount: 1,
   finishedAt: '2026-05-08T03:05:00.000Z',
   id: 'job-1',
@@ -123,11 +126,35 @@ const row: EcpmDashboardRow = {
   username: 'User A',
 };
 
+const companies: AdminCompany[] = [
+  {
+    id: 'company-1',
+    name: 'Company A',
+    balance: { li: '0', yuan: '0.00' },
+  } as AdminCompany,
+];
+
+const games: AdminGame[] = [
+  {
+    id: 'game-1',
+    companyId: 'company-1',
+    gameAppId: 'game-app-1',
+    name: 'Game A',
+  } as AdminGame,
+];
+
 type CenterOverride = Partial<{
   canUpdate: boolean;
+  companies: AdminCompany[];
+  games: AdminGame[];
+  jobs: EcpmUpdateJob[];
   loadingAction: '' | 'ecpm-dashboard' | 'ecpm-update' | 'ecpm-jobs';
-  onDashboardQuery: () => void;
+  onDashboardQuery: (
+    scope: EcpmDashboardScope,
+    query: Record<string, string | undefined>,
+  ) => void;
   onJobSelect: () => void;
+  selectedJob?: EcpmUpdateJob;
   onUpdate: (request: EcpmUpdateRequest) => void;
 }>;
 
@@ -135,28 +162,15 @@ function buildCenter(overrides: CenterOverride = {}) {
   return (
     <EcpmOperationsCenter
       canUpdate={overrides.canUpdate ?? true}
-      companies={[
-        {
-          id: 'company-1',
-          name: 'Company A',
-          balance: { li: '0', yuan: '0.00' },
-        } as any,
-      ]}
-      games={[
-        {
-          id: 'game-1',
-          companyId: 'company-1',
-          gameAppId: 'game-app-1',
-          name: 'Game A',
-        } as any,
-      ]}
-      jobs={[job]}
+      companies={overrides.companies ?? companies}
+      games={overrides.games ?? games}
+      jobs={overrides.jobs ?? [job]}
       loadingAction={overrides.loadingAction ?? ''}
       onDashboardQuery={overrides.onDashboardQuery ?? (() => undefined)}
       onJobSelect={overrides.onJobSelect ?? (() => undefined)}
       onUpdate={overrides.onUpdate ?? (() => undefined)}
       rows={[row]}
-      selectedJob={job}
+      selectedJob={overrides.selectedJob ?? job}
     />
   );
 }
@@ -181,13 +195,18 @@ type TestNode =
   | undefined;
 
 class ComponentHarness implements HookRuntime {
-  private readonly element: ReactElement;
+  private element: ReactElement;
   private idCursor = 0;
   private stateCursor = 0;
   private readonly states: unknown[] = [];
   tree: TestNode = null;
 
   constructor(element: ReactElement) {
+    this.element = element;
+    this.render();
+  }
+
+  rerender(element: ReactElement) {
     this.element = element;
     this.render();
   }
@@ -340,6 +359,10 @@ function updateButton(harness: ComponentHarness): TestHostNode {
   return buttonByText(harness, '更新', 1);
 }
 
+function queryButton(harness: ComponentHarness): TestHostNode {
+  return buttonByText(harness, '查询');
+}
+
 function click(harness: ComponentHarness, node: TestHostNode) {
   node.props.onClick?.({ currentTarget: node });
   harness.render();
@@ -352,6 +375,10 @@ function change(harness: ComponentHarness, node: TestHostNode, value: string) {
 
 function selectGameScope(harness: ComponentHarness) {
   change(harness, nodeById(harness, 'ecpm-game-scope'), 'game-1');
+}
+
+function rerenderInteractive(harness: ComponentHarness, overrides: CenterOverride = {}) {
+  harness.rerender(buildCenter(overrides));
 }
 
 describe('EcpmOperationsCenter', () => {
@@ -372,6 +399,106 @@ describe('EcpmOperationsCenter', () => {
     const markup = renderCenter(false);
 
     expect(markup).toContain('disabled=""');
+  });
+
+  it('renders selected report metadata and covered hours', () => {
+    const markup = renderCenter();
+
+    expect(markup).toContain('SUPER_ADMIN admin-1');
+    expect(markup).toContain('创建 2026-05-08T00:00:00.000Z');
+    expect(markup).toContain('开始 2026-05-08T00:00:00.000Z');
+    expect(markup).toContain('完成 2026-05-08T03:05:00.000Z');
+    expect(markup).toContain('数据 2026-05-08T01:00:00.000Z - 2026-05-08T03:00:00.000Z');
+    expect(markup).toContain('请求游戏 1');
+    expect(markup).toContain('open_id 3');
+    expect(markup).toContain('job level warning');
+    expect(markup).toContain(
+      '覆盖小时 2026-05-08T01:00:00.000Z / 2026-05-08T02:00:00.000Z / 2026-05-08T03:00:00.000Z',
+    );
+  });
+
+  it('normalizes dashboard hour range filters before querying', () => {
+    const onDashboardQuery = vi.fn();
+    const harness = renderInteractive({ onDashboardQuery });
+
+    change(
+      harness,
+      nodeById(harness, 'ecpm-dashboard-started-data-hour'),
+      '2026-05-08T03:00',
+    );
+    change(
+      harness,
+      nodeById(harness, 'ecpm-dashboard-ended-data-hour'),
+      '2026-05-08T05:00',
+    );
+    click(harness, queryButton(harness));
+
+    expect(onDashboardQuery).toHaveBeenCalledWith('latest', {
+      endedDataHour: '2026-05-08T05:00:00+08:00',
+      startedDataHour: '2026-05-08T03:00:00+08:00',
+    });
+  });
+
+  it('queries latest dashboard data without hour filters by default', () => {
+    const onDashboardQuery = vi.fn();
+    const harness = renderInteractive({ onDashboardQuery });
+
+    click(harness, queryButton(harness));
+
+    expect(onDashboardQuery).toHaveBeenCalledWith('latest', {});
+    expect(Object.keys(onDashboardQuery.mock.calls[0]?.[1] ?? {})).toEqual([]);
+  });
+
+  it('disables dashboard query for reversed or invalid hour ranges', () => {
+    const onDashboardQuery = vi.fn();
+    const harness = renderInteractive({ onDashboardQuery });
+
+    change(
+      harness,
+      nodeById(harness, 'ecpm-dashboard-started-data-hour'),
+      '2026-05-08T05:00',
+    );
+    change(
+      harness,
+      nodeById(harness, 'ecpm-dashboard-ended-data-hour'),
+      '2026-05-08T03:00',
+    );
+
+    expect(queryButton(harness).props.disabled).toBe(true);
+
+    click(harness, queryButton(harness));
+
+    expect(onDashboardQuery).not.toHaveBeenCalled();
+
+    change(
+      harness,
+      nodeById(harness, 'ecpm-dashboard-started-data-hour'),
+      '2026-05-08T03:30',
+    );
+    change(
+      harness,
+      nodeById(harness, 'ecpm-dashboard-ended-data-hour'),
+      '2026-05-08T05:00',
+    );
+
+    expect(queryButton(harness).props.disabled).toBe(true);
+  });
+
+  it('requires an id before querying user or open_id dashboard scopes', () => {
+    const onDashboardQuery = vi.fn();
+    const harness = renderInteractive({ onDashboardQuery });
+
+    click(harness, buttonByText(harness, '用户'));
+
+    expect(queryButton(harness).props.disabled).toBe(true);
+
+    click(harness, queryButton(harness));
+
+    expect(onDashboardQuery).not.toHaveBeenCalled();
+
+    click(harness, buttonByText(harness, 'open_id'));
+
+    expect(queryButton(harness).props.disabled).toBe(true);
   });
 
   it('normalizes range update hours before calling onUpdate', () => {
@@ -417,6 +544,22 @@ describe('EcpmOperationsCenter', () => {
     expect(updateButton(harness).props.disabled).toBe(true);
   });
 
+  it('disables range update when the time window is reversed', () => {
+    const onUpdate = vi.fn();
+    const harness = renderInteractive({ onUpdate });
+
+    selectGameScope(harness);
+    click(harness, buttonByText(harness, '时间范围'));
+    change(harness, nodeById(harness, 'ecpm-started-data-hour'), '2026-05-08T05:00');
+    change(harness, nodeById(harness, 'ecpm-ended-data-hour'), '2026-05-08T03:00');
+
+    expect(updateButton(harness).props.disabled).toBe(true);
+
+    click(harness, updateButton(harness));
+
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
   it('does not let dashboard query id enable the update action', () => {
     const harness = renderInteractive();
 
@@ -444,5 +587,22 @@ describe('EcpmOperationsCenter', () => {
     selectGameScope(harness);
 
     expect(updateButton(harness).props.disabled).toBe(true);
+  });
+
+  it('disables update when a selected game is removed from props', () => {
+    const onUpdate = vi.fn();
+    const harness = renderInteractive({ onUpdate });
+
+    selectGameScope(harness);
+
+    expect(updateButton(harness).props.disabled).toBe(false);
+
+    rerenderInteractive(harness, { games: [], onUpdate });
+
+    expect(updateButton(harness).props.disabled).toBe(true);
+
+    click(harness, updateButton(harness));
+
+    expect(onUpdate).not.toHaveBeenCalled();
   });
 });

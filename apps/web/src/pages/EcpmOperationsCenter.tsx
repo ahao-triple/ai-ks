@@ -148,28 +148,36 @@ const reportColumns: Array<DataTableColumn<EcpmUpdateJobItem>> = [
 function buildDashboardQuery(
   dashboardScope: EcpmDashboardScope,
   scopeId: string,
+  startedDataHour: string | null,
+  endedDataHour: string | null,
 ): Record<string, string | undefined> {
-  if (!scopeId) {
-    return {};
-  }
+  const query: Record<string, string | undefined> = {};
 
   if (dashboardScope === 'company') {
-    return { companyId: scopeId };
+    query.companyId = scopeId || undefined;
   }
 
   if (dashboardScope === 'game') {
-    return { gameId: scopeId };
+    query.gameId = scopeId || undefined;
   }
 
   if (dashboardScope === 'user') {
-    return { userId: scopeId };
+    query.userId = scopeId || undefined;
   }
 
   if (dashboardScope === 'open_id') {
-    return { openId: scopeId };
+    query.openId = scopeId || undefined;
   }
 
-  return {};
+  if (startedDataHour) {
+    query.startedDataHour = startedDataHour;
+  }
+
+  if (endedDataHour) {
+    query.endedDataHour = endedDataHour;
+  }
+
+  return query;
 }
 
 function updateStatusLabel(status: EcpmUpdateJobStatus) {
@@ -239,6 +247,17 @@ function normalizeChinaDataHour(value: string) {
   return `${yearText}-${monthText}-${dayText}T${hourText}:00:00+08:00`;
 }
 
+function isReversedDataHourRange(
+  startedDataHour: string | null,
+  endedDataHour: string | null,
+) {
+  return Boolean(
+    startedDataHour &&
+      endedDataHour &&
+      startedDataHour > endedDataHour,
+  );
+}
+
 export function EcpmOperationsCenter({
   canUpdate,
   companies,
@@ -259,6 +278,8 @@ export function EcpmOperationsCenter({
     useState<EcpmUpdateScopeType>('game');
   const [dashboardScopeId, setDashboardScopeId] = useState('');
   const [updateScopeId, setUpdateScopeId] = useState('');
+  const [dashboardStartedDataHour, setDashboardStartedDataHour] = useState('');
+  const [dashboardEndedDataHour, setDashboardEndedDataHour] = useState('');
   const [startedDataHour, setStartedDataHour] = useState('');
   const [endedDataHour, setEndedDataHour] = useState('');
 
@@ -268,14 +289,49 @@ export function EcpmOperationsCenter({
   const loading = loadingAction !== '';
   const trimmedDashboardScopeId = dashboardScopeId.trim();
   const trimmedUpdateScopeId = updateScopeId.trim();
+  const normalizedDashboardStartedDataHour = normalizeChinaDataHour(
+    dashboardStartedDataHour,
+  );
+  const normalizedDashboardEndedDataHour = normalizeChinaDataHour(
+    dashboardEndedDataHour,
+  );
   const normalizedStartedDataHour = normalizeChinaDataHour(startedDataHour);
   const normalizedEndedDataHour = normalizeChinaDataHour(endedDataHour);
+  const dashboardRangeInvalid =
+    (dashboardStartedDataHour.trim() !== '' &&
+      !normalizedDashboardStartedDataHour) ||
+    (dashboardEndedDataHour.trim() !== '' && !normalizedDashboardEndedDataHour) ||
+    isReversedDataHourRange(
+      normalizedDashboardStartedDataHour,
+      normalizedDashboardEndedDataHour,
+    );
+  const dashboardScopeNeedsId =
+    dashboardScope === 'user' || dashboardScope === 'open_id';
+  const dashboardQueryDisabled =
+    dashboardLoading ||
+    dashboardRangeInvalid ||
+    (dashboardScopeNeedsId && !trimmedDashboardScopeId);
   const rangeUpdateInvalid =
     updateMode === 'range' &&
-    (!normalizedStartedDataHour || !normalizedEndedDataHour);
+    (!normalizedStartedDataHour ||
+      !normalizedEndedDataHour ||
+      isReversedDataHourRange(normalizedStartedDataHour, normalizedEndedDataHour));
+  const updateScopeExists =
+    updateScopeType === 'company'
+      ? companies.some((company) => company.id === trimmedUpdateScopeId)
+      : updateScopeType === 'game'
+        ? games.some((game) => game.id === trimmedUpdateScopeId)
+        : true;
   const reportRows = selectedJob?.items ?? [];
+  const coveredDataHours = Array.from(
+    new Set(reportRows.map((item) => item.dataHour)),
+  ).sort();
   const updateDisabled =
-    !canUpdate || loading || !trimmedUpdateScopeId || rangeUpdateInvalid;
+    !canUpdate ||
+    loading ||
+    !trimmedUpdateScopeId ||
+    !updateScopeExists ||
+    rangeUpdateInvalid;
 
   const jobColumns: Array<DataTableColumn<EcpmUpdateJob>> = [
     {
@@ -333,9 +389,18 @@ export function EcpmOperationsCenter({
   ];
 
   function handleDashboardQuery() {
+    if (dashboardQueryDisabled) {
+      return;
+    }
+
     onDashboardQuery(
       dashboardScope,
-      buildDashboardQuery(dashboardScope, trimmedDashboardScopeId),
+      buildDashboardQuery(
+        dashboardScope,
+        trimmedDashboardScopeId,
+        normalizedDashboardStartedDataHour,
+        normalizedDashboardEndedDataHour,
+      ),
     );
   }
 
@@ -395,7 +460,7 @@ export function EcpmOperationsCenter({
           actions={
             <Button
               compact
-              disabled={dashboardLoading}
+              disabled={dashboardQueryDisabled}
               onClick={handleDashboardQuery}
               variant="secondary"
             >
@@ -423,6 +488,24 @@ export function EcpmOperationsCenter({
             onChange={setDashboardScopeId}
             value={dashboardScopeId}
           />
+          <div className="ecpm-controls">
+            <InputField
+              id="ecpm-dashboard-started-data-hour"
+              label="开始小时"
+              onChange={setDashboardStartedDataHour}
+              step={3600}
+              type="datetime-local"
+              value={dashboardStartedDataHour}
+            />
+            <InputField
+              id="ecpm-dashboard-ended-data-hour"
+              label="结束小时"
+              onChange={setDashboardEndedDataHour}
+              step={3600}
+              type="datetime-local"
+              value={dashboardEndedDataHour}
+            />
+          </div>
           <DataTable
             columns={dashboardColumns}
             emptyLabel="暂无数据"
@@ -443,6 +526,27 @@ export function EcpmOperationsCenter({
           }
           title="更新报告"
         >
+          {selectedJob ? (
+            <div className="ecpm-report-grid">
+              <StatusBadge tone="muted">
+                {selectedJob.actorType} {selectedJob.actorId}
+              </StatusBadge>
+              <span>创建 {selectedJob.createdAt}</span>
+              <span>开始 {selectedJob.startedAt}</span>
+              <span>完成 {selectedJob.finishedAt ?? '-'}</span>
+              <span>
+                数据 {selectedJob.startedDataHour} - {selectedJob.endedDataHour}
+              </span>
+              <span>请求游戏 {selectedJob.requestedGameCount}</span>
+              <span>open_id {selectedJob.requestedOpenIdCount}</span>
+              {selectedJob.errorMessage ? (
+                <StatusBadge tone="danger">{selectedJob.errorMessage}</StatusBadge>
+              ) : null}
+              <span>
+                覆盖小时 {coveredDataHours.length > 0 ? coveredDataHours.join(' / ') : '-'}
+              </span>
+            </div>
+          ) : null}
           <DataTable
             columns={jobColumns}
             emptyLabel={jobsLoading ? '加载中' : '暂无任务'}
