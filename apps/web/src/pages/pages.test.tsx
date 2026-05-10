@@ -29,6 +29,7 @@ import type {
   AdminSettlementDetailResult,
   AdminSettlementPreview,
   AdminWithdrawalBatch,
+  AdminWithdrawalDetailResult,
   BusinessClosureReport,
   KuaishouEcpmSyncJob,
   KuaishouTokenStatusResult,
@@ -183,6 +184,11 @@ const withdrawalBatch = {
   updatedAt: '2026-05-08T04:30:00.000Z',
   userId: 'user-1',
 } satisfies AdminWithdrawalBatch;
+
+const withdrawalDetail = {
+  auditLogs: [],
+  batch: withdrawalBatch,
+} satisfies AdminWithdrawalDetailResult;
 
 const businessClosureReport: BusinessClosureReport = {
   checks: [
@@ -810,6 +816,23 @@ describe('OperationsWorkspace', () => {
     expect(html).not.toMatch(/<button\b[^>]*>打款<\/button>/);
     expect(html).not.toMatch(/<button\b[^>]*>失败<\/button>/);
     expect(html).not.toMatch(/<button\b[^>]*>关闭<\/button>/);
+  });
+
+  it('hides stale withdrawal detail for company admins', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          isSuperAdmin: false,
+          selectedWithdrawalDetail: withdrawalDetail,
+        })}
+      />,
+    );
+
+    expect(html).not.toContain('提现详情');
+    expect(html).not.toContain('withdrawal-batch-1');
+    expect(html).not.toContain('Demo User');
+    expect(html).toContain('运营总览');
+    expect(html).toContain('operations-pane operations-pane-active');
   });
 
   it('keeps game integration in the game pane and Kuaishou focused on authorization and sync', () => {

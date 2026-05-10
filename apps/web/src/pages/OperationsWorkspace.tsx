@@ -766,10 +766,10 @@ export function OperationsWorkspace({
   }, [activePaneAvailable]);
 
   useEffect(() => {
-    if (selectedWithdrawalDetail) {
+    if (isSuperAdmin && selectedWithdrawalDetail) {
       setActivePane('withdrawal');
     }
-  }, [selectedWithdrawalDetail]);
+  }, [isSuperAdmin, selectedWithdrawalDetail]);
 
   const pendingWithdrawalSummary = pendingWithdrawalAction
     ? pendingWithdrawalAction.kind === 'approve'
@@ -1777,7 +1777,7 @@ export function OperationsWorkspace({
         )}
         </Panel>
 
-        {selectedWithdrawalDetail ? (
+        {isSuperAdmin && selectedWithdrawalDetail ? (
           <WithdrawalDetailPanel detail={selectedWithdrawalDetail} />
         ) : null}
       </section>
