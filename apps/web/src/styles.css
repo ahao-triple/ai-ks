@@ -1368,7 +1368,15 @@ select {
   }
 
   .operations-shell {
-    grid-template-columns: 180px minmax(0, 1fr);
+    grid-template-columns: 1fr;
+  }
+
+  .operations-feature-rail {
+    position: static;
+  }
+
+  .operations-feature-nav {
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   }
 
   .metric-grid-four {
@@ -1448,11 +1456,11 @@ select {
   }
 
   .operations-feature-nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .operations-feature-nav-item {
-    text-align: center;
+    text-align: left;
   }
 
   .ui-panel-header {

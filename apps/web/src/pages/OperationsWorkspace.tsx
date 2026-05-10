@@ -99,11 +99,9 @@ type OperationsPane =
   | 'agents'
   | 'audit'
   | 'company'
-  | 'company-admins'
   | 'ecpm'
   | 'game'
   | 'kuaishou'
-  | 'maintenance'
   | 'overview'
   | 'config'
   | 'settlement'
@@ -638,20 +636,16 @@ export function OperationsWorkspace({
     { description: '授权/同步', key: 'kuaishou', label: '快手' },
     { description: '结算确认', key: 'settlement', label: '结算' },
     { description: '提现审核', key: 'withdrawal', label: '提现' },
-    { description: '审计追踪', key: 'audit', label: '审计' },
   ];
   if (isSuperAdmin) {
-    paneItems.push({ description: '平台配置', key: 'config', label: '配置' });
     paneItems.push({ description: '代理管理', key: 'agents', label: '代理' });
+  }
+  paneItems.push({ description: '审计追踪', key: 'audit', label: '审计' });
+  if (isSuperAdmin) {
     paneItems.push({
-      description: '账号权限',
-      key: 'company-admins',
-      label: '权限',
-    });
-    paneItems.push({
-      description: '测试维护',
-      key: 'maintenance',
-      label: '维护',
+      description: '平台配置/测试维护',
+      key: 'config',
+      label: '配置/维护',
     });
   }
   const activePaneAvailable = paneItems.some((item) => item.key === activePane);
@@ -1779,10 +1773,7 @@ export function OperationsWorkspace({
             rows={adminWithdrawals}
           />
         ) : (
-          <ReadonlyWithdrawalBatchTable
-            onDetail={onLoadWithdrawalDetail}
-            rows={adminWithdrawals}
-          />
+          <ReadonlyWithdrawalBatchTable rows={adminWithdrawals} />
         )}
         </Panel>
 
@@ -2142,7 +2133,7 @@ export function OperationsWorkspace({
       ) : null}
 
       {isSuperAdmin ? (
-        <section className={paneClass('company-admins')}>
+        <section className={paneClass('company')}>
           <Panel
             actions={
               <Button
@@ -2239,7 +2230,7 @@ export function OperationsWorkspace({
       ) : null}
 
       {isSuperAdmin ? (
-        <section className={paneClass('maintenance')}>
+        <section className={paneClass('config')}>
           <Panel
             description="用于联调回滚：清空业务数据并保留超级管理员登录能力"
             title="测试数据维护"
@@ -3294,10 +3285,8 @@ function SettlementDetailPanel({
 }
 
 function ReadonlyWithdrawalBatchTable({
-  onDetail,
   rows,
 }: {
-  onDetail(batchId: string): void;
   rows: AdminWithdrawalBatch[];
 }) {
   return (
@@ -3310,7 +3299,6 @@ function ReadonlyWithdrawalBatchTable({
             <th>金额</th>
             <th>收款人</th>
             <th>状态</th>
-            <th>操作</th>
           </tr>
         </thead>
         <tbody>
@@ -3329,20 +3317,11 @@ function ReadonlyWithdrawalBatchTable({
                   {row.status}
                 </StatusBadge>
               </td>
-              <td>
-                <Button
-                  compact
-                  onClick={() => onDetail(row.id)}
-                  variant="secondary"
-                >
-                  详情
-                </Button>
-              </td>
             </tr>
           ))}
           {rows.length === 0 ? (
             <tr>
-              <td colSpan={6}>暂无提现批次</td>
+              <td colSpan={5}>暂无提现批次</td>
             </tr>
           ) : null}
         </tbody>

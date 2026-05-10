@@ -662,6 +662,22 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('运营功能栏');
     expect(html).toContain('class="operations-feature-nav-label">总览</span>');
     expect(html).toContain('class="operations-feature-rail"');
+    const railLabels = [
+      '公司',
+      '游戏',
+      'ECPM 看板',
+      '快手',
+      '结算',
+      '提现',
+      '代理',
+      '审计',
+      '配置/维护',
+    ];
+    const railPositions = railLabels.map((label) =>
+      html.indexOf(`class="operations-feature-nav-label">${label}</span>`),
+    );
+    expect(railPositions.every((position) => position >= 0)).toBe(true);
+    expect(railPositions).toEqual([...railPositions].sort((a, b) => a - b));
     expect(html).toContain('class="operations-feature-nav-label">公司</span>');
     expect(html).toContain('公司相关操作');
     expect(html).toContain('class="operations-feature-nav-label">游戏</span>');
@@ -673,9 +689,16 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('提现审核');
     expect(html).toContain('审计追踪');
     expect(html).toContain('代理管理');
-    expect(html).toContain('账号权限');
-    expect(html).toContain('平台配置');
-    expect(html).toContain('测试维护');
+    expect(html).toContain(
+      'class="operations-feature-nav-label">配置/维护</span>',
+    );
+    expect(html).toContain('平台配置/测试维护');
+    expect(html).not.toContain(
+      'class="operations-feature-nav-label">权限</span>',
+    );
+    expect(html).not.toContain(
+      'class="operations-feature-nav-label">维护</span>',
+    );
     expect(html).not.toContain('operations-nav');
     expect(html).toContain('operations-pane operations-pane-active');
   });
@@ -775,8 +798,14 @@ describe('OperationsWorkspace', () => {
       />,
     );
 
-    expect(html).toContain('withdrawal-batch-1');
-    expect(html).toContain('详情');
+    const withdrawalPanel = html.slice(
+      html.indexOf('<h2 class="ui-panel-title">提现审核</h2>'),
+      html.indexOf('<h2 class="ui-panel-title">审计日志</h2>'),
+    );
+
+    expect(withdrawalPanel).toContain('withdrawal-batch-1');
+    expect(withdrawalPanel).not.toContain('详情');
+    expect(withdrawalPanel).not.toContain('<th>操作</th>');
     expect(html).not.toMatch(/<button\b[^>]*>通过<\/button>/);
     expect(html).not.toMatch(/<button\b[^>]*>打款<\/button>/);
     expect(html).not.toMatch(/<button\b[^>]*>失败<\/button>/);

@@ -19,4 +19,16 @@ describe('global styles', () => {
     expect(styles).not.toContain('.operations-nav');
     expect(styles).not.toContain('.operations-nav-item');
   });
+
+  it('stacks the operations rail as a top section on narrow screens', () => {
+    expect(styles).toContain('@media (max-width: 1120px)');
+    expect(styles).toContain('.operations-shell {\n    grid-template-columns: 1fr;');
+    expect(styles).toContain('.operations-feature-rail {\n    position: static;');
+    expect(styles).toContain(
+      '.operations-feature-nav {\n    grid-template-columns: 1fr;',
+    );
+    expect(styles).not.toContain(
+      '.operations-feature-nav {\n    grid-template-columns: repeat(2, minmax(0, 1fr));',
+    );
+  });
 });
