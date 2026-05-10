@@ -49,6 +49,23 @@ describe('EcpmAdminController', () => {
     expect(result).toEqual(dashboardResult);
   });
 
+  it('delegates open_id dashboard alias queries', async () => {
+    const dependencies = createDependencies();
+    const controller = createController(dependencies);
+
+    const result = await controller.openIdSnake(admin, {
+      openId: 'open-1',
+      pageSize: '10',
+    });
+
+    expect(dependencies.dashboardService.queryOpenId).toHaveBeenCalledWith({
+      admin,
+      openId: 'open-1',
+      pageSize: 10,
+    });
+    expect(result).toEqual(dashboardResult);
+  });
+
   it('rejects invalid update payloads', async () => {
     const dependencies = createDependencies();
     const controller = createController(dependencies);
@@ -80,7 +97,7 @@ describe('EcpmAdminController', () => {
 
     await controller.update(admin, {
       mode: 'range',
-      scopeId: 'game-1',
+      scopeId: ' game-1 ',
       scopeType: 'game',
       startedDataHour: '2026-05-08T14:00:00+08:00',
       endedDataHour: '2026-05-08T15:00:00+08:00',
@@ -101,7 +118,7 @@ describe('EcpmAdminController', () => {
     const dependencies = createDependencies();
     const controller = createController(dependencies);
 
-    const result = await controller.jobs('250');
+    const result = await controller.jobs(admin, '250');
 
     expect(dependencies.updateJobService.listJobs).toHaveBeenCalledWith({
       limit: 100,
@@ -109,16 +126,38 @@ describe('EcpmAdminController', () => {
     expect(result).toEqual(updateJobListResult);
   });
 
+  it('allows only super admins to list update jobs', async () => {
+    const dependencies = createDependencies();
+    const controller = createController(dependencies);
+
+    await expect(
+      controller.jobs(companyAdmin, '20'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(dependencies.updateJobService.listJobs).not.toHaveBeenCalled();
+  });
+
   it('returns one update job detail', async () => {
     const dependencies = createDependencies();
     const controller = createController(dependencies);
 
-    const result = await controller.job('ecpm-job-1');
+    const result = await controller.job(admin, 'ecpm-job-1');
 
     expect(dependencies.updateJobService.findJob).toHaveBeenCalledWith(
       'ecpm-job-1',
     );
     expect(result).toEqual(updateJobDetailResult);
+  });
+
+  it('allows only super admins to view update job detail', async () => {
+    const dependencies = createDependencies();
+    const controller = createController(dependencies);
+
+    await expect(
+      controller.job(companyAdmin, 'ecpm-job-1'),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(dependencies.updateJobService.findJob).not.toHaveBeenCalled();
   });
 
   it('retries failed or partial update jobs for super admins', async () => {

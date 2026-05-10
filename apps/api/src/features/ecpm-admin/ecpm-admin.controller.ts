@@ -38,7 +38,7 @@ const updateRequestSchema = z
   .object({
     endedDataHour: z.string().nullable().optional(),
     mode: z.enum(['latest', 'range']),
-    scopeId: z.string().min(1),
+    scopeId: z.string().trim().min(1),
     scopeType: z.enum(['company', 'game', 'user', 'open_id']),
     startedDataHour: z.string().nullable().optional(),
   })
@@ -87,6 +87,18 @@ export class EcpmAdminController {
     @CurrentAdmin() admin: AdminPrincipal,
     @Query() query: unknown,
   ) {
+    return this.queryOpenId(admin, query);
+  }
+
+  @Get('dashboard/open_id')
+  async openIdSnake(
+    @CurrentAdmin() admin: AdminPrincipal,
+    @Query() query: unknown,
+  ) {
+    return this.queryOpenId(admin, query);
+  }
+
+  private queryOpenId(admin: AdminPrincipal, query: unknown) {
     return this.dashboardService.queryOpenId({
       admin,
       ...parseDashboardQuery(query),
@@ -117,14 +129,26 @@ export class EcpmAdminController {
   }
 
   @Get('update-jobs')
-  async jobs(@Query('limit') limit?: string) {
+  @UseGuards(SuperAdminGuard)
+  async jobs(
+    @CurrentAdmin() admin: AdminPrincipal,
+    @Query('limit') limit?: string,
+  ) {
+    requireSuperAdminPrincipal(admin);
+
     return this.updateJobService.listJobs({
       limit: parseLimit(limit),
     });
   }
 
   @Get('update-jobs/:jobId')
-  async job(@Param('jobId') jobId: string) {
+  @UseGuards(SuperAdminGuard)
+  async job(
+    @CurrentAdmin() admin: AdminPrincipal,
+    @Param('jobId') jobId: string,
+  ) {
+    requireSuperAdminPrincipal(admin);
+
     return this.updateJobService.findJob(jobId);
   }
 
