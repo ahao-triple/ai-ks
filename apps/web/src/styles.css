@@ -1493,3 +1493,470 @@ select {
     text-align: left;
   }
 }
+
+/* ===== UserDashboardPage ===== */
+.user-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 8px 0;
+}
+
+.user-dashboard-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.user-dashboard-greeting {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--foreground);
+}
+
+.user-dashboard-uid {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color: var(--info);
+}
+
+.user-dashboard-subtitle {
+  font-size: 12px;
+  color: var(--muted-soft);
+  margin-top: 2px;
+}
+
+.user-dashboard-time-filters {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+.user-dashboard-time {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.user-dashboard-time-active {
+  background: var(--info);
+  color: var(--on-dark);
+  border-color: var(--info);
+}
+
+.user-dashboard-time:disabled:not(.user-dashboard-time-active) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.user-dashboard-refresh {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.user-dashboard-refresh:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.user-dashboard-toast {
+  font-size: 12px;
+  margin-left: 6px;
+}
+
+.user-dashboard-toast-success,
+.user-dashboard-toast-idle-hit {
+  color: var(--success);
+}
+
+.user-dashboard-toast-error {
+  color: var(--danger);
+}
+
+.user-dashboard-kpi {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.user-dashboard-kpi-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.user-dashboard-kpi-label {
+  font-size: 12px;
+  color: var(--muted-soft);
+}
+
+.user-dashboard-kpi-value {
+  font-size: 24px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.user-dashboard-kpi-hint {
+  font-size: 12px;
+  color: var(--muted-soft);
+  margin-top: 4px;
+}
+
+.user-dashboard-section-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.user-dashboard-section-header h2 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.user-dashboard-records-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  flex-wrap: wrap;
+}
+
+.user-dashboard-filter,
+.user-dashboard-interval {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  background: var(--surface);
+}
+
+.user-dashboard-cols {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.user-dashboard-auto {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.user-dashboard-groups,
+.user-dashboard-records {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.user-dashboard-groups-table {
+  width: 100%;
+  font-size: 13px;
+  border-collapse: collapse;
+}
+
+.user-dashboard-groups-table th,
+.user-dashboard-groups-table td {
+  padding: 8px;
+  text-align: left;
+  border-top: 1px solid var(--border);
+}
+
+.user-dashboard-groups-table th {
+  background: var(--surface-soft);
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+  border-top: none;
+}
+
+.user-dashboard-col-num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.user-dashboard-groups-summary {
+  background: var(--surface-muted);
+}
+
+.user-dashboard-groups-account {
+  padding-left: 28px !important;
+}
+
+.user-dashboard-mono {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color: var(--info);
+}
+
+.user-dashboard-status {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.user-dashboard-status-active {
+  background: var(--success-soft);
+  color: var(--success);
+}
+
+.user-dashboard-status-idle,
+.user-dashboard-status-never {
+  background: var(--surface-muted);
+  color: var(--muted);
+}
+
+.user-dashboard-groups-empty {
+  font-size: 13px;
+  color: var(--muted-soft);
+  text-align: center;
+  padding: 16px 8px;
+}
+
+.user-dashboard-groups-mobile {
+  display: none;
+}
+
+/* ===== EcpmRecordTable ===== */
+.ecpm-record-counter {
+  font-size: 12px;
+  color: var(--muted-soft);
+  margin-bottom: 6px;
+}
+
+.ecpm-record-table {
+  width: 100%;
+  font-size: 13px;
+  border-collapse: collapse;
+}
+
+.ecpm-record-table th,
+.ecpm-record-table td {
+  padding: 8px;
+  text-align: left;
+  border-top: 1px solid var(--border);
+}
+
+.ecpm-record-table th {
+  background: var(--surface-soft);
+  font-size: 12px;
+  color: var(--muted);
+  font-weight: 500;
+  border-top: none;
+}
+
+.ecpm-record-col-num {
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+}
+
+.ecpm-record-mono {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+
+.ecpm-record-first {
+  color: var(--success);
+  font-weight: 600;
+}
+
+.ecpm-record-seq {
+  font-weight: 600;
+}
+
+.ecpm-record-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ecpm-record-skeleton-row {
+  height: 36px;
+  border-radius: 4px;
+  background: linear-gradient(
+    90deg,
+    var(--surface-soft) 0%,
+    var(--surface-muted) 50%,
+    var(--surface-soft) 100%
+  );
+  animation: ecpm-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes ecpm-skeleton-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+.ecpm-record-empty {
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: 32px 16px;
+  text-align: center;
+  color: var(--muted-soft);
+}
+
+.ecpm-record-empty-emoji {
+  font-size: 32px;
+  opacity: 0.45;
+}
+
+.ecpm-record-empty-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--foreground);
+  margin-top: 6px;
+}
+
+.ecpm-record-empty-hint {
+  font-size: 12px;
+  margin-top: 4px;
+  line-height: 1.6;
+}
+
+.ecpm-record-table-mobile {
+  display: none;
+}
+
+/* ===== AppShell ===== */
+.app-shell-mobile-header,
+.app-shell-mobile-overlay {
+  display: none;
+}
+
+/* ===== Mobile responsive (≤ 720px) ===== */
+@media (max-width: 720px) {
+  .user-dashboard-kpi {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .user-dashboard-kpi-value {
+    font-size: 20px;
+  }
+
+  .user-dashboard-time-filters {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .user-dashboard-groups-table {
+    display: none;
+  }
+
+  .user-dashboard-groups-mobile {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .user-dashboard-groups-detail {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+  }
+
+  .user-dashboard-groups-detail summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .user-dashboard-groups-detail summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .user-dashboard-groups-game {
+    font-weight: 600;
+    font-size: 13px;
+  }
+
+  .user-dashboard-groups-meta {
+    font-size: 11px;
+    color: var(--muted-soft);
+    margin-top: 2px;
+  }
+
+  .user-dashboard-groups-detail ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-top: 1px solid var(--border);
+  }
+
+  .user-dashboard-groups-detail li {
+    padding: 8px 10px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    border-top: 1px solid var(--surface-soft);
+  }
+
+  .user-dashboard-groups-detail li:first-child {
+    border-top: none;
+  }
+
+  .ecpm-record-table-desktop {
+    display: none;
+  }
+
+  .ecpm-record-table-mobile {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ecpm-record-card {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    display: flex;
+    justify-content: space-between;
+    background: var(--surface);
+  }
+
+  .ecpm-record-card-seq {
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .ecpm-record-card-time {
+    font-size: 11px;
+    color: var(--muted-soft);
+    margin-top: 2px;
+  }
+
+  .ecpm-record-card-right {
+    text-align: right;
+  }
+
+  .ecpm-record-card-ecpm {
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .ecpm-record-card-meta {
+    font-size: 11px;
+    color: var(--muted-soft);
+    margin-top: 2px;
+  }
+}
+

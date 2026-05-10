@@ -44,6 +44,7 @@ import {
   type PlatformConfigDraft,
   type OperationsWorkspaceBusyAction,
 } from './pages/OperationsWorkspace';
+import { UserDashboardPage } from './pages/UserDashboardPage';
 import type {
   AccountEarningsResult,
   AccountAgentBindingResult,
@@ -3479,6 +3480,19 @@ export function App() {
           onIdentityChange={setIdentity}
           onQuery={queryEarnings}
           selectedGame={selectedGame}
+        />
+      ) : null}
+      {activeView === 'account' && appSession.mode === 'account' ? (
+        <UserDashboardPage
+          api={{
+            getUserDashboardOverview: (date) =>
+              aiKsApi.getUserDashboardOverview(appSession.accessToken, date),
+            getUserDashboardGroups: (date) =>
+              aiKsApi.getUserDashboardGroups(appSession.accessToken, date),
+            getUserDashboardRecords: (input) =>
+              aiKsApi.getUserDashboardRecords(appSession.accessToken, input),
+          }}
+          userReadableId={appSession.account.readableId}
         />
       ) : null}
       {activeView === 'account' && appSession.mode === 'account' ? (
