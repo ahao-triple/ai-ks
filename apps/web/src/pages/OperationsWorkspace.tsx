@@ -45,6 +45,7 @@ import type {
 
 export type OperationsWorkspaceBusyAction =
   | ''
+  | 'admin-login'
   | 'admin-resources'
   | 'admin-withdrawals'
   | 'agent-alipay'

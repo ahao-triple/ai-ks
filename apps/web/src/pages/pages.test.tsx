@@ -21,6 +21,7 @@ import {
   mergeEcpmUpdateJob,
   readKuaishouOAuthCallback,
   reconcileSelectedEcpmUpdateJob,
+  shouldApplyEcpmUpdateJobsResponse,
   shouldApplySettlementBatchResponse,
 } from '../App';
 import { buildOperationsOverview } from '../lib/operationsOverview';
@@ -608,6 +609,12 @@ describe('ECPM App state helpers', () => {
     });
     expect(reconcileSelectedEcpmUpdateJob(selectedJob, [])).toBeUndefined();
   });
+
+  it('applies only the latest current-session ECPM job-list response', () => {
+    expect(shouldApplyEcpmUpdateJobsResponse(2, 2, true)).toBe(true);
+    expect(shouldApplyEcpmUpdateJobsResponse(1, 2, true)).toBe(false);
+    expect(shouldApplyEcpmUpdateJobsResponse(2, 2, false)).toBe(false);
+  });
 });
 
 describe('AgentWorkspace', () => {
@@ -1022,6 +1029,27 @@ describe('OperationsWorkspace', () => {
     );
     expect(html).toContain(
       '<button class="ui-button ui-button-primary ui-button-compact" type="button" disabled="">更新</button>',
+    );
+    expect(html).toContain(
+      '<button class="ui-button ui-button-secondary ui-button-compact" type="button" disabled="">刷新更新报告</button>',
+    );
+  });
+
+  it('disables ECPM controls while admin login resource loading is busy', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          busyAction: 'admin-login',
+          onEcpmDashboardQuery: () => undefined,
+          onEcpmJobSelect: () => undefined,
+          onEcpmJobsRefresh: () => undefined,
+          onEcpmUpdate: () => undefined,
+        })}
+      />,
+    );
+
+    expect(html).toContain(
+      '<button class="ui-button ui-button-secondary ui-button-compact" type="button" disabled="">查询中</button>',
     );
     expect(html).toContain(
       '<button class="ui-button ui-button-secondary ui-button-compact" type="button" disabled="">刷新更新报告</button>',

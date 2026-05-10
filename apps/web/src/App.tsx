@@ -243,6 +243,14 @@ export function shouldApplySettlementBatchResponse(
   return isCurrentSession && requestVersion === currentVersion;
 }
 
+export function shouldApplyEcpmUpdateJobsResponse(
+  requestVersion: number,
+  currentVersion: number,
+  isCurrentSession: boolean,
+) {
+  return isCurrentSession && requestVersion === currentVersion;
+}
+
 export function getAdminDisplayName(admin: AdminPrincipal) {
   return admin.role === 'COMPANY_ADMIN' ? admin.displayName : admin.username;
 }
@@ -436,6 +444,7 @@ export function App() {
   const sessionVersionRef = useRef(0);
   const settlementBatchRequestVersionRef = useRef(0);
   const configEcpmJobsRequestVersionRef = useRef(0);
+  const ecpmUpdateJobsRequestVersionRef = useRef(0);
   const selectedConfigGameIdRef = useRef('');
 
   const selectedGame = useMemo(
@@ -1247,6 +1256,7 @@ export function App() {
   }
 
   function clearEcpmOperationsState() {
+    ecpmUpdateJobsRequestVersionRef.current += 1;
     setEcpmDashboardRows([]);
     setEcpmUpdateJobs([]);
     setSelectedEcpmUpdateJob(undefined);
@@ -2118,9 +2128,19 @@ export function App() {
     isCurrent = () => true,
     options: LoadOptions = {},
   ) {
+    const requestVersion = ecpmUpdateJobsRequestVersionRef.current + 1;
+    ecpmUpdateJobsRequestVersionRef.current = requestVersion;
+
+    const shouldApplyResponse = () =>
+      shouldApplyEcpmUpdateJobsResponse(
+        requestVersion,
+        ecpmUpdateJobsRequestVersionRef.current,
+        isCurrent(),
+      );
+
     try {
       const result = await aiKsApi.getEcpmUpdateJobs(token, 20);
-      if (!isCurrent()) {
+      if (!shouldApplyResponse()) {
         return false;
       }
 
@@ -2130,7 +2150,7 @@ export function App() {
       );
       return result.jobs;
     } catch (nextError) {
-      if (!isCurrent()) {
+      if (!shouldApplyResponse()) {
         return false;
       }
 
@@ -3754,6 +3774,7 @@ function isOperationsBusyAction(
   action: AppBusyAction,
 ): action is OperationsWorkspaceBusyAction {
   switch (action) {
+    case 'admin-login':
     case 'admin-withdrawals':
     case 'agent-create':
     case 'agent-alipay':
