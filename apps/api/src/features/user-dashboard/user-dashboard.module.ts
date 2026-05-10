@@ -8,5 +8,6 @@ import { UserDashboardService } from './user-dashboard.service';
   imports: [PrismaModule, AccountModule],
   controllers: [UserDashboardController],
   providers: [UserDashboardService],
+  exports: [UserDashboardService],
 })
 export class UserDashboardModule {}
