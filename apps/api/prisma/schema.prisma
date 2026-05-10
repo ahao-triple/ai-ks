@@ -60,6 +60,13 @@ enum KuaishouEcpmSyncJobStatus {
   FAILED
 }
 
+enum EcpmUpdateJobStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+  PARTIAL
+}
+
 model Company {
   id        String    @id @default(uuid())
   name      String
@@ -91,10 +98,11 @@ model Game {
   updatedAt        DateTime  @updatedAt @map("updated_at")
   deletedAt        DateTime? @map("deleted_at")
 
-  company           Company           @relation(fields: [companyId], references: [id])
-  openIds           GameOpenId[]
-  rawEcpms          RawEcpm[]
-  settlementBatches SettlementBatch[]
+  company            Company             @relation(fields: [companyId], references: [id])
+  openIds            GameOpenId[]
+  rawEcpms           RawEcpm[]
+  settlementBatches  SettlementBatch[]
+  ecpmUpdateJobItems EcpmUpdateJobItem[]
 
   @@unique([id, companyId])
   @@index([companyId])
@@ -116,10 +124,11 @@ model UserAccount {
   updatedAt          DateTime  @updatedAt @map("updated_at")
   deletedAt          DateTime? @map("deleted_at")
 
-  currentAgent    Agent?                    @relation(fields: [currentAgentId], references: [id])
-  openIds         GameOpenId[]
-  agentBindings   UserAgentBindingHistory[]
-  settlementItems SettlementBatchItem[]
+  currentAgent       Agent?                    @relation(fields: [currentAgentId], references: [id])
+  openIds            GameOpenId[]
+  agentBindings      UserAgentBindingHistory[]
+  settlementItems    SettlementBatchItem[]
+  ecpmUpdateJobItems EcpmUpdateJobItem[]
 
   @@index([currentAgentId])
   @@map("user_accounts")
@@ -410,4 +419,60 @@ model KuaishouEcpmSyncJob {
   @@index([gameAppId, status])
   @@index([status])
   @@map("kuaishou_ecpm_sync_jobs")
+}
+
+model EcpmUpdateJob {
+  id                   String              @id @default(uuid())
+  status               EcpmUpdateJobStatus @default(RUNNING)
+  scopeType            String              @map("scope_type")
+  scopeId              String              @map("scope_id")
+  mode                 String
+  startedDataHour      String              @map("started_data_hour")
+  endedDataHour        String              @map("ended_data_hour")
+  requestedGameCount   Int                 @default(0) @map("requested_game_count")
+  requestedOpenIdCount Int                 @default(0) @map("requested_open_id_count")
+  savedCount           Int                 @default(0) @map("saved_count")
+  failedCount          Int                 @default(0) @map("failed_count")
+  skippedCount         Int                 @default(0) @map("skipped_count")
+  errorMessage         String?             @map("error_message")
+  actorType            String              @map("actor_type")
+  actorId              String              @map("actor_id")
+  startedAt            DateTime            @default(now()) @map("started_at")
+  finishedAt           DateTime?           @map("finished_at")
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+
+  items EcpmUpdateJobItem[]
+
+  @@index([createdAt])
+  @@index([scopeType, scopeId])
+  @@index([status])
+  @@map("ecpm_update_jobs")
+}
+
+model EcpmUpdateJobItem {
+  id                String              @id @default(uuid())
+  jobId             String              @map("job_id")
+  gameId            String?             @map("game_id")
+  userId            String?             @map("user_id")
+  gameAppId         String?             @map("game_app_id")
+  openId            String?             @map("open_id")
+  dataHour          String              @map("data_hour")
+  status            EcpmUpdateJobStatus
+  savedCount        Int                 @default(0) @map("saved_count")
+  skipReason        String?             @map("skip_reason")
+  errorMessage      String?             @map("error_message")
+  kuaishouSyncJobId String?             @map("kuaishou_sync_job_id")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+
+  job  EcpmUpdateJob @relation(fields: [jobId], references: [id])
+  game Game?         @relation(fields: [gameId], references: [id])
+  user UserAccount?  @relation(fields: [userId], references: [id])
+
+  @@index([jobId])
+  @@index([gameId])
+  @@index([userId])
+  @@index([gameAppId, dataHour])
+  @@map("ecpm_update_job_items")
 }
