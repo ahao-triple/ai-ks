@@ -83,6 +83,107 @@ export type EcpmRefreshResult = {
   source: 'mock' | 'kuaishou';
 };
 
+export type EcpmDashboardScope =
+  | 'company'
+  | 'game'
+  | 'latest'
+  | 'open_id'
+  | 'user';
+export type EcpmUpdateScopeType = 'company' | 'game' | 'open_id' | 'user';
+export type EcpmUpdateMode = 'latest' | 'range';
+export type EcpmUpdateJobStatus =
+  | 'FAILED'
+  | 'PARTIAL'
+  | 'RUNNING'
+  | 'SUCCEEDED';
+
+export type EcpmDashboardRow = {
+  companyId?: string;
+  companyName?: string;
+  configSnapshot?: unknown;
+  createdAt?: string;
+  dataHour: string;
+  displayAmount: MoneyValue;
+  eventCount?: number;
+  eventTime?: string;
+  gameAppId: string;
+  gameId: string;
+  gameName: string;
+  id?: string;
+  openId?: string;
+  openIdCount?: number;
+  openIdRecordId?: string | null;
+  platformEventId?: string;
+  rawCost: MoneyValue;
+  readableId?: string | null;
+  status?: string;
+  updatedAt?: string | null;
+  userId?: string | null;
+  userReadableId?: string | null;
+  username?: string | null;
+};
+
+export type EcpmDashboardResult = {
+  openId?: string;
+  openIds?: string[];
+  rows: EcpmDashboardRow[];
+  scope: EcpmDashboardScope;
+  userId?: string;
+};
+
+export type EcpmUpdateRequest = {
+  endedDataHour?: string | null;
+  mode: EcpmUpdateMode;
+  scopeId: string;
+  scopeType: EcpmUpdateScopeType;
+  startedDataHour?: string | null;
+};
+
+export type EcpmUpdateJobItem = {
+  createdAt: string;
+  dataHour: string;
+  errorMessage: string | null;
+  gameAppId: string | null;
+  gameId: string | null;
+  id: string;
+  jobId: string;
+  kuaishouSyncJobId: string | null;
+  openId: string | null;
+  savedCount: number;
+  skipReason: string | null;
+  status: EcpmUpdateJobStatus;
+  updatedAt: string;
+  userId: string | null;
+};
+
+export type EcpmUpdateJob = {
+  actorId: string;
+  actorType: string;
+  createdAt: string;
+  endedDataHour: string;
+  errorMessage: string | null;
+  failedCount: number;
+  finishedAt: string | null;
+  id: string;
+  itemCount?: number;
+  items?: EcpmUpdateJobItem[];
+  mode: EcpmUpdateMode;
+  requestedGameCount: number;
+  requestedOpenIdCount: number;
+  savedCount: number;
+  scopeId: string;
+  scopeType: EcpmUpdateScopeType;
+  skippedCount: number;
+  startedAt: string;
+  startedDataHour: string;
+  status: EcpmUpdateJobStatus;
+  updatedAt: string;
+};
+
+export type EcpmUpdateJobListResult = {
+  jobs: EcpmUpdateJob[];
+};
+
 export type EarningsResult = {
   date: string;
   identity: string;

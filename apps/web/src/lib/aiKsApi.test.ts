@@ -24,7 +24,10 @@ import type {
   AgentWithdrawalListResult,
   BusinessClosureReport,
   CurrentAdminResult,
+  EcpmDashboardResult,
   EcpmRefreshResult,
+  EcpmUpdateJob,
+  EcpmUpdateJobListResult,
   KuaishouEcpmSyncJob,
   KuaishouEcpmSyncJobListResult,
   KuaishouTokenStatusResult,
@@ -251,6 +254,19 @@ describe('aiKsApi', () => {
     expectTypeOf(aiKsApi.retryKuaishouEcpmJob)
       .returns.resolves.toEqualTypeOf<EcpmRefreshResult>();
     expectTypeOf<EcpmRefreshResult['job']>().toEqualTypeOf<KuaishouEcpmSyncJob>();
+  });
+
+  it('types ecpm dashboard and update methods as ecpm responses', () => {
+    expectTypeOf(aiKsApi.getEcpmDashboard)
+      .returns.resolves.toEqualTypeOf<EcpmDashboardResult>();
+    expectTypeOf(aiKsApi.updateEcpm)
+      .returns.resolves.toEqualTypeOf<EcpmUpdateJob>();
+    expectTypeOf(aiKsApi.getEcpmUpdateJobs)
+      .returns.resolves.toEqualTypeOf<EcpmUpdateJobListResult>();
+    expectTypeOf(aiKsApi.getEcpmUpdateJob)
+      .returns.resolves.toEqualTypeOf<EcpmUpdateJob>();
+    expectTypeOf(aiKsApi.retryEcpmUpdateJob)
+      .returns.resolves.toEqualTypeOf<EcpmUpdateJob>();
   });
 
   it('loads admin companies with the admin token', async () => {
@@ -606,6 +622,81 @@ describe('aiKsApi', () => {
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       `${API_BASE_URL}/admin/kuaishou/ecpm/jobs/job%201%2F2/retry`,
+      {
+        body: JSON.stringify({}),
+        headers: {
+          Authorization: 'Bearer admin-token',
+          'Content-Type': 'application/json',
+        },
+        method: 'POST',
+      },
+    );
+  });
+
+  it('loads latest ecpm dashboard rows with encoded query parameters', async () => {
+    mockJsonResponse({ rows: [], scope: 'latest' });
+
+    await aiKsApi.getEcpmDashboard('admin-token', 'latest', {
+      companyId: 'company 1',
+      endedDataHour: undefined,
+      startedDataHour: '2026-05-08T14:00:00+08:00',
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/admin/ecpm/dashboard/latest?'),
+      expect.objectContaining({ method: 'GET' }),
+    );
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/ecpm/dashboard/latest?companyId=company+1&startedDataHour=2026-05-08T14%3A00%3A00%2B08%3A00`,
+      expect.any(Object),
+    );
+  });
+
+  it('loads open-id ecpm dashboard rows through the snake case backend alias', async () => {
+    mockJsonResponse({ rows: [], scope: 'open_id' });
+
+    await aiKsApi.getEcpmDashboard('admin-token', 'open_id', {
+      openId: 'open id/1',
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/ecpm/dashboard/open_id?openId=open+id%2F1`,
+      expect.objectContaining({ method: 'GET' }),
+    );
+  });
+
+  it('updates ecpm data through the admin update endpoint', async () => {
+    mockJsonResponse({ id: 'job-1', status: 'SUCCEEDED' });
+
+    await aiKsApi.updateEcpm('admin-token', {
+      endedDataHour: null,
+      mode: 'latest',
+      scopeId: 'game-1',
+      scopeType: 'game',
+      startedDataHour: null,
+    });
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      expect.stringContaining('/admin/ecpm/update'),
+      expect.objectContaining({ method: 'POST' }),
+    );
+    const requestInit = vi.mocked(globalThis.fetch).mock.calls[0]?.[1];
+    expect(JSON.parse(requestInit?.body as string)).toEqual({
+      endedDataHour: null,
+      mode: 'latest',
+      scopeId: 'game-1',
+      scopeType: 'game',
+      startedDataHour: null,
+    });
+  });
+
+  it('retries ecpm update jobs with an encoded job id', async () => {
+    mockJsonResponse({ id: 'retry-job-1', status: 'RUNNING' });
+
+    await aiKsApi.retryEcpmUpdateJob('admin-token', 'job 1/2');
+
+    expect(globalThis.fetch).toHaveBeenCalledWith(
+      `${API_BASE_URL}/admin/ecpm/update-jobs/job%201%2F2/retry`,
       {
         body: JSON.stringify({}),
         headers: {

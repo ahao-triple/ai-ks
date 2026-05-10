@@ -32,9 +32,14 @@ import type {
   BusinessClosureReport,
   CurrentAdminResult,
   DemoGame,
+  EcpmDashboardResult,
+  EcpmDashboardScope,
   EarningsResult,
   EcpmLookbackHours,
   EcpmRefreshResult,
+  EcpmUpdateJob,
+  EcpmUpdateJobListResult,
+  EcpmUpdateRequest,
   GameSessionResult,
   IntegrationStatus,
   KuaishouEcpmSyncJobListResult,
@@ -66,6 +71,10 @@ function gamePath(gameId: string, suffix = '') {
 
 function kuaishouEcpmJobPath(jobId: string, suffix = '') {
   return `/admin/kuaishou/ecpm/jobs/${encodeURIComponent(jobId)}${suffix}`;
+}
+
+function ecpmUpdateJobPath(jobId: string, suffix = '') {
+  return `/admin/ecpm/update-jobs/${encodeURIComponent(jobId)}${suffix}`;
 }
 
 function settlementQuery(range: AdminSettlementRange) {
@@ -508,6 +517,59 @@ export const aiKsApi = {
         method: 'POST',
       },
     );
+  },
+
+  getEcpmDashboard(
+    adminAccessToken: string,
+    scope: EcpmDashboardScope,
+    query: Record<string, string | undefined>,
+  ) {
+    const params = new URLSearchParams();
+    Object.entries(query).forEach(([key, value]) => {
+      if (value) {
+        params.set(key, value);
+      }
+    });
+
+    return requestJson<EcpmDashboardResult>(
+      `/admin/ecpm/dashboard/${scope}?${params}`,
+      {
+        accessToken: adminAccessToken,
+      },
+    );
+  },
+
+  updateEcpm(adminAccessToken: string, body: EcpmUpdateRequest) {
+    return requestJson<EcpmUpdateJob>('/admin/ecpm/update', {
+      accessToken: adminAccessToken,
+      body,
+      method: 'POST',
+    });
+  },
+
+  getEcpmUpdateJobs(adminAccessToken: string, limit = 20) {
+    const query = new URLSearchParams({ limit: String(limit) });
+
+    return requestJson<EcpmUpdateJobListResult>(
+      `/admin/ecpm/update-jobs?${query}`,
+      {
+        accessToken: adminAccessToken,
+      },
+    );
+  },
+
+  getEcpmUpdateJob(adminAccessToken: string, jobId: string) {
+    return requestJson<EcpmUpdateJob>(ecpmUpdateJobPath(jobId), {
+      accessToken: adminAccessToken,
+    });
+  },
+
+  retryEcpmUpdateJob(adminAccessToken: string, jobId: string) {
+    return requestJson<EcpmUpdateJob>(ecpmUpdateJobPath(jobId, '/retry'), {
+      accessToken: adminAccessToken,
+      body: {},
+      method: 'POST',
+    });
   },
 
   getKuaishouTokenStatus(adminAccessToken: string) {
