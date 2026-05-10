@@ -44,9 +44,7 @@ const TIME_FILTERS = [
 
 export function UserDashboardPage(props: UserDashboardPageProps) {
   const { api, userReadableId, date, initialData } = props;
-  const [filter, setFilter] = useState<{ gameId?: string; accountId?: string }>(
-    {},
-  );
+  const [selectedGameId, setSelectedGameId] = useState<string | undefined>();
   const [extraColumns, setExtraColumns] = useState<EcpmRecordExtraColumn[]>([]);
   const [autoRefreshOn, setAutoRefreshOn] = useState(false);
   const [autoIntervalMs, setAutoIntervalMs] = useState(10_000);
@@ -55,10 +53,14 @@ export function UserDashboardPage(props: UserDashboardPageProps) {
     const [overview, groups, records] = await Promise.all([
       api.getUserDashboardOverview(date),
       api.getUserDashboardGroups(date),
-      api.getUserDashboardRecords({ date, ...filter, limit: 50 }),
+      api.getUserDashboardRecords({
+        date,
+        gameId: selectedGameId,
+        limit: 50,
+      }),
     ]);
     return { overview, groups, records };
-  }, [api, date, filter]);
+  }, [api, date, selectedGameId]);
 
   const {
     data: liveData,
@@ -93,18 +95,46 @@ export function UserDashboardPage(props: UserDashboardPageProps) {
     [data?.records.records],
   );
 
+  const selectedGame = data?.groups.find(
+    (g) => g.gameId === selectedGameId,
+  );
+  const isDrilldown = Boolean(selectedGame);
+
   return (
     <div className="user-dashboard">
       <header className="user-dashboard-header">
         <div>
-          <div className="user-dashboard-greeting">
-            你好 <span className="user-dashboard-uid">{formatUserId(userReadableId)}</span>
-          </div>
-          <div className="user-dashboard-subtitle">
-            {data
-              ? `${data.overview.gameCount} 个游戏 · ${data.overview.accountCount} 个账号`
-              : '加载中…'}
-          </div>
+          {isDrilldown ? (
+            <>
+              <div className="user-dashboard-breadcrumb">
+                <button
+                  type="button"
+                  className="user-dashboard-bc-link"
+                  onClick={() => setSelectedGameId(undefined)}
+                >
+                  ← 我的全部游戏
+                </button>
+                <span className="user-dashboard-bc-sep">/</span>
+                <span className="user-dashboard-bc-current">
+                  {selectedGame!.gameName}
+                </span>
+              </div>
+              <div className="user-dashboard-subtitle">
+                {selectedGame!.accounts.length} 个账号 · 今日 {selectedGame!.todayCount} 条 ECPM
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="user-dashboard-greeting">
+                你好 <span className="user-dashboard-uid">{formatUserId(userReadableId)}</span>
+              </div>
+              <div className="user-dashboard-subtitle">
+                {data
+                  ? `${data.overview.gameCount} 个游戏 · ${data.overview.accountCount} 个账号`
+                  : '加载中…'}
+              </div>
+            </>
+          )}
         </div>
         <div className="user-dashboard-time-filters">
           {TIME_FILTERS.map((f, idx) => (
@@ -139,58 +169,80 @@ export function UserDashboardPage(props: UserDashboardPageProps) {
       </header>
 
       <section className="user-dashboard-kpi">
-        <KpiCard
-          label="今日 ECPM 条数"
-          value={data ? String(data.overview.todayCount) : '—'}
-        />
-        <KpiCard
-          label="今日平均 ECPM"
-          value={data ? `¥ ${data.overview.todayAverageEcpmYuan.toFixed(2)}` : '—'}
-          hint={
-            data ? `最高 ¥ ${data.overview.todayMaxEcpmYuan.toFixed(2)}` : ''
-          }
-        />
-        <KpiCard
-          label="游戏数"
-          value={data ? String(data.overview.gameCount) : '—'}
-          hint={data ? `${data.overview.activeGameCount} 个今日活跃` : ''}
-        />
-        <KpiCard
-          label="账号总数"
-          value={data ? String(data.overview.accountCount) : '—'}
-          hint={data ? `${data.overview.activeAccountCount} 个今日活跃` : ''}
-        />
+        {isDrilldown ? (
+          <>
+            <KpiCard
+              label="今日 ECPM 条数"
+              value={String(selectedGame!.todayCount)}
+            />
+            <KpiCard
+              label="今日平均 ECPM"
+              value={`¥ ${selectedGame!.todayAverageEcpmYuan.toFixed(2)}`}
+            />
+            <KpiCard
+              label="累计 ECPM 条数"
+              value={String(selectedGame!.totalCount)}
+            />
+            <KpiCard
+              label="账号数"
+              value={String(selectedGame!.accounts.length)}
+              hint={`${
+                selectedGame!.accounts.filter((a) => a.activeStatus === 'ACTIVE').length
+              } 个今日活跃`}
+            />
+          </>
+        ) : (
+          <>
+            <KpiCard
+              label="今日 ECPM 条数"
+              value={data ? String(data.overview.todayCount) : '—'}
+            />
+            <KpiCard
+              label="今日平均 ECPM"
+              value={data ? `¥ ${data.overview.todayAverageEcpmYuan.toFixed(2)}` : '—'}
+              hint={
+                data ? `最高 ¥ ${data.overview.todayMaxEcpmYuan.toFixed(2)}` : ''
+              }
+            />
+            <KpiCard
+              label="游戏数"
+              value={data ? String(data.overview.gameCount) : '—'}
+              hint={data ? `${data.overview.activeGameCount} 个今日活跃` : ''}
+            />
+            <KpiCard
+              label="账号总数"
+              value={data ? String(data.overview.accountCount) : '—'}
+              hint={data ? `${data.overview.activeAccountCount} 个今日活跃` : ''}
+            />
+          </>
+        )}
       </section>
 
       <section className="user-dashboard-groups">
         <div className="user-dashboard-section-header">
-          <h2>我的游戏与账号</h2>
+          <h2>{isDrilldown ? '该游戏下的账号' : '我的游戏与账号'}</h2>
+          {!isDrilldown && (
+            <span className="user-dashboard-subtitle">点击游戏名进入下钻</span>
+          )}
         </div>
-        <GameAccountGroups groups={data?.groups ?? []} />
+        {isDrilldown ? (
+          <SingleGameAccounts game={selectedGame!} />
+        ) : (
+          <GameAccountGroups
+            groups={data?.groups ?? []}
+            onSelectGame={(gameId) => setSelectedGameId(gameId)}
+          />
+        )}
       </section>
 
       <section className="user-dashboard-records">
         <div className="user-dashboard-section-header">
-          <h2>我的 ECPM 记录</h2>
+          <h2>
+            {isDrilldown
+              ? `${selectedGame!.gameName} · ECPM 记录`
+              : '我的 ECPM 记录'}
+          </h2>
           <div className="user-dashboard-records-controls">
-            <select
-              className="user-dashboard-filter"
-              value={filter.gameId ?? ''}
-              onChange={(e) =>
-                setFilter((f) => ({
-                  ...f,
-                  gameId: e.target.value || undefined,
-                  accountId: undefined,
-                }))
-              }
-            >
-              <option value="">全部游戏</option>
-              {data?.groups.map((g) => (
-                <option key={g.gameId} value={g.gameId}>
-                  {g.gameName}
-                </option>
-              ))}
-            </select>
             <button
               type="button"
               className="user-dashboard-cols"
@@ -245,7 +297,10 @@ function KpiCard(props: { label: string; value: string; hint?: string }) {
   );
 }
 
-function GameAccountGroups(props: { groups: UserDashboardGameGroup[] }) {
+function GameAccountGroups(props: {
+  groups: UserDashboardGameGroup[];
+  onSelectGame: (gameId: string) => void;
+}) {
   if (props.groups.length === 0) {
     return (
       <div className="user-dashboard-groups-empty">
@@ -269,53 +324,62 @@ function GameAccountGroups(props: { groups: UserDashboardGameGroup[] }) {
         </thead>
         <tbody>
           {props.groups.map((group) => (
-            <GroupRows key={group.gameId} group={group} />
+            <GroupRows
+              key={group.gameId}
+              group={group}
+              onSelectGame={props.onSelectGame}
+            />
           ))}
         </tbody>
       </table>
 
-      {/* 移动：折叠卡 */}
+      {/* 移动：折叠卡（点击游戏标题区进入下钻） */}
       <div className="user-dashboard-groups-mobile">
         {props.groups.map((group) => (
-          <details
+          <div
             className="user-dashboard-groups-detail"
             key={`m-${group.gameId}`}
           >
-            <summary>
+            <button
+              type="button"
+              className="user-dashboard-groups-mobile-button"
+              onClick={() => props.onSelectGame(group.gameId)}
+            >
               <div>
                 <div className="user-dashboard-groups-game">
-                  {group.gameName}
+                  {group.gameName} ▶
                 </div>
                 <div className="user-dashboard-groups-meta">
                   {group.accounts.length} 个账号 · 今日 {group.todayCount} 条 · 平均 ¥
                   {group.todayAverageEcpmYuan.toFixed(2)}
                 </div>
               </div>
-            </summary>
-            <ul>
-              {group.accounts.map((account) => (
-                <li key={account.accountId}>
-                  <span className="user-dashboard-mono">{account.readableId}</span>
-                  <span>
-                    {account.todayCount} 条 · ¥
-                    {account.todayAverageEcpmYuan.toFixed(2)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </details>
+            </button>
+          </div>
         ))}
       </div>
     </>
   );
 }
 
-function GroupRows({ group }: { group: UserDashboardGameGroup }) {
+function GroupRows({
+  group,
+  onSelectGame,
+}: {
+  group: UserDashboardGameGroup;
+  onSelectGame: (gameId: string) => void;
+}) {
   return (
     <>
       <tr className="user-dashboard-groups-summary">
         <td>
-          <strong>{group.gameName}</strong>{' '}
+          <button
+            type="button"
+            className="user-dashboard-game-link"
+            onClick={() => onSelectGame(group.gameId)}
+          >
+            <strong>{group.gameName}</strong> ▶
+          </button>{' '}
           <span className="user-dashboard-groups-count">
             {group.accounts.length} 个账号
           </span>
@@ -347,6 +411,46 @@ function GroupRows({ group }: { group: UserDashboardGameGroup }) {
         </tr>
       ))}
     </>
+  );
+}
+
+function SingleGameAccounts({ game }: { game: UserDashboardGameGroup }) {
+  if (game.accounts.length === 0) {
+    return (
+      <div className="user-dashboard-groups-empty">
+        该游戏暂无绑定账号。
+      </div>
+    );
+  }
+  return (
+    <table className="user-dashboard-groups-table">
+      <thead>
+        <tr>
+          <th>账号</th>
+          <th className="user-dashboard-col-num">今日条数</th>
+          <th className="user-dashboard-col-num">平均 ECPM</th>
+          <th className="user-dashboard-col-num">累计</th>
+          <th>状态</th>
+        </tr>
+      </thead>
+      <tbody>
+        {game.accounts.map((account) => (
+          <tr key={account.accountId}>
+            <td>
+              <span className="user-dashboard-mono">{account.readableId}</span>
+            </td>
+            <td className="user-dashboard-col-num">{account.todayCount}</td>
+            <td className="user-dashboard-col-num">
+              ¥ {account.todayAverageEcpmYuan.toFixed(2)}
+            </td>
+            <td className="user-dashboard-col-num">{account.totalCount}</td>
+            <td>
+              <StatusBadge status={account.activeStatus} />
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 }
 
