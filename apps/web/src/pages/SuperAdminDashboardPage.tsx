@@ -69,16 +69,6 @@ export function SuperAdminDashboardPage(props: SuperAdminDashboardPageProps) {
       api.getSuperAdminUserRecords(userId, { date, limit: 50 }),
   };
 
-  if (drilldown) {
-    return (
-      <SuperAdminDrilldown
-        path={drilldown}
-        api={drilldownApi}
-        onNavigate={setDrilldown}
-      />
-    );
-  }
-
   const fetchAll = useCallback(async (): Promise<SuperAdminDashboardData> => {
     const [overview, companies, anomalies] = await Promise.all([
       api.getSuperAdminDashboardOverview(date),
@@ -99,8 +89,19 @@ export function SuperAdminDashboardPage(props: SuperAdminDashboardPageProps) {
   const data = liveData ?? initialData ?? null;
 
   useEffect(() => {
+    if (drilldown) return;
     void refresh();
-  }, [refresh]);
+  }, [refresh, drilldown]);
+
+  if (drilldown) {
+    return (
+      <SuperAdminDrilldown
+        path={drilldown}
+        api={drilldownApi}
+        onNavigate={setDrilldown}
+      />
+    );
+  }
 
   return (
     <div className="user-dashboard admin-dashboard">
