@@ -297,8 +297,10 @@ describe('EcpmUpdateRangeService', () => {
     const { prisma, rangeSyncService, service } = createService();
     const error = new Error('kuaishou audit unavailable') as Error & {
       auditOnly: boolean;
+      code: string;
     };
     error.auditOnly = true;
+    error.code = 'AUDIT_LOG_FAILED';
     rangeSyncService.refreshRange.mockRejectedValueOnce(error);
 
     const job = await service.update({

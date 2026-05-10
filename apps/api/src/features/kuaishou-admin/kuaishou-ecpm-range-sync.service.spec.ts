@@ -391,15 +391,20 @@ describe('KuaishouEcpmRangeSyncService', () => {
     );
     const service = createService(dependencies);
 
-    await expect(
-      service.refreshRange({
-        actorId: 'admin',
-        actorType: 'SUPER_ADMIN',
-        gameAppId: 'game-1',
-        lookbackHours: 1,
-        markTokenError: true,
-      }),
-    ).rejects.toThrow('audit unavailable');
+    const refresh = service.refreshRange({
+      actorId: 'admin',
+      actorType: 'SUPER_ADMIN',
+      gameAppId: 'game-1',
+      lookbackHours: 1,
+      markTokenError: true,
+    });
+
+    await expect(refresh).rejects.toThrow('audit unavailable');
+    await expect(refresh).rejects.toMatchObject({
+      auditOnly: true,
+      code: 'AUDIT_LOG_FAILED',
+      message: 'audit unavailable',
+    });
 
     expect(dependencies.demoStore.addEcpmRows).toHaveBeenCalled();
     expect(dependencies.syncJobService.completeJob).toHaveBeenCalledWith({

@@ -124,23 +124,27 @@ export class KuaishouEcpmRangeSyncService {
       savedCount: savedRows.length,
       source,
     });
-    await this.auditLogService.record({
-      action: 'kuaishou.ecpm_refreshed',
-      actorId: input.actorId,
-      actorType: input.actorType,
-      metadata: {
-        dataHours,
-        startedDataHour,
-        endedDataHour,
-        lookbackHours: input.lookbackHours,
-        jobId: job.id,
-        requestedOpenIds,
-        savedCount: savedRows.length,
-        source,
-      },
-      targetId: input.gameAppId,
-      targetType: 'kuaishou_ecpm_refresh',
-    });
+    try {
+      await this.auditLogService.record({
+        action: 'kuaishou.ecpm_refreshed',
+        actorId: input.actorId,
+        actorType: input.actorType,
+        metadata: {
+          dataHours,
+          startedDataHour,
+          endedDataHour,
+          lookbackHours: input.lookbackHours,
+          jobId: job.id,
+          requestedOpenIds,
+          savedCount: savedRows.length,
+          source,
+        },
+        targetId: input.gameAppId,
+        targetType: 'kuaishou_ecpm_refresh',
+      });
+    } catch (error) {
+      throw tagAuditLogFailure(error);
+    }
 
     return {
       job: presentKuaishouEcpmSyncJob(completedJob),
@@ -246,4 +250,18 @@ function pad2(value: number) {
 
 function readErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'unknown error';
+}
+
+function tagAuditLogFailure(error: unknown) {
+  const tagged =
+    error instanceof Error
+      ? (error as Error & { auditOnly?: boolean; code?: string })
+      : (new Error(readErrorMessage(error)) as Error & {
+          auditOnly?: boolean;
+          code?: string;
+        });
+  tagged.auditOnly = true;
+  tagged.code = 'AUDIT_LOG_FAILED';
+
+  return tagged;
 }
