@@ -44,6 +44,7 @@ import {
   type PlatformConfigDraft,
   type OperationsWorkspaceBusyAction,
 } from './pages/OperationsWorkspace';
+import { AgentDashboardPage } from './pages/AgentDashboardPage';
 import { SuperAdminDashboardPage } from './pages/SuperAdminDashboardPage';
 import { UserDashboardPage } from './pages/UserDashboardPage';
 import type {
@@ -3524,6 +3525,19 @@ export function App() {
         </details>
       ) : null}
       {activeView === 'agent' && appSession.mode === 'agent' ? (
+        <AgentDashboardPage
+          api={{
+            getAgentDashboardOverview: (date) =>
+              aiKsApi.getAgentDashboardOverview(appSession.accessToken, date),
+            getAgentDashboardUsers: (date) =>
+              aiKsApi.getAgentDashboardUsers(appSession.accessToken, date),
+          }}
+          agentName={appSession.agent.username}
+        />
+      ) : null}
+      {activeView === 'agent' && appSession.mode === 'agent' ? (
+        <details className="legacy-workspace-toggle">
+          <summary>展开旧版代理工作台（提现 / 资料 / 名下用户）</summary>
         <AgentWorkspace
           agent={currentAgent}
           alipayAccount={ownAgentAlipayAccount}
@@ -3543,6 +3557,7 @@ export function App() {
           withdrawalAmountYuan={ownAgentWithdrawalAmountYuan}
           withdrawals={agentWithdrawals}
         />
+        </details>
       ) : null}
       {activeView === 'operations' && appSession.mode === 'admin' ? (
         <SuperAdminDashboardPage

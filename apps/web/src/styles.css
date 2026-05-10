@@ -1735,6 +1735,67 @@ select {
   display: none;
 }
 
+/* ===== AgentDashboardPage 身份卡 ===== */
+.agent-dashboard-identity {
+  background: linear-gradient(135deg, var(--warning-soft) 0%, var(--surface) 100%);
+  border: 1px solid var(--warning);
+  border-radius: 8px;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.agent-dashboard-identity-left {
+  flex: 1;
+  min-width: 240px;
+}
+
+.agent-dashboard-identity-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.agent-dashboard-invitation {
+  background: var(--surface);
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--info);
+}
+
+.agent-dashboard-button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.agent-dashboard-identity-stats {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.agent-dashboard-share {
+  color: var(--success);
+}
+
+.agent-dashboard-row-idle {
+  opacity: 0.65;
+}
+
 /* ===== 旧 workspace 折叠按钮 ===== */
 .legacy-workspace-toggle {
   margin-top: 24px;

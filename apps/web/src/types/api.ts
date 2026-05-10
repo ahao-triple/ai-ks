@@ -650,6 +650,23 @@ export type SuperAdminCompanyRow = {
   maxEcpmYuan: number;
 };
 
+export type AgentDashboardOverview = {
+  invitationCode: string;
+  directUserCount: number;
+  todayTotalAmountYuan: number;
+  myShareTodayYuan: number;
+};
+
+export type AgentDashboardUserRow = {
+  userId: string;
+  readableId: string;
+  todayAmountYuan: number;
+  todayEcpmCount: number;
+  totalAmountYuan: number;
+  registeredAt: string;
+  lastActiveAt: string | null;
+};
+
 export type SuperAdminAnomalies = {
   syncFailures: Array<{
     gameAppId: string;

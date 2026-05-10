@@ -43,6 +43,8 @@ import type {
   IntegrationStatus,
   KuaishouEcpmSyncJobListResult,
   KuaishouTokenStatusResult,
+  AgentDashboardOverview,
+  AgentDashboardUserRow,
   PlatformConfig,
   PlatformConfigUpdateInput,
   SuperAdminAnomalies,
@@ -761,5 +763,21 @@ export const aiKsApi = {
     return requestJson<SuperAdminAnomalies>(`/admin/dashboard/anomalies`, {
       accessToken: adminAccessToken,
     });
+  },
+
+  getAgentDashboardOverview(agentAccessToken: string, date?: string) {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return requestJson<AgentDashboardOverview>(
+      `/agents/me/dashboard/overview${qs}`,
+      { accessToken: agentAccessToken },
+    );
+  },
+
+  getAgentDashboardUsers(agentAccessToken: string, date?: string) {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return requestJson<AgentDashboardUserRow[]>(
+      `/agents/me/dashboard/users${qs}`,
+      { accessToken: agentAccessToken },
+    );
   },
 };

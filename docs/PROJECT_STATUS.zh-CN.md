@@ -22,7 +22,12 @@
 - 后端 `SuperAdminDashboardModule`：提供 `/admin/dashboard/{overview,companies,anomalies}` 三个接口，覆盖全平台 KPI（今日 ECPM 条数 / 平均 / 最高 / 活跃游戏 / 活跃用户）+ 按公司分布数据 + 异常聚合（最近 24h 同步失败 + 长时间无数据游戏）。受 `SuperAdminGuard + RateLimitGuard` 保护并启用静默节流
 - 前端 `SuperAdminDashboardPage`：复用 Plan 1 的 `useThrottledRefresh` 与 KPI 卡视觉风格，接入 `OperationsWorkspace` 顶部，旧 10 tab 留在下方。超级管理员登录后第一眼看到新看板（KPI / 异常区 / 公司分布表）
 
-下一步（Plan 2B/2C/2D）：代理看板 + 公司管理员看板 + 公司/游戏/用户下钻视图 + AppShell 替换 DashboardLayout 完整 IA 切换 + 拆除旧 OperationsWorkspace。
+**Plan 2B（代理看板）已落地**：
+
+- 后端 `AgentDashboardModule`：提供 `/agents/me/dashboard/{overview,users}` 两个接口。覆盖代理身份卡（邀请码 / 名下用户数 / 名下今日总收益 / 我的分账今日，"我的分账"按 `PlatformConfig.directAgentRatioPercent` 折算）+ 名下用户列表（用户 ID / 今日金额 / 今日 ECPM 条数 / 累计金额 / 注册时间 / 最近活跃）
+- 前端 `AgentDashboardPage`：代理工作台顶部金黄色身份卡 + 名下用户表，**用户 ID 不可点击下钻**（按 spec 隐私要求），列表带搜索与"无名下用户"引导。接入 AgentWorkspace 顶部，旧版工作台收进 details 折叠
+
+下一步（Plan 2C/2D）：公司管理员看板 + 公司/游戏/用户下钻视图 + AppShell 替换 DashboardLayout 完整 IA 切换 + 拆除旧 OperationsWorkspace。
 
 本文档是当前项目进度的主入口，用于替代早期 `docs/superpowers/specs` 和 `docs/superpowers/plans` 下的阶段性设计文档。旧文档已归档，只作为历史设计记录，不再代表当前实现状态。
 
