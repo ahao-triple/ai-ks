@@ -95,7 +95,7 @@ describe('EcpmUpdateJobService', () => {
       jobId: job.id,
       openId: 'open-b',
       savedCount: 1,
-      status: 'PARTIAL',
+      status: 'SUCCEEDED',
     });
 
     const finished = await service.finishJob(job.id);
@@ -107,6 +107,55 @@ describe('EcpmUpdateJobService', () => {
       status: EcpmUpdateJobStatus.SUCCEEDED,
     });
     expect(finished.finishedAt).toBeInstanceOf(Date);
+  });
+
+  it('completes a skipped-only job as SUCCEEDED with skipped count', async () => {
+    const { service } = createService();
+    const job = await service.startJob(baseStartInput());
+    await service.recordItem({
+      dataHour: '2026-05-08T14:00:00+08:00',
+      gameId: 'game-1',
+      jobId: job.id,
+      skipReason: 'NO_OPEN_IDS',
+      status: 'FAILED',
+    });
+    await service.recordItem({
+      dataHour: '2026-05-08T15:00:00+08:00',
+      gameId: 'game-2',
+      jobId: job.id,
+      skipReason: 'NO_OPEN_IDS',
+      status: 'FAILED',
+    });
+
+    const finished = await service.finishJob(job.id);
+
+    expect(finished).toMatchObject({
+      failedCount: 0,
+      savedCount: 0,
+      skippedCount: 2,
+      status: EcpmUpdateJobStatus.SUCCEEDED,
+    });
+  });
+
+  it('completes a job as PARTIAL when any item is partial', async () => {
+    const { service } = createService();
+    const job = await service.startJob(baseStartInput());
+    await service.recordItem({
+      dataHour: '2026-05-08T14:00:00+08:00',
+      gameId: 'game-1',
+      jobId: job.id,
+      openId: 'open-a',
+      status: 'PARTIAL',
+    });
+
+    const finished = await service.finishJob(job.id);
+
+    expect(finished).toMatchObject({
+      failedCount: 0,
+      savedCount: 0,
+      skippedCount: 0,
+      status: EcpmUpdateJobStatus.PARTIAL,
+    });
   });
 
   it('completes a job as PARTIAL when failures and saves exist', async () => {
@@ -139,7 +188,7 @@ describe('EcpmUpdateJobService', () => {
     });
   });
 
-  it('completes a job as FAILED when every item failed or skipped', async () => {
+  it('completes a job as FAILED when a hard failure exists with no saves', async () => {
     const { service } = createService();
     const job = await service.startJob(baseStartInput());
     await service.recordItem({
@@ -166,6 +215,20 @@ describe('EcpmUpdateJobService', () => {
       savedCount: 0,
       skippedCount: 1,
       status: EcpmUpdateJobStatus.FAILED,
+    });
+  });
+
+  it('completes a job as SUCCEEDED when no items exist', async () => {
+    const { service } = createService();
+    const job = await service.startJob(baseStartInput());
+
+    const finished = await service.finishJob(job.id);
+
+    expect(finished).toMatchObject({
+      failedCount: 0,
+      savedCount: 0,
+      skippedCount: 0,
+      status: EcpmUpdateJobStatus.SUCCEEDED,
     });
   });
 

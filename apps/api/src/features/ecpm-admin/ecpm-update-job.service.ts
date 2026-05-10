@@ -254,23 +254,25 @@ function summarizeEcpmUpdateJobItems(items: EcpmUpdateJobItem[]) {
   const failedCount = items.filter(
     (item) => item.status === EcpmUpdateJobStatus.FAILED && !hasSkipReason(item),
   ).length;
-  const failedOrSkippedCount = failedCount + skippedCount;
 
-  if (failedOrSkippedCount === 0) {
+  if (failedCount > 0) {
     return {
       failedCount,
       savedCount,
       skippedCount,
-      status: EcpmUpdateJobStatus.SUCCEEDED,
+      status:
+        savedCount > 0
+          ? EcpmUpdateJobStatus.PARTIAL
+          : EcpmUpdateJobStatus.FAILED,
     };
   }
 
-  if (savedCount === 0 || failedOrSkippedCount === items.length) {
+  if (items.some((item) => item.status === EcpmUpdateJobStatus.PARTIAL)) {
     return {
       failedCount,
       savedCount,
       skippedCount,
-      status: EcpmUpdateJobStatus.FAILED,
+      status: EcpmUpdateJobStatus.PARTIAL,
     };
   }
 
@@ -278,7 +280,7 @@ function summarizeEcpmUpdateJobItems(items: EcpmUpdateJobItem[]) {
     failedCount,
     savedCount,
     skippedCount,
-    status: EcpmUpdateJobStatus.PARTIAL,
+    status: EcpmUpdateJobStatus.SUCCEEDED,
   };
 }
 
