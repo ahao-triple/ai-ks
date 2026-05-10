@@ -5,7 +5,14 @@ import {
   type AppSession,
   type ViewKey,
 } from './app/session';
-import { Alert } from './components/ui';
+import {
+  createOperationFeedbackItem,
+  finishOperationFeedbackItem,
+  limitOperationFeedbackItems,
+  type OperationFeedbackItem,
+  type OperationFeedbackStatus,
+} from './app/operationFeedback';
+import { Alert, OperationFeedback } from './components/ui';
 import { DashboardLayout } from './layouts/DashboardLayout';
 import { ApiError } from './lib/api';
 import { aiKsApi } from './lib/aiKsApi';
@@ -371,8 +378,12 @@ export function App() {
     useState<AdminSettlementDetailResult>();
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [operationFeedbackItems, setOperationFeedbackItems] = useState<
+    OperationFeedbackItem[]
+  >([]);
   const [busyAction, setBusyAction] = useState<AppBusyAction>('');
   const busyRef = useRef(false);
+  const operationFeedbackIdRef = useRef(0);
   const sessionVersionRef = useRef(0);
   const settlementBatchRequestVersionRef = useRef(0);
   const configEcpmJobsRequestVersionRef = useRef(0);
@@ -454,6 +465,44 @@ export function App() {
   function clearBusyState() {
     busyRef.current = false;
     setBusyAction('');
+  }
+
+  function startOperationFeedback(actionName: AppBusyAction) {
+    operationFeedbackIdRef.current += 1;
+    const feedbackId = `operation-${operationFeedbackIdRef.current}`;
+    setOperationFeedbackItems((current) =>
+      limitOperationFeedbackItems([
+        createOperationFeedbackItem(actionName, feedbackId),
+        ...current,
+      ]),
+    );
+
+    return feedbackId;
+  }
+
+  function finishOperationFeedback(
+    feedbackId: string,
+    status: Exclude<OperationFeedbackStatus, 'running'>,
+    message?: string,
+  ) {
+    setOperationFeedbackItems((current) =>
+      finishOperationFeedbackItem(current, feedbackId, status, message),
+    );
+  }
+
+  function getActionErrorMessage(nextError: unknown) {
+    if (nextError instanceof Error) {
+      return nextError.message;
+    }
+
+    return '请求失败，请检查 API';
+  }
+
+  function reportActionError(actionName: AppBusyAction, message: string) {
+    setError(message);
+    setNotice('');
+    const feedbackId = startOperationFeedback(actionName);
+    finishOperationFeedback(feedbackId, 'failed', message);
   }
 
   async function initializeApp() {
@@ -624,7 +673,7 @@ export function App() {
 
   async function runAction(
     name: AppBusyAction,
-    action: (isCurrent: () => boolean) => Promise<void>,
+    action: (isCurrent: () => boolean) => Promise<false | void>,
     authScope: AuthScope = 'none',
   ) {
     if (busyRef.current) {
@@ -636,22 +685,50 @@ export function App() {
     setBusyAction(name);
     setError('');
     setNotice('');
+    const feedbackId = startOperationFeedback(name);
 
     try {
-      await action(() => isCurrentSessionVersion(actionVersion));
-    } catch (nextError) {
+      const actionResult = await action(() =>
+        isCurrentSessionVersion(actionVersion),
+      );
       if (!isCurrentSessionVersion(actionVersion)) {
+        finishOperationFeedback(
+          feedbackId,
+          'failed',
+          '操作已取消，当前登录状态已变化',
+        );
         return;
       }
 
+      if (actionResult === false) {
+        finishOperationFeedback(
+          feedbackId,
+          'failed',
+          '操作未完成，请查看错误提示',
+        );
+        return;
+      }
+
+      finishOperationFeedback(feedbackId, 'success');
+    } catch (nextError) {
+      if (!isCurrentSessionVersion(actionVersion)) {
+        finishOperationFeedback(
+          feedbackId,
+          'failed',
+          '操作已取消，当前登录状态已变化',
+        );
+        return;
+      }
+
+      const errorMessage = getActionErrorMessage(nextError);
+
       if (nextError instanceof ApiError && nextError.status === 401) {
         handleUnauthorized(authScope);
-        setError(nextError.message);
-      } else if (nextError instanceof Error) {
-        setError(nextError.message);
+        setError(errorMessage);
       } else {
-        setError('请求失败，请检查 API');
+        setError(errorMessage);
       }
+      finishOperationFeedback(feedbackId, 'failed', errorMessage);
     } finally {
       if (isCurrentSessionVersion(actionVersion)) {
         clearBusyState();
@@ -673,9 +750,13 @@ export function App() {
     }
   }
 
-  function ensureSuperAdmin() {
+  function ensureSuperAdmin(actionName?: AppBusyAction) {
     if (!isSuperAdmin(currentAdmin)) {
-      setError('无权限访问该操作');
+      if (actionName) {
+        reportActionError(actionName, '无权限访问该操作');
+      } else {
+        setError('无权限访问该操作');
+      }
       return false;
     }
 
@@ -736,7 +817,7 @@ export function App() {
   async function queryEarnings() {
     const targetIdentity = identity.trim();
     if (!targetIdentity) {
-      setError('请输入 open_id 或可读 ID');
+      reportActionError('query', '请输入 open_id 或可读 ID');
       return;
     }
 
@@ -990,10 +1071,10 @@ export function App() {
 
   async function refreshEcpm() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('refresh', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('refresh')) {
       return;
     }
 
@@ -1018,10 +1099,10 @@ export function App() {
 
   async function retryKuaishouEcpmJob(jobId: string) {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError(`retry-ecpm-${jobId}`, '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin(`retry-ecpm-${jobId}`)) {
       return;
     }
 
@@ -1298,10 +1379,10 @@ export function App() {
 
   async function loadBusinessClosure() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('business-closure', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('business-closure')) {
       return;
     }
 
@@ -1310,8 +1391,11 @@ export function App() {
         adminAccessToken,
         isCurrent,
       );
-      if (!isCurrent() || !loaded) {
+      if (!isCurrent()) {
         return;
+      }
+      if (!loaded) {
+        return false;
       }
 
       setNotice('真实数据闭环核对已刷新');
@@ -1320,17 +1404,20 @@ export function App() {
 
   async function loadCompanyAdmins() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('company-admins', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('company-admins')) {
       return;
     }
 
     await runAction('company-admins', async (isCurrent) => {
       const loaded = await loadCompanyAdminsForToken(adminAccessToken, isCurrent);
-      if (!isCurrent() || !loaded) {
+      if (!isCurrent()) {
         return;
+      }
+      if (!loaded) {
+        return false;
       }
 
       setNotice('公司管理员账号已刷新');
@@ -1339,17 +1426,20 @@ export function App() {
 
   async function loadAdminAgents() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('agents', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('agents')) {
       return;
     }
 
     await runAction('agents', async (isCurrent) => {
       const loaded = await loadAdminAgentsForToken(adminAccessToken, isCurrent);
-      if (!isCurrent() || !loaded) {
+      if (!isCurrent()) {
         return;
+      }
+      if (!loaded) {
+        return false;
       }
 
       setNotice('代理列表已刷新');
@@ -1396,10 +1486,10 @@ export function App() {
 
   async function loadPlatformConfig() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('platform-config', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('platform-config')) {
       return;
     }
 
@@ -1408,8 +1498,11 @@ export function App() {
         adminAccessToken,
         isCurrent,
       );
-      if (!isCurrent() || !loaded) {
+      if (!isCurrent()) {
         return;
+      }
+      if (!loaded) {
+        return false;
       }
 
       setNotice('平台配置已刷新');
@@ -1457,7 +1550,7 @@ export function App() {
       parentAgentRatioPercent === undefined ||
       userSettlementRatioPercent === undefined
     ) {
-      setError('比例必须填写 0 到 100 的整数');
+      reportActionError('platform-config', '比例必须填写 0 到 100 的整数');
       return undefined;
     }
     const settlementTotal =
@@ -1467,12 +1560,15 @@ export function App() {
       defaultAgentRatioPercent +
       feeRatioPercent;
     if (settlementTotal !== 100) {
-      setError(`分账比例合计必须为 100%，当前为 ${settlementTotal}%`);
+      reportActionError(
+        'platform-config',
+        `分账比例合计必须为 100%，当前为 ${settlementTotal}%`,
+      );
       return undefined;
     }
     const minWithdrawalYuan = platformConfigDraft.minWithdrawalYuan.trim();
     if (!minWithdrawalYuan) {
-      setError('请填写最低提现金额');
+      reportActionError('platform-config', '请填写最低提现金额');
       return undefined;
     }
 
@@ -1490,10 +1586,10 @@ export function App() {
 
   async function savePlatformConfig() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('platform-config', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('platform-config')) {
       return;
     }
 
@@ -1523,10 +1619,10 @@ export function App() {
     username: string;
   }) {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('company-admin-create', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('company-admin-create')) {
       return;
     }
 
@@ -1543,10 +1639,10 @@ export function App() {
 
   async function createAdminAgent() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('agent-create', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('agent-create')) {
       return;
     }
 
@@ -1555,7 +1651,10 @@ export function App() {
     const invitationCode = newAgentInvitationCode.trim();
     const parentAgentId = newAgentParentId.trim() || null;
     if (!username || !invitationCode || password.length < 8) {
-      setError('请填写代理用户名、至少 8 位密码和邀请码');
+      reportActionError(
+        'agent-create',
+        '请填写代理用户名、至少 8 位密码和邀请码',
+      );
       return;
     }
 
@@ -1581,10 +1680,10 @@ export function App() {
 
   async function updateAdminAgentAlipay() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('agent-alipay', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('agent-alipay')) {
       return;
     }
     if (
@@ -1592,7 +1691,7 @@ export function App() {
       !agentAlipayAccount.trim() ||
       !agentAlipayRealName.trim()
     ) {
-      setError('请选择代理并填写支付宝账号和真实姓名');
+      reportActionError('agent-alipay', '请选择代理并填写支付宝账号和真实姓名');
       return;
     }
 
@@ -1618,14 +1717,14 @@ export function App() {
 
   async function requestAdminAgentWithdrawal() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('agent-withdrawal', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('agent-withdrawal')) {
       return;
     }
     if (!agentActionAgentId || !agentWithdrawalAmountYuan.trim()) {
-      setError('请选择代理并填写提现金额');
+      reportActionError('agent-withdrawal', '请选择代理并填写提现金额');
       return;
     }
 
@@ -1664,10 +1763,10 @@ export function App() {
     payload: { displayName: string; enabled: boolean; password?: string },
   ) {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('company-admin-update', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('company-admin-update')) {
       return;
     }
 
@@ -1693,10 +1792,10 @@ export function App() {
     payload: { scopes: Array<{ companyId: string; gameIds: string[] }> },
   ) {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('company-admin-scopes', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('company-admin-scopes')) {
       return;
     }
 
@@ -1719,14 +1818,17 @@ export function App() {
 
   async function loadAdminResources() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('admin-resources', '请先登录管理员账号');
       return;
     }
 
     await runAction('admin-resources', async (isCurrent) => {
       const loaded = await loadAdminResourcesForToken(adminAccessToken, isCurrent);
-      if (!isCurrent() || !loaded) {
+      if (!isCurrent()) {
         return;
+      }
+      if (!loaded) {
+        return false;
       }
 
       setNotice('预算资源已刷新');
@@ -1798,10 +1900,10 @@ export function App() {
 
   async function loadKuaishouTokenStatus() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('kuaishou-token', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('kuaishou-token')) {
       return;
     }
 
@@ -1810,8 +1912,11 @@ export function App() {
         adminAccessToken,
         isCurrent,
       );
-      if (!isCurrent() || !loaded) {
+      if (!isCurrent()) {
         return;
+      }
+      if (!loaded) {
+        return false;
       }
 
       setNotice('平台授权状态已刷新');
@@ -1899,7 +2004,7 @@ export function App() {
 
   async function loadKuaishouEcpmJobs() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('kuaishou-ecpm-jobs', '请先登录管理员账号');
       return;
     }
 
@@ -1908,8 +2013,11 @@ export function App() {
         adminAccessToken,
         isCurrent,
       );
-      if (!isCurrent() || !loaded) {
+      if (!isCurrent()) {
         return;
+      }
+      if (!loaded) {
+        return false;
       }
 
       setNotice('同步任务已刷新');
@@ -1918,10 +2026,10 @@ export function App() {
 
   async function authorizeKuaishouToken() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('kuaishou-authorize', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('kuaishou-authorize')) {
       return;
     }
 
@@ -1929,7 +2037,10 @@ export function App() {
     const secret = kuaishouSecret.trim();
     const authCode = kuaishouAuthCode.trim();
     if (!appId || !secret || !authCode) {
-      setError('请填写平台 app_id、secret 和 auth_code');
+      reportActionError(
+        'kuaishou-authorize',
+        '请填写平台 app_id、secret 和 auth_code',
+      );
       return;
     }
 
@@ -1952,10 +2063,10 @@ export function App() {
 
   async function refreshKuaishouToken() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('kuaishou-refresh-token', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('kuaishou-refresh-token')) {
       return;
     }
 
@@ -1972,10 +2083,10 @@ export function App() {
 
   async function resetTestData() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('reset-test-data', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('reset-test-data')) {
       return;
     }
 
@@ -2021,16 +2132,16 @@ export function App() {
 
   async function createAdminCompany() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('company-create', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('company-create')) {
       return;
     }
 
     const name = newCompanyName.trim();
     if (!name) {
-      setError('请输入公司名称');
+      reportActionError('company-create', '请输入公司名称');
       return;
     }
 
@@ -2052,15 +2163,15 @@ export function App() {
 
   async function adjustCompanyBalance() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('company-balance', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('company-balance')) {
       return;
     }
 
     if (!balanceCompanyId || !balanceAmountYuan.trim()) {
-      setError('请选择公司并填写充值金额');
+      reportActionError('company-balance', '请选择公司并填写充值金额');
       return;
     }
 
@@ -2085,10 +2196,10 @@ export function App() {
 
   async function createAdminGame() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('game-create', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('game-create')) {
       return;
     }
 
@@ -2097,7 +2208,7 @@ export function App() {
     const nextGameAppId = newGameAppId.trim();
     const gameSecret = newGameSecret.trim();
     if (!companyId || !name || !nextGameAppId || !gameSecret) {
-      setError('请填写公司、游戏名称、AppID 和密钥');
+      reportActionError('game-create', '请填写公司、游戏名称、AppID 和密钥');
       return;
     }
 
@@ -2129,15 +2240,15 @@ export function App() {
 
   async function allocateGameBudget() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('game-budget', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('game-budget')) {
       return;
     }
 
     if (!budgetGameId || !budgetAmountYuan.trim()) {
-      setError('请选择游戏并填写分配金额');
+      reportActionError('game-budget', '请选择游戏并填写分配金额');
       return;
     }
 
@@ -2175,7 +2286,7 @@ export function App() {
   function openGameConfig(gameId: string) {
     const game = adminGames.find((row) => row.id === gameId);
     if (!game) {
-      setError('未找到要配置的游戏');
+      reportActionError('game-config', '未找到要配置的游戏');
       return;
     }
 
@@ -2213,24 +2324,24 @@ export function App() {
 
   async function saveGameConfig() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('game-config', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('game-config')) {
       return;
     }
 
     const game = selectedConfigGame;
     const draft = configGameDraft;
     if (!game || !draft) {
-      setError('请选择要配置的游戏');
+      reportActionError('game-config', '请选择要配置的游戏');
       return;
     }
 
     const name = draft.name.trim();
     const gameSecret = draft.gameSecret.trim();
     if (!name || !gameSecret) {
-      setError('请填写游戏名称和密钥');
+      reportActionError('game-config', '请填写游戏名称和密钥');
       return;
     }
 
@@ -2261,16 +2372,16 @@ export function App() {
 
   async function submitConfigBudget() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('game-config-budget', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('game-config-budget')) {
       return;
     }
 
     const game = selectedConfigGame;
     if (!game || !configBudgetAmountYuan.trim()) {
-      setError('请选择游戏并填写分配金额');
+      reportActionError('game-config-budget', '请选择游戏并填写分配金额');
       return;
     }
 
@@ -2295,16 +2406,16 @@ export function App() {
 
   async function refreshConfigGameEcpm() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('game-config-ecpm-refresh', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('game-config-ecpm-refresh')) {
       return;
     }
 
     const game = selectedConfigGame;
     if (!game) {
-      setError('请选择要刷新的游戏');
+      reportActionError('game-config-ecpm-refresh', '请选择要刷新的游戏');
       return;
     }
 
@@ -2337,13 +2448,13 @@ export function App() {
 
   async function bindAccountOpenId() {
     if (!account || !accessToken) {
-      setError('请先登录或注册账号');
+      reportActionError('bind', '请先登录或注册账号');
       return;
     }
 
     const targetIdentity = bindIdentity.trim();
     if (!targetIdentity) {
-      setError('请输入要绑定的 open_id 或可读 ID');
+      reportActionError('bind', '请输入要绑定的 open_id 或可读 ID');
       return;
     }
 
@@ -2365,7 +2476,7 @@ export function App() {
 
   async function queryAccountEarnings() {
     if (!account || !accessToken) {
-      setError('请先登录或注册账号');
+      reportActionError('account-query', '请先登录或注册账号');
       return;
     }
 
@@ -2391,13 +2502,13 @@ export function App() {
 
   async function bindAccountAgent() {
     if (!account || !accessToken) {
-      setError('请先登录或注册账号');
+      reportActionError('agent-binding', '请先登录或注册账号');
       return;
     }
 
     const targetInvitationCode = accountAgentInvitationCode.trim();
     if (!targetInvitationCode) {
-      setError('请输入代理邀请码');
+      reportActionError('agent-binding', '请输入代理邀请码');
       return;
     }
 
@@ -2428,7 +2539,7 @@ export function App() {
 
   async function updateAlipayProfile() {
     if (!accessToken) {
-      setError('请先登录或注册账号');
+      reportActionError('alipay', '请先登录或注册账号');
       return;
     }
 
@@ -2449,7 +2560,7 @@ export function App() {
 
   async function requestWithdrawal() {
     if (!accessToken) {
-      setError('请先登录或注册账号');
+      reportActionError('withdrawal', '请先登录或注册账号');
       return;
     }
 
@@ -2531,7 +2642,7 @@ export function App() {
 
   async function loadAgentEarnings() {
     if (!agentAccessToken) {
-      setError('请先登录代理账号');
+      reportActionError('agent-earnings', '请先登录代理账号');
       return;
     }
 
@@ -2547,7 +2658,7 @@ export function App() {
 
   async function loadAgentWithdrawals() {
     if (!agentAccessToken) {
-      setError('请先登录代理账号');
+      reportActionError('agent-withdrawals', '请先登录代理账号');
       return;
     }
 
@@ -2563,7 +2674,7 @@ export function App() {
 
   async function loadAgentUsers() {
     if (!agentAccessToken) {
-      setError('请先登录代理账号');
+      reportActionError('agent-users', '请先登录代理账号');
       return;
     }
 
@@ -2579,7 +2690,7 @@ export function App() {
 
   async function updateOwnAgentAlipayProfile() {
     if (!agentAccessToken) {
-      setError('请先登录代理账号');
+      reportActionError('agent-alipay-own', '请先登录代理账号');
       return;
     }
 
@@ -2605,7 +2716,7 @@ export function App() {
 
   async function requestOwnAgentWithdrawal() {
     if (!agentAccessToken) {
-      setError('请先登录代理账号');
+      reportActionError('agent-withdrawal-own', '请先登录代理账号');
       return;
     }
 
@@ -2759,7 +2870,7 @@ export function App() {
 
   async function loadSettlementDetail(batchId: string) {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError(`settlement-detail-${batchId}`, '请先登录管理员账号');
       return;
     }
 
@@ -2779,15 +2890,15 @@ export function App() {
 
   async function previewSettlement() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('settlement-preview', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('settlement-preview')) {
       return;
     }
 
     if (!getSettlementGameId()) {
-      setError('请选择要结算的游戏');
+      reportActionError('settlement-preview', '请选择要结算的游戏');
       return;
     }
 
@@ -2818,20 +2929,20 @@ export function App() {
 
   async function confirmSettlement() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('settlement-confirm', '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin('settlement-confirm')) {
       return;
     }
 
     if (!getSettlementGameId()) {
-      setError('请选择要结算的游戏');
+      reportActionError('settlement-confirm', '请选择要结算的游戏');
       return;
     }
 
     if (!canConfirmSettlement()) {
-      setError('请先预览可结算收益');
+      reportActionError('settlement-confirm', '请先预览可结算收益');
       return;
     }
 
@@ -2856,8 +2967,11 @@ export function App() {
         range.gameId,
         isCurrent,
       );
-      if (!isCurrent() || !batchesLoaded) {
+      if (!isCurrent()) {
         return;
+      }
+      if (!batchesLoaded) {
+        return false;
       }
 
       setNotice(`结算成功，入账 ${result.batch.settledCount} 条`);
@@ -2866,7 +2980,7 @@ export function App() {
 
   async function loadAdminWithdrawals(statusFilter = adminWithdrawalStatus) {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('admin-withdrawals', '请先登录管理员账号');
       return;
     }
 
@@ -2876,8 +2990,11 @@ export function App() {
         statusFilter,
         isCurrent,
       );
-      if (!isCurrent() || loadedCount === undefined) {
+      if (!isCurrent()) {
         return;
+      }
+      if (loadedCount === undefined) {
+        return false;
       }
 
       setNotice(`提现批次 ${loadedCount} 笔`);
@@ -2921,10 +3038,10 @@ export function App() {
 
   async function approveAdminWithdrawal(batchId: string) {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError(`approve-${batchId}`, '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin(`approve-${batchId}`)) {
       return;
     }
 
@@ -2950,10 +3067,10 @@ export function App() {
     mockResult: 'failed' | 'success' = 'success',
   ) {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError(`pay-${mockResult}-${batchId}`, '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin(`pay-${mockResult}-${batchId}`)) {
       return;
     }
 
@@ -2981,10 +3098,10 @@ export function App() {
 
   async function closeAdminWithdrawal(batchId: string) {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError(`close-${batchId}`, '请先登录管理员账号');
       return;
     }
-    if (!ensureSuperAdmin()) {
+    if (!ensureSuperAdmin(`close-${batchId}`)) {
       return;
     }
 
@@ -3004,7 +3121,7 @@ export function App() {
 
   async function loadWithdrawalDetail(batchId: string) {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError(`detail-${batchId}`, '请先登录管理员账号');
       return;
     }
 
@@ -3024,7 +3141,7 @@ export function App() {
 
   async function loadAuditLogs() {
     if (!adminAccessToken) {
-      setError('请先登录管理员账号');
+      reportActionError('audit-logs', '请先登录管理员账号');
       return;
     }
 
@@ -3033,8 +3150,11 @@ export function App() {
         adminAccessToken,
         isCurrent,
       );
-      if (!isCurrent() || loadedCount === undefined) {
+      if (!isCurrent()) {
         return;
+      }
+      if (loadedCount === undefined) {
+        return false;
       }
 
       setNotice(`审计日志 ${loadedCount} 条`);
@@ -3090,11 +3210,18 @@ export function App() {
       {notice ? <Alert tone="success">{notice}</Alert> : null}
     </>
   );
+  const operationFeedback = (
+    <OperationFeedback
+      items={operationFeedbackItems}
+      onClear={() => setOperationFeedbackItems([])}
+    />
+  );
 
   if (appSession.mode === 'signed-out') {
     return (
       <>
         {alerts}
+        {operationFeedback}
         <LoginPage
           adminPassword={adminPassword}
           adminUsername={adminUsername}
@@ -3132,6 +3259,7 @@ export function App() {
       session={appSession}
     >
       {alerts}
+      {operationFeedback}
       {activeView === 'query' ? (
         <GuestQueryPage
           busy={busyAction === 'query'}

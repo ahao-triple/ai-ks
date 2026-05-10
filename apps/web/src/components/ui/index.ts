@@ -14,6 +14,8 @@ export { InputField } from './InputField';
 export type { InputFieldProps } from './InputField';
 export { MetricCard } from './MetricCard';
 export type { MetricCardProps } from './MetricCard';
+export { OperationFeedback } from './OperationFeedback';
+export type { OperationFeedbackProps } from './OperationFeedback';
 export { Panel } from './Panel';
 export type { PanelProps } from './Panel';
 export { StatusBadge } from './StatusBadge';
