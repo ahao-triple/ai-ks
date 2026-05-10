@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { EcpmDashboardService } from './ecpm-dashboard.service';
 import type { AdminPrincipal } from '../admin-auth/admin-auth.service';
 import type { AdminReadScope } from '../admin-auth/admin-access-control.service';
@@ -254,6 +255,36 @@ describe('EcpmDashboardService', () => {
       rows: [presentedRawRow(rawRow)],
       scope: 'game',
     });
+  });
+
+  it('rejects invalid calendar dates in data-hour filters', async () => {
+    const prisma = createFakePrisma();
+    prisma.rawEcpm.findMany.mockResolvedValueOnce([]);
+    const service = createService(prisma);
+
+    await expect(
+      service.queryGame({
+        admin: superAdmin,
+        gameId: 'game-1',
+        startedDataHour: '2026-02-31T00:00:00+08:00',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.rawEcpm.findMany).not.toHaveBeenCalled();
+  });
+
+  it('validates user date-hour filters before returning empty open_id rows', async () => {
+    const prisma = createFakePrisma();
+    prisma.gameOpenId.findMany.mockResolvedValueOnce([]);
+    const service = createService(prisma);
+
+    await expect(
+      service.queryUser({
+        admin: superAdmin,
+        startedDataHour: '2026-05-08T14:00:00+08:00',
+        endedDataHour: 'not-a-date',
+        userId: 'user-without-open-ids',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });
 

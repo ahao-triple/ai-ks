@@ -107,6 +107,8 @@ const HOUR_MS = 60 * 60 * 1000;
 const DEFAULT_PAGE = 1;
 const DEFAULT_PAGE_SIZE = 50;
 const MAX_PAGE_SIZE = 200;
+const DATA_HOUR_PATTERN =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/;
 
 @Injectable()
 export class EcpmDashboardService {
@@ -146,6 +148,7 @@ export class EcpmDashboardService {
     }
 
     const scope = await this.accessControl.resolveReadScope(input.admin);
+    const eventTime = buildDataHourFilter(input);
     const selector = this.resolveGameSelector(input, scope);
     if (selector === false) {
       return {
@@ -175,7 +178,7 @@ export class EcpmDashboardService {
       };
     }
 
-    const where = this.buildRawEcpmWhere(input, scope, undefined, {
+    const where = this.buildRawEcpmWhere(input, scope, eventTime, {
       openId: {
         in: openIds,
       },
@@ -568,12 +571,59 @@ function buildDataHourFilter(input: EcpmDashboardQueryInput) {
 }
 
 function parseDataHour(value: string, fieldName: string) {
+  const match = DATA_HOUR_PATTERN.exec(value);
+  if (!match) {
+    throw new BadRequestException(`Invalid ${fieldName}`);
+  }
+
+  const [, yearText, monthText, dayText, hourText, minuteText, secondText] =
+    match;
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const hour = Number(hourText);
+  const minute = Number(minuteText);
+  const second = Number(secondText);
+
+  if (
+    month < 1 ||
+    month > 12 ||
+    day < 1 ||
+    day > daysInMonth(year, month) ||
+    hour > 23 ||
+    minute > 59 ||
+    second > 59
+  ) {
+    throw new BadRequestException(`Invalid ${fieldName}`);
+  }
+
   const timestamp = Date.parse(value);
   if (!Number.isFinite(timestamp)) {
     throw new BadRequestException(`Invalid ${fieldName}`);
   }
 
   return new Date(timestamp);
+}
+
+function daysInMonth(year: number, month: number) {
+  return [
+    31,
+    isLeapYear(year) ? 29 : 28,
+    31,
+    30,
+    31,
+    30,
+    31,
+    31,
+    30,
+    31,
+    30,
+    31,
+  ][month - 1];
+}
+
+function isLeapYear(year: number) {
+  return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
 }
 
 function floorChinaHour(date: Date) {
