@@ -37,6 +37,7 @@ const lookbackHoursSchema = z.union([
   z.literal(6),
   z.literal(12),
   z.literal(24),
+  z.literal(168),
 ]);
 
 const refreshEcpmSchema = z
@@ -141,7 +142,7 @@ function buildRetryDataHours(job: KuaishouEcpmSyncJob) {
 }
 
 function resolveRetryLookbackHours(job: KuaishouEcpmSyncJob) {
-  return job.lookbackHours && [1, 3, 6, 12, 24].includes(job.lookbackHours)
+  return job.lookbackHours && [1, 3, 6, 12, 24, 168].includes(job.lookbackHours)
     ? job.lookbackHours
     : 1;
 }

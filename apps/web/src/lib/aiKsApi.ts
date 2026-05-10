@@ -797,18 +797,18 @@ export const aiKsApi = {
       | {
           scope: 'company';
           companyId: string;
-          lookbackHours?: 1 | 3 | 6 | 12 | 24;
+          lookbackHours?: 1 | 3 | 6 | 12 | 24 | 168;
         }
       | {
           scope: 'game';
           gameId: string;
-          lookbackHours?: 1 | 3 | 6 | 12 | 24;
+          lookbackHours?: 1 | 3 | 6 | 12 | 24 | 168;
         }
       | {
           scope: 'user';
           gameId: string;
           userId: string;
-          lookbackHours?: 1 | 3 | 6 | 12 | 24;
+          lookbackHours?: 1 | 3 | 6 | 12 | 24 | 168;
         },
   ) {
     return requestJson<{ results: unknown[] }>(`/admin/dashboard/refresh`, {

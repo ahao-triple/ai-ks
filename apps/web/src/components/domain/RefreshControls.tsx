@@ -1,6 +1,6 @@
 import { useState } from 'react';
 
-export type RefreshLookbackHours = 1 | 3 | 6 | 12 | 24;
+export type RefreshLookbackHours = 1 | 3 | 6 | 12 | 24 | 168;
 
 export const REFRESH_LOOKBACK_OPTIONS: ReadonlyArray<{
   hours: RefreshLookbackHours;
@@ -11,6 +11,7 @@ export const REFRESH_LOOKBACK_OPTIONS: ReadonlyArray<{
   { hours: 6, label: '近 6 小时' },
   { hours: 12, label: '近 12 小时' },
   { hours: 24, label: '近 24 小时' },
+  { hours: 168, label: '近 7 天（168 小时，最长）' },
 ];
 
 export function RefreshWindowSelect(props: {

@@ -181,9 +181,10 @@ describe('EcpmUpdateRangeService', () => {
     });
   });
 
-  it('rejects ranges longer than 24 hours', async () => {
+  it('rejects ranges longer than 168 hours (7 days)', async () => {
     const { prisma, rangeSyncService, service } = createService();
 
+    // 169 小时跨度（7 天 + 1 小时），超出快手 ECPM 接口最大窗口
     await expect(
       service.update({
         ...baseActor(),
@@ -191,7 +192,7 @@ describe('EcpmUpdateRangeService', () => {
         mode: 'range',
         scopeId: 'game-1',
         scopeType: 'game',
-        startedDataHour: '2026-05-07T00:00:00+08:00',
+        startedDataHour: '2026-04-30T23:00:00+08:00',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 

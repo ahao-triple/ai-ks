@@ -28,7 +28,7 @@ export type KuaishouEcpmRangeSyncInput = {
   openIds?: string[];
 };
 
-const ALLOWED_LOOKBACK_HOURS = new Set([1, 3, 6, 12, 24]);
+const ALLOWED_LOOKBACK_HOURS = new Set([1, 3, 6, 12, 24, 168]);
 const CHINA_TIMEZONE_OFFSET_MS = 8 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 
@@ -227,7 +227,7 @@ export function buildDataHoursBetween(
   }
 
   const count = Math.floor((endMs - startMs) / HOUR_MS) + 1;
-  if (count > 24) {
+  if (count > 168) {
     throw new BadRequestException('ECPM retry data-hour range is too large');
   }
 
