@@ -76,7 +76,7 @@ describe('AdminResourcesController', () => {
           companyName: 'Acme Studio',
           createdAt: '2026-05-08T02:00:00.000Z',
           ecpmAutoSyncEnabled: false,
-          ecpmAutoSyncIntervalHours: 3,
+          ecpmAutoSyncIntervalHours: 5,
           ecpmAutoSyncLastRunAt: null,
           ecpmAutoSyncNextRunAt: null,
           gameAppId: 'ks_game_001',
@@ -173,13 +173,13 @@ describe('AdminResourcesController', () => {
 
     await controller.updateGame(admin, ' game-1 ', {
       ecpmAutoSyncEnabled: true,
-      ecpmAutoSyncIntervalHours: 6,
+      ecpmAutoSyncIntervalHours: 5,
     });
 
     expect(service.lastUpdateGameInput).toEqual({
       actor: admin,
       ecpmAutoSyncEnabled: true,
-      ecpmAutoSyncIntervalHours: 6,
+      ecpmAutoSyncIntervalHours: 5,
       gameId: 'game-1',
       gameSecret: undefined,
       name: undefined,
@@ -331,7 +331,7 @@ function createService(options: { game?: Record<string, unknown> } = {}) {
     createdAt: new Date('2026-05-08T02:00:00.000Z'),
     deletedAt: null,
     ecpmAutoSyncEnabled: false,
-    ecpmAutoSyncIntervalHours: 3,
+    ecpmAutoSyncIntervalHours: 5,
     ecpmAutoSyncLastRunAt: null,
     ecpmAutoSyncNextRunAt: null,
     gameAppId: 'ks_game_001',

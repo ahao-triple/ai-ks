@@ -68,10 +68,10 @@ const createGameSchema = z.object({
 
 const ecpmAutoSyncIntervalSchema = z.union([
   z.literal(1),
-  z.literal(3),
-  z.literal(6),
-  z.literal(12),
+  z.literal(5),
   z.literal(24),
+  z.literal(72),
+  z.literal(168),
 ]);
 
 const updateGameSchema = z.object({

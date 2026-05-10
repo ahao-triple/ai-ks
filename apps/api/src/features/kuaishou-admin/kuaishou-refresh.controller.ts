@@ -33,10 +33,9 @@ import {
 
 const lookbackHoursSchema = z.union([
   z.literal(1),
-  z.literal(3),
-  z.literal(6),
-  z.literal(12),
+  z.literal(5),
   z.literal(24),
+  z.literal(72),
   z.literal(168),
 ]);
 
@@ -142,7 +141,7 @@ function buildRetryDataHours(job: KuaishouEcpmSyncJob) {
 }
 
 function resolveRetryLookbackHours(job: KuaishouEcpmSyncJob) {
-  return job.lookbackHours && [1, 3, 6, 12, 24, 168].includes(job.lookbackHours)
+  return job.lookbackHours && [1, 5, 24, 72, 168].includes(job.lookbackHours)
     ? job.lookbackHours
     : 1;
 }

@@ -379,7 +379,7 @@ function formatTokenDate(value?: string | null) {
   return value.replace('T', ' ').slice(0, 16);
 }
 
-const ecpmLookbackOptions: EcpmLookbackHours[] = [1, 3, 6, 12, 24];
+const ecpmLookbackOptions: EcpmLookbackHours[] = [1, 5, 24, 72, 168];
 
 function formatDateTime(value?: string | null) {
   if (!value) {
@@ -401,7 +401,7 @@ function formatSyncRange(job: KuaishouEcpmSyncJob) {
 
 function parseEcpmLookback(value: string): EcpmLookbackHours {
   const parsed = Number(value) as EcpmLookbackHours;
-  return ecpmLookbackOptions.includes(parsed) ? parsed : 3;
+  return ecpmLookbackOptions.includes(parsed) ? parsed : 5;
 }
 
 function formatCompanyAdminScopes(admin: AdminCompanyAdmin) {

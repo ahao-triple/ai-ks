@@ -42,7 +42,7 @@ export type EcpmRow = {
   rawCost: MoneyValue;
 };
 
-export type EcpmLookbackHours = 1 | 3 | 6 | 12 | 24;
+export type EcpmLookbackHours = 1 | 5 | 24 | 72 | 168;
 
 export type KuaishouEcpmSyncJob = {
   actorId: string;

@@ -1,18 +1,25 @@
 import { useState } from 'react';
 
-export type RefreshLookbackHours = 1 | 3 | 6 | 12 | 24 | 168;
+export type RefreshLookbackHours = 1 | 5 | 24 | 72 | 168;
 
 export const REFRESH_LOOKBACK_OPTIONS: ReadonlyArray<{
   hours: RefreshLookbackHours;
   label: string;
+  short: string;
 }> = [
-  { hours: 1, label: '近 1 小时' },
-  { hours: 3, label: '近 3 小时' },
-  { hours: 6, label: '近 6 小时' },
-  { hours: 12, label: '近 12 小时' },
-  { hours: 24, label: '近 24 小时' },
-  { hours: 168, label: '近 7 天（168 小时，最长）' },
+  { hours: 1, label: '最近 1 小时', short: '1h' },
+  { hours: 5, label: '最近 5 小时', short: '5h' },
+  { hours: 24, label: '最近 1 天', short: '1d' },
+  { hours: 72, label: '最近 3 天', short: '3d' },
+  { hours: 168, label: '最近 7 天（最长）', short: '7d' },
 ];
+
+function shortLabelFor(hours: RefreshLookbackHours): string {
+  return (
+    REFRESH_LOOKBACK_OPTIONS.find((opt) => opt.hours === hours)?.short ??
+    `${hours}h`
+  );
+}
 
 export function RefreshWindowSelect(props: {
   value: RefreshLookbackHours;
@@ -45,7 +52,7 @@ export function RowRefreshButton(props: {
   label?: string;
 }) {
   const [busy, setBusy] = useState(false);
-  const suffix = props.hours ? ` ${props.hours}h` : '';
+  const suffix = props.hours ? ` ${shortLabelFor(props.hours)}` : '';
   return (
     <button
       type="button"

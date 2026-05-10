@@ -73,7 +73,7 @@ describe('EcpmUpdateRangeService', () => {
         '2026-05-08T15:00:00+08:00',
       ],
       gameAppId: 'game-app-1',
-      lookbackHours: 3,
+      lookbackHours: 5,
       markTokenError: true,
       openIds: ['open-a', 'open-b'],
     });

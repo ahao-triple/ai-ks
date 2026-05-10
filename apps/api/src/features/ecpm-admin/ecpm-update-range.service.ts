@@ -403,17 +403,17 @@ function resolveDelegatedLookbackHours(dataHourCount: number) {
   if (dataHourCount <= 1) {
     return 1;
   }
-  if (dataHourCount <= 3) {
-    return 3;
+  if (dataHourCount <= 5) {
+    return 5;
   }
-  if (dataHourCount <= 6) {
-    return 6;
+  if (dataHourCount <= 24) {
+    return 24;
   }
-  if (dataHourCount <= 12) {
-    return 12;
+  if (dataHourCount <= 72) {
+    return 72;
   }
 
-  return 24;
+  return 168;
 }
 
 function resolveSuccessfulItemStatus(status: string) {

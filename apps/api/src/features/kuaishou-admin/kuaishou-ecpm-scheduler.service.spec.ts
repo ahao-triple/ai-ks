@@ -8,7 +8,7 @@ describe('KuaishouEcpmSchedulerService', () => {
 
   it('runs due enabled games with the system actor and advances last and next run times', async () => {
     const dependencies = createDependencies([
-      createGame({ ecpmAutoSyncIntervalHours: 3 }),
+      createGame({ ecpmAutoSyncIntervalHours: 5 }),
     ]);
     const service = createService(dependencies);
 
@@ -28,13 +28,13 @@ describe('KuaishouEcpmSchedulerService', () => {
       actorId: 'system',
       actorType: 'SYSTEM',
       gameAppId: 'app-1',
-      lookbackHours: 3,
+      lookbackHours: 5,
       markTokenError: false,
     });
     expect(dependencies.prisma.game.update).toHaveBeenCalledWith({
       data: {
         ecpmAutoSyncLastRunAt: now,
-        ecpmAutoSyncNextRunAt: new Date('2026-05-08T09:20:00.000Z'),
+        ecpmAutoSyncNextRunAt: new Date('2026-05-08T11:20:00.000Z'),
       },
       where: {
         id: 'game-1',
@@ -44,7 +44,7 @@ describe('KuaishouEcpmSchedulerService', () => {
 
   it('skips refresh when a running job already exists and advances only next run', async () => {
     const dependencies = createDependencies([
-      createGame({ ecpmAutoSyncIntervalHours: 6 }),
+      createGame({ ecpmAutoSyncIntervalHours: 5 }),
     ]);
     dependencies.syncJobService.hasRunningJob.mockResolvedValueOnce(true);
     const service = createService(dependencies);
@@ -54,7 +54,7 @@ describe('KuaishouEcpmSchedulerService', () => {
     expect(dependencies.rangeSyncService.refreshRange).not.toHaveBeenCalled();
     expect(dependencies.prisma.game.update).toHaveBeenCalledWith({
       data: {
-        ecpmAutoSyncNextRunAt: new Date('2026-05-08T12:20:00.000Z'),
+        ecpmAutoSyncNextRunAt: new Date('2026-05-08T11:20:00.000Z'),
       },
       where: {
         id: 'game-1',
@@ -88,7 +88,7 @@ describe('KuaishouEcpmSchedulerService', () => {
   it('returns immediately while a run is already active', async () => {
     const findManyGate = createDeferred<Array<ReturnType<typeof createGame>>>();
     const dependencies = createDependencies([
-      createGame({ ecpmAutoSyncIntervalHours: 3 }),
+      createGame({ ecpmAutoSyncIntervalHours: 5 }),
     ]);
     dependencies.prisma.game.findMany.mockReturnValueOnce(findManyGate.promise);
     const service = createService(dependencies);
@@ -153,7 +153,7 @@ function createGame(
   return {
     deletedAt: null,
     ecpmAutoSyncEnabled: true,
-    ecpmAutoSyncIntervalHours: 3,
+    ecpmAutoSyncIntervalHours: 5,
     ecpmAutoSyncLastRunAt: null,
     ecpmAutoSyncNextRunAt: new Date('2026-05-08T06:00:00.000Z'),
     gameAppId: 'app-1',

@@ -5,7 +5,7 @@ import {
 } from './kuaishou-ecpm-range-sync.service';
 
 describe('KuaishouEcpmRangeSyncService', () => {
-  it('splits lookback 3 into hourly China dataHour points and saves combined rows', async () => {
+  it('splits lookback 5 into hourly China dataHour points and saves combined rows', async () => {
     const dependencies = createDependencies();
     const service = createService(dependencies);
 
@@ -13,39 +13,33 @@ describe('KuaishouEcpmRangeSyncService', () => {
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
       gameAppId: 'game-1',
-      lookbackHours: 3,
+      lookbackHours: 5,
       markTokenError: true,
     });
 
     const dataHours = [
+      '2026-05-08T10:00:00+08:00',
+      '2026-05-08T11:00:00+08:00',
       '2026-05-08T12:00:00+08:00',
       '2026-05-08T13:00:00+08:00',
       '2026-05-08T14:00:00+08:00',
     ];
-    expect(buildRecentDataHours(3, now)).toEqual(dataHours);
-    expect(dependencies.ecpmClient.refresh).toHaveBeenCalledTimes(3);
-    expect(dependencies.ecpmClient.refresh).toHaveBeenNthCalledWith(1, {
-      dataHour: dataHours[0],
-      gameAppId: 'game-1',
-      openIds: ['open-1'],
-    });
-    expect(dependencies.ecpmClient.refresh).toHaveBeenNthCalledWith(2, {
-      dataHour: dataHours[1],
-      gameAppId: 'game-1',
-      openIds: ['open-1'],
-    });
-    expect(dependencies.ecpmClient.refresh).toHaveBeenNthCalledWith(3, {
-      dataHour: dataHours[2],
-      gameAppId: 'game-1',
-      openIds: ['open-1'],
+    expect(buildRecentDataHours(5, now)).toEqual(dataHours);
+    expect(dependencies.ecpmClient.refresh).toHaveBeenCalledTimes(5);
+    dataHours.forEach((dataHour, index) => {
+      expect(dependencies.ecpmClient.refresh).toHaveBeenNthCalledWith(index + 1, {
+        dataHour,
+        gameAppId: 'game-1',
+        openIds: ['open-1'],
+      });
     });
     expect(dependencies.syncJobService.startJob).toHaveBeenCalledWith({
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
-      dataHour: dataHours[2],
-      endedDataHour: dataHours[2],
+      dataHour: dataHours[4],
+      endedDataHour: dataHours[4],
       gameAppId: 'game-1',
-      lookbackHours: 3,
+      lookbackHours: 5,
       requestedOpenIdCount: 1,
       startedDataHour: dataHours[0],
     });
@@ -55,6 +49,8 @@ describe('KuaishouEcpmRangeSyncService', () => {
         expect.objectContaining({ platformEventId: 'event-1' }),
         expect.objectContaining({ platformEventId: 'event-2' }),
         expect.objectContaining({ platformEventId: 'event-3' }),
+        expect.objectContaining({ platformEventId: 'event-4' }),
+        expect.objectContaining({ platformEventId: 'event-5' }),
       ],
     });
     expect(dependencies.syncJobService.completeJob).toHaveBeenCalledWith({
@@ -69,8 +65,8 @@ describe('KuaishouEcpmRangeSyncService', () => {
       metadata: {
         dataHours,
         startedDataHour: dataHours[0],
-        endedDataHour: dataHours[2],
-        lookbackHours: 3,
+        endedDataHour: dataHours[4],
+        lookbackHours: 5,
         jobId: 'job-1',
         requestedOpenIds: ['open-1'],
         savedCount: 3,
@@ -126,7 +122,7 @@ describe('KuaishouEcpmRangeSyncService', () => {
       actorType: 'SUPER_ADMIN',
       dataHours,
       gameAppId: 'game-1',
-      lookbackHours: 3,
+      lookbackHours: 5,
       markTokenError: true,
     });
 
@@ -147,7 +143,7 @@ describe('KuaishouEcpmRangeSyncService', () => {
       dataHour: dataHours[1],
       endedDataHour: dataHours[1],
       gameAppId: 'game-1',
-      lookbackHours: 3,
+      lookbackHours: 5,
       requestedOpenIdCount: 1,
       startedDataHour: dataHours[0],
     });

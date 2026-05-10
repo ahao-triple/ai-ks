@@ -404,7 +404,7 @@ export function App() {
   const [configBudgetAmountYuan, setConfigBudgetAmountYuan] = useState('');
   const [configBudgetReason, setConfigBudgetReason] = useState('');
   const [configEcpmLookbackHours, setConfigEcpmLookbackHours] =
-    useState<EcpmLookbackHours>(3);
+    useState<EcpmLookbackHours>(5);
   const [accountEarnings, setAccountEarnings] =
     useState<AccountEarningsResult>();
   const [alipayAccount, setAlipayAccount] = useState('');
@@ -1233,7 +1233,7 @@ export function App() {
     setConfigGameDraft(undefined);
     setConfigBudgetAmountYuan('');
     setConfigBudgetReason('');
-    setConfigEcpmLookbackHours(3);
+    setConfigEcpmLookbackHours(5);
     setConfigKuaishouEcpmJobs([]);
   }
 
@@ -2513,7 +2513,7 @@ export function App() {
     setConfigGameDraft(buildGameConfigDraft(game));
     setConfigBudgetAmountYuan('');
     setConfigBudgetReason('');
-    setConfigEcpmLookbackHours(3);
+    setConfigEcpmLookbackHours(5);
     setConfigKuaishouEcpmJobs([]);
 
     if (adminAccessToken) {

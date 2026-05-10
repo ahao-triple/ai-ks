@@ -299,7 +299,7 @@ describe('AdminResourcesService', () => {
       budgetLi: 0n,
       companyId: 'company-1',
       ecpmAutoSyncEnabled: false,
-      ecpmAutoSyncIntervalHours: 3,
+      ecpmAutoSyncIntervalHours: 5,
       ecpmAutoSyncLastRunAt: null,
       ecpmAutoSyncNextRunAt: null,
       gameAppId: 'ks_game_001',
@@ -431,18 +431,18 @@ describe('AdminResourcesService', () => {
     const game = await service.updateGame({
       actor: adminActor,
       ecpmAutoSyncEnabled: true,
-      ecpmAutoSyncIntervalHours: 3,
+      ecpmAutoSyncIntervalHours: 5,
       gameId: 'game-1',
     });
 
     expect(game).toMatchObject({
       ecpmAutoSyncEnabled: true,
-      ecpmAutoSyncIntervalHours: 3,
+      ecpmAutoSyncIntervalHours: 5,
       ecpmAutoSyncNextRunAt: now,
     });
     expect(prisma.getGame('game-1')).toMatchObject({
       ecpmAutoSyncEnabled: true,
-      ecpmAutoSyncIntervalHours: 3,
+      ecpmAutoSyncIntervalHours: 5,
       ecpmAutoSyncNextRunAt: now,
     });
     expect(prisma.auditLogs).toEqual([
@@ -471,7 +471,7 @@ describe('AdminResourcesService', () => {
           id: 'game-1',
           companyId: 'company-1',
           ecpmAutoSyncEnabled: true,
-          ecpmAutoSyncIntervalHours: 3,
+          ecpmAutoSyncIntervalHours: 5,
           ecpmAutoSyncNextRunAt: nextRunAt,
           gameAppId: 'ks_game_001',
           gameSecret: 'secret-1',
@@ -514,7 +514,7 @@ describe('AdminResourcesService', () => {
           id: 'game-1',
           companyId: 'company-1',
           ecpmAutoSyncEnabled: true,
-          ecpmAutoSyncIntervalHours: 3,
+          ecpmAutoSyncIntervalHours: 5,
           ecpmAutoSyncNextRunAt: nextRunAt,
           gameAppId: 'ks_game_001',
           gameSecret: 'secret-1',
@@ -526,13 +526,13 @@ describe('AdminResourcesService', () => {
 
     const game = await service.updateGame({
       actor: adminActor,
-      ecpmAutoSyncIntervalHours: 6,
+      ecpmAutoSyncIntervalHours: 5,
       gameId: 'game-1',
     });
 
     expect(game).toMatchObject({
       ecpmAutoSyncEnabled: true,
-      ecpmAutoSyncIntervalHours: 6,
+      ecpmAutoSyncIntervalHours: 5,
       ecpmAutoSyncNextRunAt: nextRunAt,
     });
     expect(prisma.auditLogs).toEqual([
@@ -590,7 +590,7 @@ describe('AdminResourcesService', () => {
           id: 'game-1',
           companyId: 'company-1',
           ecpmAutoSyncEnabled: true,
-          ecpmAutoSyncIntervalHours: 6,
+          ecpmAutoSyncIntervalHours: 5,
           ecpmAutoSyncNextRunAt: nextRunAt,
           gameAppId: 'ks_game_001',
           gameSecret: 'secret-1',
@@ -880,7 +880,7 @@ function createFakePrisma(seed: FakePrismaSeed = {}) {
       createdAt: game.createdAt ?? new Date('2026-05-08T02:00:00.000Z'),
       deletedAt: game.deletedAt ?? null,
       ecpmAutoSyncEnabled: game.ecpmAutoSyncEnabled ?? false,
-      ecpmAutoSyncIntervalHours: game.ecpmAutoSyncIntervalHours ?? 3,
+      ecpmAutoSyncIntervalHours: game.ecpmAutoSyncIntervalHours ?? 5,
       ecpmAutoSyncLastRunAt: game.ecpmAutoSyncLastRunAt ?? null,
       ecpmAutoSyncNextRunAt: game.ecpmAutoSyncNextRunAt ?? null,
       gameAppId: game.gameAppId,
@@ -1108,7 +1108,7 @@ function createFakePrisma(seed: FakePrismaSeed = {}) {
           createdAt: new Date('2026-05-08T02:00:00.000Z'),
           deletedAt: null,
           ecpmAutoSyncEnabled: data.ecpmAutoSyncEnabled ?? false,
-          ecpmAutoSyncIntervalHours: data.ecpmAutoSyncIntervalHours ?? 3,
+          ecpmAutoSyncIntervalHours: data.ecpmAutoSyncIntervalHours ?? 5,
           ecpmAutoSyncLastRunAt: data.ecpmAutoSyncLastRunAt ?? null,
           ecpmAutoSyncNextRunAt: data.ecpmAutoSyncNextRunAt ?? null,
           gameAppId: data.gameAppId,

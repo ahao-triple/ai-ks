@@ -479,7 +479,7 @@ describe('aiKsApi', () => {
 
     await aiKsApi.updateAdminGame('admin-token', 'game 1/2', {
       ecpmAutoSyncEnabled: true,
-      ecpmAutoSyncIntervalHours: 6,
+      ecpmAutoSyncIntervalHours: 5,
       gameSecret: 'secret-2',
       name: 'Runner Pro',
       settlementPaused: false,
@@ -490,7 +490,7 @@ describe('aiKsApi', () => {
       {
         body: JSON.stringify({
           ecpmAutoSyncEnabled: true,
-          ecpmAutoSyncIntervalHours: 6,
+          ecpmAutoSyncIntervalHours: 5,
           gameSecret: 'secret-2',
           name: 'Runner Pro',
           settlementPaused: false,
@@ -531,14 +531,14 @@ describe('aiKsApi', () => {
   it('refreshes kuaishou ecpm with lookback hours', async () => {
     mockJsonResponse({ requestedOpenIds: [], rows: [], savedCount: 0 });
 
-    await aiKsApi.refreshEcpm('admin-token', 'ks game/1', 12);
+    await aiKsApi.refreshEcpm('admin-token', 'ks game/1', 24);
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       `${API_BASE_URL}/admin/kuaishou/ecpm/refresh`,
       {
         body: JSON.stringify({
           gameAppId: 'ks game/1',
-          lookbackHours: 12,
+          lookbackHours: 24,
         }),
         headers: {
           Authorization: 'Bearer admin-token',

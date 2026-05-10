@@ -12,7 +12,7 @@ describe('KuaishouRefreshController', () => {
 
     const result = await controller.refresh(admin, {
       gameAppId: 'game-1',
-      lookbackHours: 3,
+      lookbackHours: 5,
       openIds: ['open-1', 'open-2'],
     });
 
@@ -20,7 +20,7 @@ describe('KuaishouRefreshController', () => {
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
       gameAppId: 'game-1',
-      lookbackHours: 3,
+      lookbackHours: 5,
       markTokenError: true,
       openIds: ['open-1', 'open-2'],
     });
@@ -154,7 +154,7 @@ describe('KuaishouRefreshController', () => {
         '2026-05-08T14:00:00+08:00',
       ],
       gameAppId: 'game-1',
-      lookbackHours: 3,
+      lookbackHours: 5,
       markTokenError: true,
     });
     expect(result).toEqual(refreshResult);
@@ -217,7 +217,7 @@ const syncJob = {
   finishedAt: new Date('2026-05-08T00:01:00.000Z'),
   gameAppId: 'game-1',
   id: 'job-1',
-  lookbackHours: 3,
+  lookbackHours: 5,
   requestedOpenIdCount: 1,
   savedCount: 0,
   source: null,

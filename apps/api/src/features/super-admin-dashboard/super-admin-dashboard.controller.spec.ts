@@ -147,28 +147,28 @@ describe('SuperAdminDashboardController', () => {
     );
   });
 
-  it('POST /refresh 透传 lookbackHours=6 给同步服务', async () => {
+  it('POST /refresh 透传 lookbackHours=5 给同步服务', async () => {
     prismaStub.game.findUnique.mockResolvedValue({ gameAppId: 'app-1' });
     rangeSyncService.refreshRange.mockClear();
 
     await controller.refresh(
       { username: 'admin', role: 'SUPER_ADMIN' } as never,
-      { scope: 'game', gameId: 'g1', lookbackHours: 6 },
+      { scope: 'game', gameId: 'g1', lookbackHours: 5 },
     );
 
     expect(rangeSyncService.refreshRange).toHaveBeenCalledWith(
       expect.objectContaining({
         gameAppId: 'app-1',
-        lookbackHours: 6,
+        lookbackHours: 5,
       }),
     );
   });
 
-  it('POST /refresh 拒绝非法 lookbackHours（如 5）', async () => {
+  it('POST /refresh 拒绝非法 lookbackHours（如 7）', async () => {
     await expect(
       controller.refresh(
         { username: 'admin', role: 'SUPER_ADMIN' } as never,
-        { scope: 'game', gameId: 'g1', lookbackHours: 5 },
+        { scope: 'game', gameId: 'g1', lookbackHours: 7 },
       ),
     ).rejects.toThrow('刷新范围参数无效');
   });

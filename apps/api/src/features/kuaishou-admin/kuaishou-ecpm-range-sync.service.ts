@@ -28,7 +28,7 @@ export type KuaishouEcpmRangeSyncInput = {
   openIds?: string[];
 };
 
-const ALLOWED_LOOKBACK_HOURS = new Set([1, 3, 6, 12, 24, 168]);
+const ALLOWED_LOOKBACK_HOURS = new Set([1, 5, 24, 72, 168]);
 const CHINA_TIMEZONE_OFFSET_MS = 8 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 

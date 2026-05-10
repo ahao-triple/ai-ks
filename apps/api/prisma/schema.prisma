@@ -91,7 +91,7 @@ model Game {
   budgetLi         BigInt    @default(0) @map("budget_li")
   settlementPaused Boolean   @default(false) @map("settlement_paused")
   ecpmAutoSyncEnabled        Boolean   @default(false) @map("ecpm_auto_sync_enabled")
-  ecpmAutoSyncIntervalHours  Int       @default(3) @map("ecpm_auto_sync_interval_hours")
+  ecpmAutoSyncIntervalHours  Int       @default(5) @map("ecpm_auto_sync_interval_hours")
   ecpmAutoSyncNextRunAt      DateTime? @map("ecpm_auto_sync_next_run_at")
   ecpmAutoSyncLastRunAt      DateTime? @map("ecpm_auto_sync_last_run_at")
   createdAt        DateTime  @default(now()) @map("created_at")

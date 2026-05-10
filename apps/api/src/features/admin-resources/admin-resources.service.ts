@@ -132,7 +132,7 @@ export type ClearOperationalDataInput = {
 
 export const ADMIN_RESOURCES_NOW = Symbol('ADMIN_RESOURCES_NOW');
 
-const ALLOWED_ECPM_SYNC_INTERVAL_HOURS = new Set([1, 3, 6, 12, 24]);
+const ALLOWED_ECPM_SYNC_INTERVAL_HOURS = new Set([1, 5, 24, 72, 168]);
 
 const OPERATIONAL_DATA_TABLE_NAMES = [
   'settlement_batch_items',
