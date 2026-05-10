@@ -188,6 +188,35 @@ describe('EcpmUpdateJobService', () => {
     });
   });
 
+  it('completes a job as PARTIAL when hard failures and partial items exist with no saves', async () => {
+    const { service } = createService();
+    const job = await service.startJob(baseStartInput());
+    await service.recordItem({
+      dataHour: '2026-05-08T14:00:00+08:00',
+      errorMessage: 'kuaishou request failed',
+      gameId: 'game-1',
+      jobId: job.id,
+      openId: 'open-a',
+      status: 'FAILED',
+    });
+    await service.recordItem({
+      dataHour: '2026-05-08T14:00:00+08:00',
+      gameId: 'game-1',
+      jobId: job.id,
+      openId: 'open-b',
+      status: 'PARTIAL',
+    });
+
+    const finished = await service.finishJob(job.id);
+
+    expect(finished).toMatchObject({
+      failedCount: 1,
+      savedCount: 0,
+      skippedCount: 0,
+      status: EcpmUpdateJobStatus.PARTIAL,
+    });
+  });
+
   it('completes a job as FAILED when a hard failure exists with no saves', async () => {
     const { service } = createService();
     const job = await service.startJob(baseStartInput());
