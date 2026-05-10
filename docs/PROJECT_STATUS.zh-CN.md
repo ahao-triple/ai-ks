@@ -1,6 +1,23 @@
 # AI-KS 项目状态与功能清单
 
-更新日期：2026-05-10
+更新日期：2026-05-11
+
+## 0. ECPM 看板重构 · Plan 1（基础 + 普通用户端）已落地
+
+设计与计划文档：
+
+- spec：`docs/superpowers/specs/2026-05-11-ecpm-dashboard-redesign-design.md`
+- plan：`docs/superpowers/plans/2026-05-11-ecpm-dashboard-foundation-and-user.md`
+
+本轮（Plan 1）实现：
+
+- 后端 `RateLimitGuard` + `CachedResponseInterceptor`：针对 ECPM 看板这种纯查询接口的"静默节流"——超限请求不抛 429，而是标记 `rateLimitHit` 并由拦截器返回上次缓存（带 `X-Cache-Hit: true` 头）
+- 后端 `UserDashboardModule`：提供 `/users/me/dashboard/{overview,groups,records}` 三个查询接口，覆盖 KPI 聚合 / 游戏与账号分组 / ECPM 单条记录（含"今日序号"语义）
+- 前端 `UserDashboardPage`：普通用户登录后看到的新看板，包含 4 KPI、按"游戏 → 账号"分组的表格、ECPM 单条记录列表（自动刷新 + 限流静默 + 列设置）、移动端响应式
+- 前端共享基础：`useThrottledRefresh` hook、`EcpmRecordTable` 通用组件、`AppShell` 左侧导航、`menusForScope` 按身份返回菜单项、`formatUserId/formatAccountId` ID 格式化
+- 接入：账号视图（`activeView === 'account'`）现在先渲染 `UserDashboardPage`，旧 `AccountWorkspace` 继续保留在下方提供提现 / 资料 / open_id 绑定等功能；不破坏现有可用性
+
+下一步（Plan 2）覆盖代理 / 公司管理员 / 超级管理员看板，以及 IA 全面切换到 `AppShell` 的左侧 10/4/3 项导航结构。
 
 本文档是当前项目进度的主入口，用于替代早期 `docs/superpowers/specs` 和 `docs/superpowers/plans` 下的阶段性设计文档。旧文档已归档，只作为历史设计记录，不再代表当前实现状态。
 
