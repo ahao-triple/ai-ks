@@ -579,3 +579,53 @@ export type BusinessClosureReport = {
     ready: number;
   };
 };
+
+export type UserDashboardOverview = {
+  todayCount: number;
+  todayAverageEcpmYuan: number;
+  todayMaxEcpmYuan: number;
+  gameCount: number;
+  accountCount: number;
+  activeGameCount: number;
+  activeAccountCount: number;
+};
+
+export type UserDashboardAccountActiveStatus = 'ACTIVE' | 'IDLE' | 'NEVER';
+
+export type UserDashboardAccountRow = {
+  accountId: string;
+  readableId: string;
+  todayCount: number;
+  todayAverageEcpmYuan: number;
+  totalCount: number;
+  lastActiveAt: string | null;
+  activeStatus: UserDashboardAccountActiveStatus;
+};
+
+export type UserDashboardGameGroup = {
+  gameId: string;
+  gameName: string;
+  todayCount: number;
+  todayAverageEcpmYuan: number;
+  totalCount: number;
+  lastActiveAt: string | null;
+  accounts: UserDashboardAccountRow[];
+};
+
+export type UserDashboardEcpmRecord = {
+  id: string;
+  todaySequence: number;
+  eventTime: string;
+  ecpmYuan: number;
+  gameId: string;
+  gameName: string;
+  accountId: string;
+  accountReadableId: string;
+  source: string;
+};
+
+export type UserDashboardEcpmRecordsResult = {
+  records: UserDashboardEcpmRecord[];
+  totalToday: number;
+  totalAll: number;
+};

@@ -45,6 +45,9 @@ import type {
   KuaishouTokenStatusResult,
   PlatformConfig,
   PlatformConfigUpdateInput,
+  UserDashboardEcpmRecordsResult,
+  UserDashboardGameGroup,
+  UserDashboardOverview,
   WithdrawalResult,
 } from '../types/api';
 
@@ -697,5 +700,42 @@ export const aiKsApi = {
     return requestJson<BusinessClosureReport>('/admin/business-closure', {
       accessToken: adminAccessToken,
     });
+  },
+
+  getUserDashboardOverview(accessToken: string, date?: string) {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return requestJson<UserDashboardOverview>(
+      `/users/me/dashboard/overview${qs}`,
+      { accessToken },
+    );
+  },
+
+  getUserDashboardGroups(accessToken: string, date?: string) {
+    const qs = date ? `?date=${encodeURIComponent(date)}` : '';
+    return requestJson<UserDashboardGameGroup[]>(
+      `/users/me/dashboard/groups${qs}`,
+      { accessToken },
+    );
+  },
+
+  getUserDashboardRecords(
+    accessToken: string,
+    input: {
+      date?: string;
+      gameId?: string;
+      accountId?: string;
+      limit?: number;
+    } = {},
+  ) {
+    const params = new URLSearchParams();
+    if (input.date) params.set('date', input.date);
+    if (input.gameId) params.set('gameId', input.gameId);
+    if (input.accountId) params.set('accountId', input.accountId);
+    if (input.limit) params.set('limit', String(input.limit));
+    const qs = params.toString();
+    return requestJson<UserDashboardEcpmRecordsResult>(
+      `/users/me/dashboard/records${qs ? '?' + qs : ''}`,
+      { accessToken },
+    );
   },
 };
