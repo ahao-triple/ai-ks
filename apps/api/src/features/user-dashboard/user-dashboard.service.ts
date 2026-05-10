@@ -38,6 +38,24 @@ export type GameGroupRow = {
   accounts: GameAccountRow[];
 };
 
+export type EcpmRecordRow = {
+  id: string;
+  todaySequence: number;
+  eventTime: Date;
+  ecpmYuan: number;
+  gameId: string;
+  gameName: string;
+  accountId: string;
+  accountReadableId: string;
+  source: 'kuaishou';
+};
+
+export type EcpmRecordsResult = {
+  records: EcpmRecordRow[];
+  totalToday: number;
+  totalAll: number;
+};
+
 type DashboardPrisma = {
   gameOpenId: {
     findMany(args: {
@@ -59,12 +77,15 @@ type DashboardPrisma = {
     findMany(args: {
       where: {
         openIdRecordId?: { in: string[] };
+        gameId?: string;
         eventTime?: { gte: Date; lt: Date };
       };
       orderBy?: { eventTime: 'asc' | 'desc' };
+      take?: number;
     }): Promise<
       Array<{
         id: string;
+        gameId: string;
         openIdRecordId: string | null;
         rawCostLi: bigint;
         eventTime: Date;
@@ -210,6 +231,75 @@ export class UserDashboardService {
     return Array.from(groupsByGameId.values()).sort(
       (a, b) => b.todayCount - a.todayCount,
     );
+  }
+
+  async listEcpmRecords(input: {
+    userId: string;
+    range: Range;
+    limit: number;
+    gameId?: string;
+    accountId?: string;
+  }): Promise<EcpmRecordsResult> {
+    const prisma = this.prisma as unknown as DashboardPrisma;
+    const openIds = await prisma.gameOpenId.findMany({
+      where: { userId: input.userId },
+      include: { game: true },
+    });
+
+    if (openIds.length === 0) {
+      return { records: [], totalToday: 0, totalAll: 0 };
+    }
+
+    let recordIds = openIds.map((o) => o.id);
+    if (input.accountId) {
+      recordIds = recordIds.filter((id) => id === input.accountId);
+    }
+    if (recordIds.length === 0) {
+      return { records: [], totalToday: 0, totalAll: 0 };
+    }
+
+    const filterWhere = {
+      openIdRecordId: { in: recordIds },
+      ...(input.gameId ? { gameId: input.gameId } : {}),
+    };
+
+    const allMatching = await prisma.rawEcpm.findMany({
+      where: filterWhere,
+      orderBy: { eventTime: 'desc' },
+    });
+    const totalAll = allMatching.length;
+
+    const todayMatching = allMatching.filter(
+      (r) =>
+        r.eventTime >= input.range.startAt && r.eventTime < input.range.endAt,
+    );
+    const totalToday = todayMatching.length;
+
+    const todayAsc = todayMatching
+      .slice()
+      .sort((a, b) => a.eventTime.getTime() - b.eventTime.getTime());
+    const sequenceById = new Map<string, number>();
+    todayAsc.forEach((r, idx) => sequenceById.set(r.id, idx + 1));
+
+    const limited = allMatching.slice(0, input.limit);
+    const openIdById = new Map(openIds.map((o) => [o.id, o]));
+
+    const records: EcpmRecordRow[] = limited.map((r) => {
+      const openId = openIdById.get(r.openIdRecordId ?? '');
+      return {
+        id: r.id,
+        todaySequence: sequenceById.get(r.id) ?? 0,
+        eventTime: r.eventTime,
+        ecpmYuan: Number(r.rawCostLi) / LI_PER_YUAN,
+        gameId: r.gameId,
+        gameName: openId?.game?.name ?? '',
+        accountId: r.openIdRecordId ?? '',
+        accountReadableId: openId?.readableId ?? '',
+        source: 'kuaishou',
+      };
+    });
+
+    return { records, totalToday, totalAll };
   }
 }
 

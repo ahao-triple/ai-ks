@@ -11,6 +11,7 @@ type FakeOpenId = {
 
 type FakeRawEcpm = {
   id: string;
+  gameId?: string;
   openIdRecordId: string;
   rawCostLi: bigint;
   eventTime: Date;
@@ -49,17 +50,26 @@ function makeFakePrisma(seed: {
       findMany: async ({
         where,
         orderBy,
+        take,
       }: {
         where: {
           openIdRecordId?: { in: string[] };
+          gameId?: string;
           eventTime?: { gte: Date; lt: Date };
         };
         orderBy?: { eventTime: 'asc' | 'desc' };
+        take?: number;
       }) => {
-        let rows = seed.rawEcpms.slice();
+        let rows = seed.rawEcpms.slice().map((r) => {
+          const matched = seed.openIds.find((o) => o.id === r.openIdRecordId);
+          return { ...r, gameId: r.gameId ?? matched?.gameId ?? '' };
+        });
         if (where.openIdRecordId?.in) {
           const ids = new Set(where.openIdRecordId.in);
           rows = rows.filter((r) => ids.has(r.openIdRecordId));
+        }
+        if (where.gameId) {
+          rows = rows.filter((r) => r.gameId === where.gameId);
         }
         if (where.eventTime) {
           rows = rows.filter(
@@ -73,6 +83,7 @@ function makeFakePrisma(seed: {
         } else if (orderBy?.eventTime === 'asc') {
           rows.sort((a, b) => a.eventTime.getTime() - b.eventTime.getTime());
         }
+        if (typeof take === 'number') rows = rows.slice(0, take);
         return rows;
       },
     },
@@ -234,3 +245,102 @@ describe('UserDashboardService.getGameAccountGroups', () => {
     expect(accounts.find((a) => a.readableId === 'CCCCCCC')!.activeStatus).toBe('NEVER');
   });
 });
+
+describe('UserDashboardService.listEcpmRecords', () => {
+  const seedForRecords = {
+    games: [
+      { id: 'g1', name: '消消乐 Pro' },
+      { id: 'g2', name: '合成大西瓜' },
+    ],
+    openIds: [
+      { id: 'o1', gameId: 'g1', userId: 'u1', openId: 'open-1', readableId: 'A8F3D2K', createdAt: TODAY },
+      { id: 'o2', gameId: 'g1', userId: 'u1', openId: 'open-2', readableId: 'B7C2E91', createdAt: TODAY },
+      { id: 'o3', gameId: 'g2', userId: 'u1', openId: 'open-3', readableId: 'C2A5F33', createdAt: TODAY },
+    ] as FakeOpenId[],
+    rawEcpms: [
+      { id: 'r1', openIdRecordId: 'o1', rawCostLi: 45200n, eventTime: todayAt('14:34:18') },
+      { id: 'r2', openIdRecordId: 'o1', rawCostLi: 42800n, eventTime: todayAt('14:25:47') },
+      { id: 'r3', openIdRecordId: 'o3', rawCostLi: 36500n, eventTime: todayAt('09:12:33') },
+    ] as FakeRawEcpm[],
+  };
+
+  it('按时间倒序返回 ECPM 单条记录，每条带"今日序号"（按用户当天累计编号，从 1 开始）', async () => {
+    const prisma = makeFakePrisma(seedForRecords);
+    const service = new UserDashboardService(prisma);
+
+    const result = await service.listEcpmRecords({
+      userId: 'u1',
+      range: { startAt: TODAY, endAt: TOMORROW },
+      limit: 50,
+    });
+
+    expect(result.records).toHaveLength(3);
+    expect(result.records[0].todaySequence).toBe(3);
+    expect(result.records[2].todaySequence).toBe(1);
+    expect(result.records[0].ecpmYuan).toBeCloseTo(45.2, 2);
+    expect(result.records[0].gameName).toBe('消消乐 Pro');
+    expect(result.records[0].accountReadableId).toBe('A8F3D2K');
+    expect(result.totalToday).toBe(3);
+    expect(result.totalAll).toBe(3);
+  });
+
+  it('支持按 gameId 筛选，序号在筛选后重新编号', async () => {
+    const prisma = makeFakePrisma(seedForRecords);
+    const service = new UserDashboardService(prisma);
+
+    const result = await service.listEcpmRecords({
+      userId: 'u1',
+      range: { startAt: TODAY, endAt: TOMORROW },
+      limit: 50,
+      gameId: 'g2',
+    });
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].gameName).toBe('合成大西瓜');
+    expect(result.records[0].todaySequence).toBe(1);
+    expect(result.totalToday).toBe(1);
+  });
+
+  it('支持按 accountId 筛选', async () => {
+    const prisma = makeFakePrisma(seedForRecords);
+    const service = new UserDashboardService(prisma);
+
+    const result = await service.listEcpmRecords({
+      userId: 'u1',
+      range: { startAt: TODAY, endAt: TOMORROW },
+      limit: 50,
+      accountId: 'o3',
+    });
+
+    expect(result.records).toHaveLength(1);
+    expect(result.records[0].accountReadableId).toBe('C2A5F33');
+  });
+
+  it('limit 限制返回数量但不影响 total', async () => {
+    const prisma = makeFakePrisma(seedForRecords);
+    const service = new UserDashboardService(prisma);
+
+    const result = await service.listEcpmRecords({
+      userId: 'u1',
+      range: { startAt: TODAY, endAt: TOMORROW },
+      limit: 2,
+    });
+
+    expect(result.records).toHaveLength(2);
+    expect(result.totalAll).toBe(3);
+  });
+
+  it('用户没有 open_id 时返回空结果', async () => {
+    const prisma = makeFakePrisma({ games: [], openIds: [], rawEcpms: [] });
+    const service = new UserDashboardService(prisma);
+
+    const result = await service.listEcpmRecords({
+      userId: 'u-empty',
+      range: { startAt: TODAY, endAt: TOMORROW },
+      limit: 50,
+    });
+
+    expect(result).toEqual({ records: [], totalToday: 0, totalAll: 0 });
+  });
+});
+

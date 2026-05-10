@@ -24,7 +24,10 @@ export class CachedResponseInterceptor implements NestInterceptor {
     if (!opts) return next.handle();
 
     const req = ctx.switchToHttp().getRequest<{
+      account?: { id?: string };
       user?: { id?: string };
+      agent?: { id?: string };
+      admin?: { id?: string };
       ip?: string;
       route?: { path?: string };
       url?: string;
@@ -34,7 +37,13 @@ export class CachedResponseInterceptor implements NestInterceptor {
     const res = ctx
       .switchToHttp()
       .getResponse<{ setHeader: (name: string, value: string) => void }>();
-    const principalId = req?.user?.id ?? req?.ip ?? 'anon';
+    const principalId =
+      req?.account?.id ??
+      req?.user?.id ??
+      req?.agent?.id ??
+      req?.admin?.id ??
+      req?.ip ??
+      'anon';
     const route = req?.route?.path ?? req?.url ?? 'unknown';
     const key = `${principalId}:${route}:${req?.method ?? 'GET'}`;
     const now = Date.now();

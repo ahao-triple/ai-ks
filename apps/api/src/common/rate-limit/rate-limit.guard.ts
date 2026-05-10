@@ -41,8 +41,23 @@ export class RateLimitGuard implements CanActivate {
     return true;
   }
 
-  private bucketKey(req: any): string {
-    const principalId = req?.user?.id ?? req?.ip ?? 'anon';
+  private bucketKey(req: {
+    account?: { id?: string };
+    user?: { id?: string };
+    agent?: { id?: string };
+    admin?: { id?: string };
+    ip?: string;
+    route?: { path?: string };
+    url?: string;
+    method?: string;
+  }): string {
+    const principalId =
+      req?.account?.id ??
+      req?.user?.id ??
+      req?.agent?.id ??
+      req?.admin?.id ??
+      req?.ip ??
+      'anon';
     const route = req?.route?.path ?? req?.url ?? 'unknown';
     return `${principalId}:${route}:${req?.method ?? 'GET'}`;
   }

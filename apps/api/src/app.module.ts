@@ -15,6 +15,7 @@ import { GameSessionModule } from './features/game/game-session.module';
 import { KuaishouRefreshModule } from './features/kuaishou-admin/kuaishou-refresh.module';
 import { PlatformConfigModule } from './features/platform-config/platform-config.module';
 import { SettlementAdminModule } from './features/settlement-admin/settlement-admin.module';
+import { UserDashboardModule } from './features/user-dashboard/user-dashboard.module';
 import { UserEarningsModule } from './features/user/user-earnings.module';
 import { WithdrawalReviewModule } from './features/withdrawal-admin/withdrawal-review.module';
 import { HealthModule } from './health/health.module';
@@ -41,6 +42,7 @@ import { HealthModule } from './health/health.module';
     PlatformConfigModule,
     SettlementAdminModule,
     WithdrawalReviewModule,
+    UserDashboardModule,
     UserEarningsModule,
   ],
 })
