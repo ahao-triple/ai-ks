@@ -446,6 +446,7 @@ export class EcpmDashboardService {
     eventTime?: Prisma.DateTimeFilter,
     extraWhere: Prisma.RawEcpmWhereInput = {},
   ): Prisma.RawEcpmWhereInput | false {
+    const eventTimeFilter = eventTime ?? buildDataHourFilter(input);
     const selector = this.resolveGameSelector(input, scope);
     if (selector === false) {
       return false;
@@ -459,7 +460,6 @@ export class EcpmDashboardService {
       ...this.buildRawEcpmGameWhere(selector),
       ...extraWhere,
     };
-    const eventTimeFilter = eventTime ?? buildDataHourFilter(input);
     if (eventTimeFilter) {
       where.eventTime = eventTimeFilter;
     }

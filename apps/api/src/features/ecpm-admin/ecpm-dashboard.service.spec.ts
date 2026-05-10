@@ -466,6 +466,46 @@ describe('EcpmDashboardService', () => {
     expect(prisma.rawEcpm.findMany).not.toHaveBeenCalled();
   });
 
+  it('validates hour filters before empty scoped-game short circuit', async () => {
+    const prisma = createFakePrisma();
+    const accessControl = createAccessControl({
+      companyIds: [],
+      gameAppIds: [],
+      gameIds: [],
+      isSuperAdmin: false,
+    });
+    const service = createService(prisma, accessControl);
+
+    await expect(
+      service.queryGame({
+        admin: companyAdmin,
+        startedDataHour: '2026-05-08T14:30:00+08:00',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.rawEcpm.findMany).not.toHaveBeenCalled();
+  });
+
+  it('validates hour filters before unauthorized game short circuit', async () => {
+    const prisma = createFakePrisma();
+    const accessControl = createAccessControl({
+      companyIds: ['company-1'],
+      gameAppIds: ['game-app-1'],
+      gameIds: ['game-1'],
+      isSuperAdmin: false,
+    });
+    const service = createService(prisma, accessControl);
+
+    await expect(
+      service.queryOpenId({
+        admin: companyAdmin,
+        gameId: 'game-2',
+        openId: 'open-a',
+        startedDataHour: '2026-02-31T00:00:00+08:00',
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(prisma.rawEcpm.findMany).not.toHaveBeenCalled();
+  });
+
   it('validates user date-hour filters before returning empty open_id rows', async () => {
     const prisma = createFakePrisma();
     prisma.gameOpenId.findMany.mockResolvedValueOnce([]);
