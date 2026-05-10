@@ -6,6 +6,7 @@ import {
   ReadoutGrid,
   WithdrawalBatchTable,
 } from '../components/domain';
+import { EcpmOperationsCenter } from './EcpmOperationsCenter';
 import {
   Button,
   Dialog,
@@ -30,8 +31,12 @@ import type {
   DemoGame,
   BusinessClosureReport,
   BusinessClosureStatus,
+  EcpmDashboardRow,
+  EcpmDashboardScope,
   EcpmRefreshResult,
   EcpmLookbackHours,
+  EcpmUpdateJob,
+  EcpmUpdateRequest,
   GameSessionResult,
   KuaishouEcpmSyncJob,
   KuaishouTokenStatusResult,
@@ -54,6 +59,9 @@ export type OperationsWorkspaceBusyAction =
   | 'company-admins'
   | 'company-balance'
   | 'company-create'
+  | 'ecpm-dashboard'
+  | 'ecpm-jobs'
+  | 'ecpm-update'
   | 'game-budget'
   | 'game-config'
   | 'game-config-budget'
@@ -90,15 +98,15 @@ type GameConfigDraft = {
 type OperationsPane =
   | 'agents'
   | 'audit'
-  | 'authorization'
-  | 'budget'
+  | 'company'
   | 'company-admins'
-  | 'integration'
+  | 'ecpm'
+  | 'game'
+  | 'kuaishou'
   | 'maintenance'
   | 'overview'
   | 'config'
   | 'settlement'
-  | 'sync'
   | 'withdrawal';
 
 export type PlatformConfigDraft = {
@@ -160,6 +168,8 @@ export interface OperationsWorkspaceProps {
   configGameDraft?: GameConfigDraft;
   configKuaishouEcpmJobs: KuaishouEcpmSyncJob[];
   configSection: GameConfigSection;
+  ecpmJobs?: EcpmUpdateJob[];
+  ecpmRows?: EcpmDashboardRow[];
   gameAppId: string;
   games: DemoGame[];
   jsCode: string;
@@ -212,6 +222,12 @@ export interface OperationsWorkspaceProps {
   }): void;
   onCreateGame(): void;
   onCreateSession(): void;
+  onEcpmDashboardQuery?(
+    scope: EcpmDashboardScope,
+    query: Record<string, string | undefined>,
+  ): void;
+  onEcpmJobSelect?(jobId: string): void;
+  onEcpmUpdate?(request: EcpmUpdateRequest): void;
   onGameChange(value: string): void;
   onJsCodeChange(value: string): void;
   onKuaishouAppIdChange(value: string): void;
@@ -267,6 +283,7 @@ export interface OperationsWorkspaceProps {
   sampleJsCodes: string[];
   selectedConfigGame?: AdminGame;
   selectedConfigGameId: string;
+  selectedEcpmJob?: EcpmUpdateJob;
   selectedSettlementDetail?: AdminSettlementDetailResult;
   selectedGame?: DemoGame;
   selectedWithdrawalDetail?: AdminWithdrawalDetailResult;
@@ -412,6 +429,8 @@ export function OperationsWorkspace({
   configGameDraft,
   configKuaishouEcpmJobs,
   configSection,
+  ecpmJobs = [],
+  ecpmRows = [],
   gameAppId,
   games,
   jsCode,
@@ -459,6 +478,9 @@ export function OperationsWorkspace({
   onCreateCompanyAdmin,
   onCreateGame,
   onCreateSession,
+  onEcpmDashboardQuery = () => undefined,
+  onEcpmJobSelect = () => undefined,
+  onEcpmUpdate = () => undefined,
   onGameChange,
   onJsCodeChange,
   onKuaishouAppIdChange,
@@ -508,6 +530,7 @@ export function OperationsWorkspace({
   sampleJsCodes,
   selectedConfigGame,
   selectedConfigGameId,
+  selectedEcpmJob,
   selectedSettlementDetail,
   selectedGame,
   selectedWithdrawalDetail,
@@ -558,6 +581,12 @@ export function OperationsWorkspace({
     platformConfigDraft.displayRatioPercent.trim().length > 0 &&
     platformConfigDraft.minWithdrawalYuan.trim().length > 0 &&
     settlementRatioTotal === 100;
+  const ecpmLoadingAction =
+    busyAction === 'ecpm-dashboard' ||
+    busyAction === 'ecpm-update' ||
+    busyAction === 'ecpm-jobs'
+      ? busyAction
+      : '';
   const [activePane, setActivePane] = useState<OperationsPane>('overview');
   const [activeDialog, setActiveDialog] = useState<SuperAdminDialog>('');
   const [resetConfirmation, setResetConfirmation] = useState('');
@@ -590,10 +619,10 @@ export function OperationsWorkspace({
       companyAdminEditPassword.length >= 8);
   const paneItems: Array<{ key: OperationsPane; label: string }> = [
     { key: 'overview', label: '总览' },
-    { key: 'integration', label: '联调' },
-    { key: 'budget', label: '预算' },
-    { key: 'authorization', label: '授权' },
-    { key: 'sync', label: '同步' },
+    { key: 'company', label: '公司' },
+    { key: 'game', label: '游戏' },
+    { key: 'ecpm', label: 'ECPM 看板' },
+    { key: 'kuaishou', label: '快手' },
     { key: 'settlement', label: '结算' },
     { key: 'withdrawal', label: '提现' },
     { key: 'audit', label: '审计' },
@@ -713,7 +742,7 @@ export function OperationsWorkspace({
 
   useEffect(() => {
     if (selectedConfigGame) {
-      setActivePane('budget');
+      setActivePane('game');
     }
   }, [selectedConfigGame]);
 
@@ -750,20 +779,28 @@ export function OperationsWorkspace({
     : undefined;
 
   return (
-    <div className="view-stack">
-      <nav className="operations-nav" aria-label="运营台模块">
-        {paneItems.map((item) => (
-          <button
-            aria-current={activePane === item.key ? 'page' : undefined}
-            className="operations-nav-item"
-            key={item.key}
-            onClick={() => setActivePane(item.key)}
-            type="button"
-          >
-            {item.label}
-          </button>
-        ))}
-      </nav>
+    <div className="operations-shell">
+      <aside
+        aria-label="运营功能栏"
+        className="operations-feature-rail"
+        title="运营功能栏"
+      >
+        <nav className="operations-feature-nav" aria-label="运营功能栏导航">
+          {paneItems.map((item) => (
+            <button
+              aria-current={activePane === item.key ? 'page' : undefined}
+              className="operations-feature-nav-item"
+              key={item.key}
+              onClick={() => setActivePane(item.key)}
+              type="button"
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
+
+      <div className="operations-workspace-body">
 
       {isSuperAdmin ? (
         <section className="super-admin-guide">
@@ -942,7 +979,7 @@ export function OperationsWorkspace({
         </Panel>
       </section>
 
-      <section className={paneClass('integration')}>
+      <section className={paneClass('kuaishou')}>
         {isSuperAdmin ? (
           <Panel
             description="联调页用于验证游戏登录换取 open_id 与 ECPM 明细写入链路。"
@@ -1067,309 +1104,344 @@ export function OperationsWorkspace({
         />
       </section>
 
-      <section className={paneClass('budget')}>
+      <section className={paneClass('company')}>
         <Panel
-        actions={
-          <Button
-            disabled={workspaceBusy}
-            icon={<RefreshCw size={16} />}
-            onClick={onLoadAdminResources}
-            variant="secondary"
-          >
-            {busyAction === 'admin-resources' ? '加载中' : '刷新预算'}
-          </Button>
-        }
-        description="公司余额与游戏预算"
-        title="预算管理"
-      >
-        <ReadoutGrid
-          items={[
-            { label: '公司数量', value: `${adminCompanies.length} 个` },
-            { label: '游戏数量', value: `${adminGames.length} 个` },
-          ]}
-        />
-        <div className="data-table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>公司</th>
-                <th>余额</th>
-              </tr>
-            </thead>
-            <tbody>
-              {adminCompanies.map((company) => (
-                <tr key={company.id}>
-                  <td>{company.name}</td>
-                  <td>{formatMoney(company.balance)}</td>
-                </tr>
-              ))}
-              {adminCompanies.length === 0 ? (
+          actions={
+            <Button
+              disabled={workspaceBusy}
+              icon={<RefreshCw size={16} />}
+              onClick={onLoadAdminResources}
+              variant="secondary"
+            >
+              {busyAction === 'admin-resources' ? '加载中' : '刷新公司'}
+            </Button>
+          }
+          description="公司主体与余额账户"
+          title="公司管理"
+        >
+          <ReadoutGrid
+            items={[
+              { label: '公司数量', value: `${adminCompanies.length} 个` },
+              { label: '游戏数量', value: `${adminGames.length} 个` },
+            ]}
+          />
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
                 <tr>
-                  <td colSpan={2}>暂无公司</td>
+                  <th>公司</th>
+                  <th>余额</th>
                 </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-        <div className="data-table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>游戏</th>
-                <th>公司</th>
-                <th>AppID</th>
-                <th>预算</th>
-                <th>状态</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {adminGames.map((game) => (
-                <tr key={game.id}>
-                  <td>{game.name}</td>
-                  <td>{game.companyName}</td>
-                  <td>{game.gameAppId}</td>
-                  <td>{formatMoney(game.budget)}</td>
-                  <td>
-                    <StatusBadge tone={game.settlementPaused ? 'warning' : 'success'}>
-                      {game.settlementPaused ? '已暂停' : '可结算'}
-                    </StatusBadge>
-                  </td>
-                  <td>
-                    <Button
-                      compact
-                      disabled={workspaceBusy}
-                      icon={<Settings size={14} />}
-                      onClick={() => onOpenGameConfig(game.id)}
-                      variant={
-                        selectedConfigGameId === game.id ? 'primary' : 'secondary'
-                      }
-                    >
-                      配置
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-              {adminGames.length === 0 ? (
-                <tr>
-                  <td colSpan={6}>暂无游戏</td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-        {isSuperAdmin ? (
-          <div className="workflow-grid">
-            <article className="workflow-card">
-              <h3>创建公司</h3>
-              <p>新增运营公司主体，后续用于关联管理员、游戏与预算账户。</p>
-              <dl className="workflow-meta">
-                <dt>执行结果</dt>
-                <dd>生成公司记录，显示在公司余额表。</dd>
-              </dl>
-              <Button
-                disabled={workspaceBusy}
-                onClick={() => setActiveDialog('create-company')}
-                variant="secondary"
-              >
-                打开创建公司弹窗
-              </Button>
-            </article>
-            <article className="workflow-card">
-              <h3>公司余额充值</h3>
-              <p>向公司主账户注入预算资金，作为后续游戏结算的资金来源。</p>
-              <dl className="workflow-meta">
-                <dt>执行结果</dt>
-                <dd>公司余额增加并写入审计记录。</dd>
-              </dl>
-              <Button
-                disabled={workspaceBusy}
-                onClick={() => setActiveDialog('recharge-company')}
-                variant="secondary"
-              >
-                打开充值弹窗
-              </Button>
-            </article>
-            <article className="workflow-card">
-              <h3>创建游戏</h3>
-              <p>新增可联调的游戏配置，包含 game_app_id 与 game_secret。</p>
-              <dl className="workflow-meta">
-                <dt>执行结果</dt>
-                <dd>游戏写入资源列表，可进入配置与结算流程。</dd>
-              </dl>
-              <Button
-                disabled={workspaceBusy}
-                onClick={() => setActiveDialog('create-game')}
-                variant="secondary"
-              >
-                打开创建游戏弹窗
-              </Button>
-            </article>
-            <article className="workflow-card">
-              <h3>分配游戏预算</h3>
-              <p>给单个游戏划拨可用预算；结算确认时将从该预算扣减。</p>
-              <dl className="workflow-meta">
-                <dt>执行结果</dt>
-                <dd>目标游戏预算增加并写入预算流水。</dd>
-              </dl>
-              <Button
-                disabled={workspaceBusy}
-                onClick={() => setActiveDialog('allocate-budget')}
-                variant="secondary"
-              >
-                打开预算分配弹窗
-              </Button>
-            </article>
+              </thead>
+              <tbody>
+                {adminCompanies.map((company) => (
+                  <tr key={company.id}>
+                    <td>{company.name}</td>
+                    <td>{formatMoney(company.balance)}</td>
+                  </tr>
+                ))}
+                {adminCompanies.length === 0 ? (
+                  <tr>
+                    <td colSpan={2}>暂无公司</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
           </div>
-        ) : (
-          <>
-            <div className="query-form">
-              <InputField
-                disabled={workspaceBusy}
-                label="公司名称"
-                onChange={onNewCompanyNameChange}
-                value={newCompanyName}
-              />
-              <Button
-                disabled={workspaceBusy || !canCreateCompany}
-                onClick={onCreateCompany}
-                variant="secondary"
-              >
-                {busyAction === 'company-create' ? '创建中' : '创建公司'}
-              </Button>
+          {isSuperAdmin ? (
+            <div className="workflow-grid">
+              <article className="workflow-card">
+                <h3>创建公司</h3>
+                <p>新增运营公司主体，后续用于关联管理员、游戏与预算账户。</p>
+                <dl className="workflow-meta">
+                  <dt>执行结果</dt>
+                  <dd>生成公司记录，显示在公司余额表。</dd>
+                </dl>
+                <Button
+                  disabled={workspaceBusy}
+                  onClick={() => setActiveDialog('create-company')}
+                  variant="secondary"
+                >
+                  打开创建公司弹窗
+                </Button>
+              </article>
+              <article className="workflow-card">
+                <h3>公司余额充值</h3>
+                <p>向公司主账户注入预算资金，作为后续游戏结算的资金来源。</p>
+                <dl className="workflow-meta">
+                  <dt>执行结果</dt>
+                  <dd>公司余额增加并写入审计记录。</dd>
+                </dl>
+                <Button
+                  disabled={workspaceBusy}
+                  onClick={() => setActiveDialog('recharge-company')}
+                  variant="secondary"
+                >
+                  打开充值弹窗
+                </Button>
+              </article>
             </div>
-            <div className="query-form">
-              <label className="ui-input-field">
-                <span className="ui-input-label">充值公司</span>
-                <span className="ui-input-control">
-                  <select
-                    disabled={workspaceBusy}
-                    onChange={(event) =>
-                      onBalanceCompanyIdChange(event.currentTarget.value)
-                    }
-                    value={balanceCompanyId}
-                  >
-                    <option value="">选择公司</option>
-                    {adminCompanies.map((company) => (
-                      <option key={company.id} value={company.id}>
-                        {company.name}
-                      </option>
-                    ))}
-                  </select>
-                </span>
-              </label>
-              <InputField
-                disabled={workspaceBusy}
-                label="充值金额"
-                onChange={onBalanceAmountChange}
-                placeholder="例如 100.00"
-                value={balanceAmountYuan}
-              />
-              <InputField
-                disabled={workspaceBusy}
-                label="充值原因"
-                onChange={onBalanceReasonChange}
-                placeholder="可选"
-                value={balanceReason}
-              />
-              <Button
-                disabled={workspaceBusy || !canAdjustCompanyBalance}
-                onClick={onAdjustCompanyBalance}
-                variant="secondary"
-              >
-                {busyAction === 'company-balance' ? '提交中' : '充值公司余额'}
-              </Button>
+          ) : (
+            <>
+              <div className="query-form">
+                <InputField
+                  disabled={workspaceBusy}
+                  label="公司名称"
+                  onChange={onNewCompanyNameChange}
+                  value={newCompanyName}
+                />
+                <Button
+                  disabled={workspaceBusy || !canCreateCompany}
+                  onClick={onCreateCompany}
+                  variant="secondary"
+                >
+                  {busyAction === 'company-create' ? '创建中' : '创建公司'}
+                </Button>
+              </div>
+              <div className="query-form">
+                <label className="ui-input-field">
+                  <span className="ui-input-label">充值公司</span>
+                  <span className="ui-input-control">
+                    <select
+                      disabled={workspaceBusy}
+                      onChange={(event) =>
+                        onBalanceCompanyIdChange(event.currentTarget.value)
+                      }
+                      value={balanceCompanyId}
+                    >
+                      <option value="">选择公司</option>
+                      {adminCompanies.map((company) => (
+                        <option key={company.id} value={company.id}>
+                          {company.name}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                </label>
+                <InputField
+                  disabled={workspaceBusy}
+                  label="充值金额"
+                  onChange={onBalanceAmountChange}
+                  placeholder="例如 100.00"
+                  value={balanceAmountYuan}
+                />
+                <InputField
+                  disabled={workspaceBusy}
+                  label="充值原因"
+                  onChange={onBalanceReasonChange}
+                  placeholder="可选"
+                  value={balanceReason}
+                />
+                <Button
+                  disabled={workspaceBusy || !canAdjustCompanyBalance}
+                  onClick={onAdjustCompanyBalance}
+                  variant="secondary"
+                >
+                  {busyAction === 'company-balance' ? '提交中' : '充值公司余额'}
+                </Button>
+              </div>
+            </>
+          )}
+        </Panel>
+      </section>
+
+      <section className={paneClass('game')}>
+        <Panel
+          actions={
+            <Button
+              disabled={workspaceBusy}
+              icon={<RefreshCw size={16} />}
+              onClick={onLoadAdminResources}
+              variant="secondary"
+            >
+              {busyAction === 'admin-resources' ? '加载中' : '刷新游戏'}
+            </Button>
+          }
+          description="游戏配置与预算分配"
+          title="游戏管理"
+        >
+          <ReadoutGrid
+            items={[
+              { label: '游戏数量', value: `${adminGames.length} 个` },
+              { label: '公司数量', value: `${adminCompanies.length} 个` },
+            ]}
+          />
+          <div className="data-table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>游戏</th>
+                  <th>公司</th>
+                  <th>AppID</th>
+                  <th>预算</th>
+                  <th>状态</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {adminGames.map((game) => (
+                  <tr key={game.id}>
+                    <td>{game.name}</td>
+                    <td>{game.companyName}</td>
+                    <td>{game.gameAppId}</td>
+                    <td>{formatMoney(game.budget)}</td>
+                    <td>
+                      <StatusBadge
+                        tone={game.settlementPaused ? 'warning' : 'success'}
+                      >
+                        {game.settlementPaused ? '已暂停' : '可结算'}
+                      </StatusBadge>
+                    </td>
+                    <td>
+                      <Button
+                        compact
+                        disabled={workspaceBusy}
+                        icon={<Settings size={14} />}
+                        onClick={() => onOpenGameConfig(game.id)}
+                        variant={
+                          selectedConfigGameId === game.id
+                            ? 'primary'
+                            : 'secondary'
+                        }
+                      >
+                        配置
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+                {adminGames.length === 0 ? (
+                  <tr>
+                    <td colSpan={6}>暂无游戏</td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </div>
+          {isSuperAdmin ? (
+            <div className="workflow-grid">
+              <article className="workflow-card">
+                <h3>创建游戏</h3>
+                <p>新增可联调的游戏配置，包含 game_app_id 与 game_secret。</p>
+                <dl className="workflow-meta">
+                  <dt>执行结果</dt>
+                  <dd>游戏写入资源列表，可进入配置与结算流程。</dd>
+                </dl>
+                <Button
+                  disabled={workspaceBusy}
+                  onClick={() => setActiveDialog('create-game')}
+                  variant="secondary"
+                >
+                  打开创建游戏弹窗
+                </Button>
+              </article>
+              <article className="workflow-card">
+                <h3>分配游戏预算</h3>
+                <p>给单个游戏划拨可用预算；结算确认时将从该预算扣减。</p>
+                <dl className="workflow-meta">
+                  <dt>执行结果</dt>
+                  <dd>目标游戏预算增加并写入预算流水。</dd>
+                </dl>
+                <Button
+                  disabled={workspaceBusy}
+                  onClick={() => setActiveDialog('allocate-budget')}
+                  variant="secondary"
+                >
+                  打开预算分配弹窗
+                </Button>
+              </article>
             </div>
-            <div className="query-form">
-              <label className="ui-input-field">
-                <span className="ui-input-label">所属公司</span>
-                <span className="ui-input-control">
-                  <select
-                    disabled={workspaceBusy}
-                    onChange={(event) =>
-                      onNewGameCompanyIdChange(event.currentTarget.value)
-                    }
-                    value={newGameCompanyId}
-                  >
-                    <option value="">选择公司</option>
-                    {adminCompanies.map((company) => (
-                      <option key={company.id} value={company.id}>
-                        {company.name}
-                      </option>
-                    ))}
-                  </select>
-                </span>
-              </label>
-              <InputField
-                disabled={workspaceBusy}
-                label="游戏名称"
-                onChange={onNewGameNameChange}
-                value={newGameName}
-              />
-              <InputField
-                disabled={workspaceBusy}
-                label="game_app_id"
-                onChange={onNewGameAppIdChange}
-                value={newGameAppId}
-              />
-              <InputField
-                disabled={workspaceBusy}
-                label="game_secret"
-                onChange={onNewGameSecretChange}
-                value={newGameSecret}
-              />
-              <Button
-                disabled={workspaceBusy || !canCreateGame}
-                onClick={onCreateGame}
-                variant="secondary"
-              >
-                {busyAction === 'game-create' ? '创建中' : '创建游戏'}
-              </Button>
-            </div>
-            <div className="query-form">
-              <label className="ui-input-field">
-                <span className="ui-input-label">预算游戏</span>
-                <span className="ui-input-control">
-                  <select
-                    disabled={workspaceBusy}
-                    onChange={(event) =>
-                      onBudgetGameIdChange(event.currentTarget.value)
-                    }
-                    value={budgetGameId}
-                  >
-                    <option value="">选择游戏</option>
-                    {adminGames.map((game) => (
-                      <option key={game.id} value={game.id}>
-                        {game.name}
-                      </option>
-                    ))}
-                  </select>
-                </span>
-              </label>
-              <InputField
-                disabled={workspaceBusy}
-                label="分配金额"
-                onChange={onBudgetAmountChange}
-                placeholder="例如 50.00"
-                value={budgetAmountYuan}
-              />
-              <InputField
-                disabled={workspaceBusy}
-                label="分配原因"
-                onChange={onBudgetReasonChange}
-                placeholder="可选"
-                value={budgetReason}
-              />
-              <Button
-                disabled={workspaceBusy || !canAllocateBudget}
-                onClick={onAllocateGameBudget}
-                variant="secondary"
-              >
-                {busyAction === 'game-budget' ? '提交中' : '分配游戏预算'}
-              </Button>
-            </div>
-          </>
-        )}
+          ) : (
+            <>
+              <div className="query-form">
+                <label className="ui-input-field">
+                  <span className="ui-input-label">所属公司</span>
+                  <span className="ui-input-control">
+                    <select
+                      disabled={workspaceBusy}
+                      onChange={(event) =>
+                        onNewGameCompanyIdChange(event.currentTarget.value)
+                      }
+                      value={newGameCompanyId}
+                    >
+                      <option value="">选择公司</option>
+                      {adminCompanies.map((company) => (
+                        <option key={company.id} value={company.id}>
+                          {company.name}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                </label>
+                <InputField
+                  disabled={workspaceBusy}
+                  label="游戏名称"
+                  onChange={onNewGameNameChange}
+                  value={newGameName}
+                />
+                <InputField
+                  disabled={workspaceBusy}
+                  label="game_app_id"
+                  onChange={onNewGameAppIdChange}
+                  value={newGameAppId}
+                />
+                <InputField
+                  disabled={workspaceBusy}
+                  label="game_secret"
+                  onChange={onNewGameSecretChange}
+                  value={newGameSecret}
+                />
+                <Button
+                  disabled={workspaceBusy || !canCreateGame}
+                  onClick={onCreateGame}
+                  variant="secondary"
+                >
+                  {busyAction === 'game-create' ? '创建中' : '创建游戏'}
+                </Button>
+              </div>
+              <div className="query-form">
+                <label className="ui-input-field">
+                  <span className="ui-input-label">预算游戏</span>
+                  <span className="ui-input-control">
+                    <select
+                      disabled={workspaceBusy}
+                      onChange={(event) =>
+                        onBudgetGameIdChange(event.currentTarget.value)
+                      }
+                      value={budgetGameId}
+                    >
+                      <option value="">选择游戏</option>
+                      {adminGames.map((game) => (
+                        <option key={game.id} value={game.id}>
+                          {game.name}
+                        </option>
+                      ))}
+                    </select>
+                  </span>
+                </label>
+                <InputField
+                  disabled={workspaceBusy}
+                  label="分配金额"
+                  onChange={onBudgetAmountChange}
+                  placeholder="例如 50.00"
+                  value={budgetAmountYuan}
+                />
+                <InputField
+                  disabled={workspaceBusy}
+                  label="分配原因"
+                  onChange={onBudgetReasonChange}
+                  placeholder="可选"
+                  value={budgetReason}
+                />
+                <Button
+                  disabled={workspaceBusy || !canAllocateBudget}
+                  onClick={onAllocateGameBudget}
+                  variant="secondary"
+                >
+                  {busyAction === 'game-budget' ? '提交中' : '分配游戏预算'}
+                </Button>
+              </div>
+            </>
+          )}
         </Panel>
 
         {selectedConfigGame && configGameDraft ? (
@@ -1397,7 +1469,22 @@ export function OperationsWorkspace({
         ) : null}
       </section>
 
-      <section className={paneClass('authorization')}>
+      <section className={paneClass('ecpm')}>
+        <EcpmOperationsCenter
+          canUpdate={isSuperAdmin}
+          companies={adminCompanies}
+          games={adminGames}
+          jobs={ecpmJobs}
+          loadingAction={ecpmLoadingAction}
+          onDashboardQuery={onEcpmDashboardQuery}
+          onJobSelect={onEcpmJobSelect}
+          onUpdate={onEcpmUpdate}
+          rows={ecpmRows}
+          selectedJob={selectedEcpmJob}
+        />
+      </section>
+
+      <section className={paneClass('kuaishou')}>
         <Panel
         actions={
           <Button
@@ -1530,7 +1617,7 @@ export function OperationsWorkspace({
         </Panel>
       </section>
 
-      <section className={paneClass('sync')}>
+      <section className={paneClass('kuaishou')}>
         {isSuperAdmin ? (
           <Panel
             description="同步页用于排查快手任务执行结果、错误原因与数据覆盖范围。"
@@ -2928,6 +3015,7 @@ export function OperationsWorkspace({
           执行后仅保留超级管理员登录能力；业务数据不可恢复。
         </p>
       </Dialog>
+      </div>
     </div>
   );
 }

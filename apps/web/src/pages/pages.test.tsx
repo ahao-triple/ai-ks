@@ -633,17 +633,22 @@ describe('AccountWorkspace', () => {
 });
 
 describe('OperationsWorkspace', () => {
-  it('renders pane navigation and defaults to overview pane', () => {
+  it('renders the business function rail and defaults to overview pane', () => {
     const html = renderToStaticMarkup(
       <OperationsWorkspace {...operationsWorkspaceProps()} />,
     );
 
-    expect(html).toContain('运营台模块');
+    expect(html).toContain('运营功能栏');
     expect(html).toContain(
-      '<button aria-current="page" class="operations-nav-item" type="button">总览</button>',
+      '<button aria-current="page" class="operations-feature-nav-item" type="button">总览</button>',
     );
+    expect(html).toContain('class="operations-feature-rail"');
+    expect(html).toContain('>公司</button>');
+    expect(html).toContain('>游戏</button>');
+    expect(html).toContain('>ECPM 看板</button>');
     expect(html).toContain('>维护</button>');
     expect(html).toContain('>权限</button>');
+    expect(html).not.toContain('operations-nav');
     expect(html).toContain('operations-pane operations-pane-active');
   });
 
@@ -903,7 +908,7 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('¥ 0.05');
   });
 
-  it('renders the admin budget management panel with companies and games', () => {
+  it('renders company and game management panes with their related actions', () => {
     const html = renderToStaticMarkup(
       <OperationsWorkspace
         {...operationsWorkspaceProps({
@@ -922,7 +927,8 @@ describe('OperationsWorkspace', () => {
       />,
     );
 
-    expect(html).toContain('预算管理');
+    expect(html).toContain('公司管理');
+    expect(html).toContain('游戏管理');
     expect(html).toContain('Acme Studio');
     expect(html).toContain('¥ 12.35');
     expect(html).toContain('Runner');
@@ -952,7 +958,7 @@ describe('OperationsWorkspace', () => {
       />,
     );
 
-    expect(html.match(/ui-button-compact/g)).toHaveLength(2);
+    expect(html.match(/lucide-settings/g)).toHaveLength(2);
   });
 
   it('renders selected game config modules and ecpm sync policy copy', () => {
