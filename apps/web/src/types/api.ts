@@ -168,11 +168,13 @@ export type EcpmUpdateJob = {
   itemCount?: number;
   items?: EcpmUpdateJobItem[];
   mode: EcpmUpdateMode;
+  requestCount?: number | null;
   requestedGameCount: number;
   requestedOpenIdCount: number;
   savedCount: number;
   scopeId: string;
   scopeType: EcpmUpdateScopeType;
+  source?: 'mock' | 'kuaishou' | null;
   skippedCount: number;
   startedAt: string;
   startedDataHour: string;

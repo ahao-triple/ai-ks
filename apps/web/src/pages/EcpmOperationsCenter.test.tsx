@@ -442,7 +442,7 @@ describe('EcpmOperationsCenter', () => {
           ...job,
           requestCount: 7,
           source: 'kuaishou',
-        } as EcpmUpdateJob,
+        },
       }),
     );
 

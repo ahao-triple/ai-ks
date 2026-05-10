@@ -39,11 +39,6 @@ export type EcpmOperationsCenterProps = {
 
 type TabId = 'dashboard' | 'reports' | 'update';
 
-type EcpmUpdateJobWithMetadata = EcpmUpdateJob & {
-  requestCount?: number | null;
-  source?: string | null;
-};
-
 const dashboardScopes: Array<{ label: string; value: EcpmDashboardScope }> = [
   { label: '最新数据', value: 'latest' },
   { label: '公司', value: 'company' },
@@ -376,9 +371,8 @@ export function EcpmOperationsCenter({
         ? games.some((game) => game.id === trimmedUpdateScopeId)
         : true;
   const reportRows = selectedJob?.items ?? [];
-  const selectedJobMetadata = selectedJob as EcpmUpdateJobWithMetadata | undefined;
   const reportRequestCount =
-    selectedJobMetadata?.requestCount ?? selectedJob?.itemCount ?? reportRows.length;
+    selectedJob?.requestCount ?? selectedJob?.itemCount ?? reportRows.length;
   const coveredDataHours = Array.from(
     new Set(reportRows.map((item) => item.dataHour)),
   ).sort();
@@ -608,7 +602,7 @@ export function EcpmOperationsCenter({
               </span>
               <span>请求游戏 {selectedJob.requestedGameCount}</span>
               <span>open_id {selectedJob.requestedOpenIdCount}</span>
-              <span>来源 {selectedJobMetadata?.source ?? '-'}</span>
+              <span>来源 {selectedJob.source ?? '-'}</span>
               <span>请求数 {reportRequestCount}</span>
               {selectedJob.errorMessage ? (
                 <StatusBadge tone="danger">{selectedJob.errorMessage}</StatusBadge>
