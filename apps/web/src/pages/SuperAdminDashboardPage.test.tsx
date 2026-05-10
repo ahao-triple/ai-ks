@@ -69,6 +69,7 @@ const noopApi = {
     }),
   getSuperAdminUserRecords: () =>
     Promise.resolve({ records: [], totalToday: 0, totalAll: 0 }),
+  refreshSuperAdminScope: () => Promise.resolve({ results: [] }),
 };
 
 describe('SuperAdminDashboardPage SSR', () => {

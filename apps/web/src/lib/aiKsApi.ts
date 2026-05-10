@@ -791,6 +791,20 @@ export const aiKsApi = {
     );
   },
 
+  refreshSuperAdminScope(
+    adminAccessToken: string,
+    body:
+      | { scope: 'company'; companyId: string }
+      | { scope: 'game'; gameId: string }
+      | { scope: 'user'; gameId: string; userId: string },
+  ) {
+    return requestJson<{ results: unknown[] }>(`/admin/dashboard/refresh`, {
+      accessToken: adminAccessToken,
+      body,
+      method: 'POST',
+    });
+  },
+
   getSuperAdminUserRecords(
     adminAccessToken: string,
     userId: string,

@@ -37,6 +37,12 @@ export type SuperAdminDashboardApi = {
       limit?: number;
     },
   ) => Promise<UserDashboardEcpmRecordsResult>;
+  refreshSuperAdminScope: (
+    body:
+      | { scope: 'company'; companyId: string }
+      | { scope: 'game'; gameId: string }
+      | { scope: 'user'; gameId: string; userId: string },
+  ) => Promise<unknown>;
 };
 
 export type SuperAdminDashboardData = {
@@ -67,6 +73,7 @@ export function SuperAdminDashboardPage(props: SuperAdminDashboardPageProps) {
     loadGameUsers: (gameId) => api.getSuperAdminUsersUnderGame(gameId, date),
     loadUserRecords: (userId) =>
       api.getSuperAdminUserRecords(userId, { date, limit: 50 }),
+    refreshScope: (body) => api.refreshSuperAdminScope(body),
   };
 
   const fetchAll = useCallback(async (): Promise<SuperAdminDashboardData> => {
@@ -274,9 +281,11 @@ function Anomalies({ anomalies }: { anomalies?: SuperAdminAnomalies }) {
 function CompanyDistributionTable({
   companies,
   onSelect,
+  onRefresh,
 }: {
   companies: SuperAdminCompanyRow[];
   onSelect?: (row: SuperAdminCompanyRow) => void;
+  onRefresh?: (row: SuperAdminCompanyRow) => Promise<void>;
 }) {
   if (companies.length === 0) {
     return (
@@ -293,6 +302,7 @@ function CompanyDistributionTable({
           <th className="user-dashboard-col-num">活跃用户</th>
           <th className="user-dashboard-col-num">平均 ECPM</th>
           <th className="user-dashboard-col-num">最高 ECPM</th>
+          {onRefresh && <th className="user-dashboard-col-num">操作</th>}
         </tr>
       </thead>
       <tbody>
@@ -324,10 +334,40 @@ function CompanyDistributionTable({
             <td className="user-dashboard-col-num">
               {row.maxEcpmYuan === 0 ? '—' : `¥ ${row.maxEcpmYuan.toFixed(2)}`}
             </td>
+            {onRefresh && (
+              <td className="user-dashboard-col-num">
+                <RowRefreshButton onRefresh={() => onRefresh(row)} />
+              </td>
+            )}
           </tr>
         ))}
       </tbody>
     </table>
+  );
+}
+
+export function RowRefreshButton(props: {
+  onRefresh: () => Promise<void>;
+  label?: string;
+}) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      type="button"
+      className="row-refresh-button"
+      disabled={busy}
+      title={props.label ?? '刷新该行 ECPM'}
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await props.onRefresh();
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      {busy ? '同步中…' : '⟳'}
+    </button>
   );
 }
 

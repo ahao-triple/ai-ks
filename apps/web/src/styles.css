@@ -1834,6 +1834,28 @@ select {
   font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
 }
 
+.row-refresh-button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  color: var(--info);
+}
+
+.row-refresh-button:hover:not(:disabled) {
+  background: var(--surface-soft, var(--surface));
+  border-color: var(--info);
+}
+
+.row-refresh-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+  color: var(--text-muted);
+}
+
 /* ===== AgentDashboardPage 身份卡 ===== */
 .agent-dashboard-identity {
   background: linear-gradient(135deg, var(--warning-soft) 0%, var(--surface) 100%);

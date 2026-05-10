@@ -17,5 +17,6 @@ import { KuaishouTokenController } from './kuaishou-token.controller';
     KuaishouEcpmSchedulerService,
     KuaishouEcpmSyncJobService,
   ],
+  exports: [KuaishouEcpmRangeSyncService],
 })
 export class KuaishouRefreshModule {}

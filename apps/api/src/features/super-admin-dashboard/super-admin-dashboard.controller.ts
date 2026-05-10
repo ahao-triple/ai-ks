@@ -1,14 +1,24 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
   Get,
   Param,
+  Post,
   Query,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
 import { z } from 'zod';
+import { PrismaService } from '../../common/prisma/prisma.service';
+import {
+  type AdminPrincipal,
+  requireSuperAdminPrincipal,
+} from '../admin-auth/admin-auth.service';
 import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
+import { CurrentAdmin } from '../admin-auth/current-admin.decorator';
 import { SuperAdminGuard } from '../admin-auth/super-admin.guard';
+import { KuaishouEcpmRangeSyncService } from '../kuaishou-admin/kuaishou-ecpm-range-sync.service';
 import { UserDashboardService } from '../user-dashboard/user-dashboard.service';
 import { resolveChinaDayRange } from '../user/china-day-range';
 import { CachedResponseInterceptor } from '../../common/rate-limit/cached-response.interceptor';
@@ -25,6 +35,16 @@ const userRecordsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(200).optional().default(50),
 });
 
+const refreshScopeSchema = z.union([
+  z.object({ scope: z.literal('company'), companyId: z.string().min(1) }),
+  z.object({ scope: z.literal('game'), gameId: z.string().min(1) }),
+  z.object({
+    scope: z.literal('user'),
+    gameId: z.string().min(1),
+    userId: z.string().min(1),
+  }),
+]);
+
 const STANDARD_THROTTLE = {
   windowMs: 5_000,
   max: 1,
@@ -38,6 +58,8 @@ export class SuperAdminDashboardController {
   constructor(
     private readonly service: SuperAdminDashboardService,
     private readonly userDashboardService: UserDashboardService,
+    private readonly prisma: PrismaService,
+    private readonly rangeSyncService: KuaishouEcpmRangeSyncService,
   ) {}
 
   @Get('overview')
@@ -104,5 +126,72 @@ export class SuperAdminDashboardController {
       accountId,
       limit,
     });
+  }
+
+  @Post('refresh')
+  @UseGuards(SuperAdminGuard)
+  async refresh(
+    @CurrentAdmin() admin: AdminPrincipal,
+    @Body() body: unknown,
+  ) {
+    const parsed = refreshScopeSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new BadRequestException('刷新范围参数无效');
+    }
+    const input = parsed.data;
+    const actor = requireSuperAdminPrincipal(admin);
+
+    const callRefresh = (gameAppId: string, openIds?: string[]) =>
+      this.rangeSyncService.refreshRange({
+        actorId: actor.username,
+        actorType: actor.role,
+        gameAppId,
+        lookbackHours: 1,
+        markTokenError: true,
+        openIds,
+      });
+
+    if (input.scope === 'game') {
+      const game = await this.prisma.game.findUnique({
+        where: { id: input.gameId },
+        select: { gameAppId: true },
+      });
+      if (!game) throw new BadRequestException('游戏不存在');
+      return { results: [await callRefresh(game.gameAppId)] };
+    }
+
+    if (input.scope === 'company') {
+      const games = await this.prisma.game.findMany({
+        where: { companyId: input.companyId, deletedAt: null },
+        select: { gameAppId: true },
+      });
+      const results: unknown[] = [];
+      for (const game of games) {
+        results.push(await callRefresh(game.gameAppId));
+      }
+      return { results };
+    }
+
+    // scope === 'user'
+    const game = await this.prisma.game.findUnique({
+      where: { id: input.gameId },
+      select: { gameAppId: true },
+    });
+    if (!game) throw new BadRequestException('游戏不存在');
+    const openIdRecords = await this.prisma.gameOpenId.findMany({
+      where: { gameId: input.gameId, userId: input.userId },
+      select: { openId: true },
+    });
+    if (openIdRecords.length === 0) {
+      throw new BadRequestException('该用户在此游戏下没有 open_id');
+    }
+    return {
+      results: [
+        await callRefresh(
+          game.gameAppId,
+          openIdRecords.map((o) => o.openId),
+        ),
+      ],
+    };
   }
 }

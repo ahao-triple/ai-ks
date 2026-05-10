@@ -10,11 +10,18 @@ import type {
   SuperAdminUnderGameResult,
   UserDashboardEcpmRecordsResult,
 } from '../types/api';
+import { RowRefreshButton } from './SuperAdminDashboardPage';
 
 export type DrilldownApi = {
   loadCompanyGames: (companyId: string) => Promise<SuperAdminUnderCompanyResult>;
   loadGameUsers: (gameId: string) => Promise<SuperAdminUnderGameResult>;
   loadUserRecords: (userId: string) => Promise<UserDashboardEcpmRecordsResult>;
+  refreshScope: (
+    body:
+      | { scope: 'company'; companyId: string }
+      | { scope: 'game'; gameId: string }
+      | { scope: 'user'; gameId: string; userId: string },
+  ) => Promise<unknown>;
 };
 
 export type DrilldownPath =
@@ -165,6 +172,7 @@ function CompanyLevel(props: {
               <th className="user-dashboard-col-num">活跃用户</th>
               <th className="user-dashboard-col-num">平均 ECPM</th>
               <th className="user-dashboard-col-num">最高 ECPM</th>
+              <th className="user-dashboard-col-num">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -192,6 +200,14 @@ function CompanyLevel(props: {
                 <td className="user-dashboard-col-num">¥ {g.averageEcpmYuan.toFixed(2)}</td>
                 <td className="user-dashboard-col-num">
                   {g.maxEcpmYuan === 0 ? '—' : `¥ ${g.maxEcpmYuan.toFixed(2)}`}
+                </td>
+                <td className="user-dashboard-col-num">
+                  <RowRefreshButton
+                    onRefresh={async () => {
+                      await api.refreshScope({ scope: 'game', gameId: g.gameId });
+                      await refresh();
+                    }}
+                  />
                 </td>
               </tr>
             ))}
@@ -238,6 +254,7 @@ function GameLevel(props: {
               <th className="user-dashboard-col-num">平均 ECPM</th>
               <th className="user-dashboard-col-num">最高 ECPM</th>
               <th>最近活跃</th>
+              <th className="user-dashboard-col-num">操作</th>
             </tr>
           </thead>
           <tbody>
@@ -268,6 +285,18 @@ function GameLevel(props: {
                   {u.maxEcpmYuan === 0 ? '—' : `¥ ${u.maxEcpmYuan.toFixed(2)}`}
                 </td>
                 <td>{u.lastActiveAt ? formatRelative(u.lastActiveAt) : '从未活跃'}</td>
+                <td className="user-dashboard-col-num">
+                  <RowRefreshButton
+                    onRefresh={async () => {
+                      await api.refreshScope({
+                        scope: 'user',
+                        gameId: path.gameId,
+                        userId: u.userId,
+                      });
+                      await refresh();
+                    }}
+                  />
+                </td>
               </tr>
             ))}
           </tbody>

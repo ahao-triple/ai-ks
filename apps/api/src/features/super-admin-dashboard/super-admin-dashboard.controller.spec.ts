@@ -1,6 +1,8 @@
 import { Test } from '@nestjs/testing';
+import { PrismaService } from '../../common/prisma/prisma.service';
 import { AdminJwtGuard } from '../admin-auth/admin-jwt.guard';
 import { SuperAdminGuard } from '../admin-auth/super-admin.guard';
+import { KuaishouEcpmRangeSyncService } from '../kuaishou-admin/kuaishou-ecpm-range-sync.service';
 import { UserDashboardService } from '../user-dashboard/user-dashboard.service';
 import { SuperAdminDashboardController } from './super-admin-dashboard.controller';
 import { SuperAdminDashboardService } from './super-admin-dashboard.service';
@@ -42,6 +44,18 @@ describe('SuperAdminDashboardController', () => {
       .mockResolvedValue({ records: [], totalToday: 0, totalAll: 0 }),
   };
 
+  const prismaStub = {
+    game: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+    },
+    gameOpenId: { findMany: jest.fn() },
+  };
+
+  const rangeSyncService = {
+    refreshRange: jest.fn().mockResolvedValue({ ok: true }),
+  };
+
   let controller: SuperAdminDashboardController;
 
   beforeEach(async () => {
@@ -54,6 +68,11 @@ describe('SuperAdminDashboardController', () => {
       providers: [
         { provide: SuperAdminDashboardService, useValue: service },
         { provide: UserDashboardService, useValue: userDashboardService },
+        { provide: PrismaService, useValue: prismaStub },
+        {
+          provide: KuaishouEcpmRangeSyncService,
+          useValue: rangeSyncService,
+        },
       ],
     })
       .overrideGuard(AdminJwtGuard)

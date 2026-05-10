@@ -3592,6 +3592,8 @@ export function App() {
                 userId,
                 input,
               ),
+            refreshSuperAdminScope: (body) =>
+              aiKsApi.refreshSuperAdminScope(appSession.accessToken, body),
           }}
         />
       ) : null}
