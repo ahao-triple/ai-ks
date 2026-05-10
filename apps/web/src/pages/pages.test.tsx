@@ -667,6 +667,56 @@ describe('OperationsWorkspace', () => {
     expect(html).not.toContain('平台业务配置');
   });
 
+  it('keeps company admins read-only in company and game panes', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          adminCompanies: [adminCompany],
+          adminGames: [adminGame],
+          isSuperAdmin: false,
+        })}
+      />,
+    );
+
+    expect(html).toContain('公司管理');
+    expect(html).toContain('游戏管理');
+    expect(html).toContain('Acme Studio');
+    expect(html).toContain('Runner');
+    expect(html).not.toContain('创建公司');
+    expect(html).not.toContain('充值公司余额');
+    expect(html).not.toContain('创建游戏');
+    expect(html).not.toContain('分配游戏预算');
+    expect(html).not.toContain('打开创建公司弹窗');
+    expect(html).not.toContain('打开预算分配弹窗');
+  });
+
+  it('renders an ECPM wiring fallback until operations handlers are supplied', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace {...operationsWorkspaceProps()} />,
+    );
+
+    expect(html).toContain('ECPM 看板等待接入');
+    expect(html).toContain('等待 Task 9 接入数据与操作回调');
+    expect(html).not.toContain('ECPM 数据');
+    expect(html).not.toContain('更新报告');
+  });
+
+  it('renders the ECPM operations center when handlers are supplied', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          onEcpmDashboardQuery: () => undefined,
+          onEcpmJobSelect: () => undefined,
+          onEcpmUpdate: () => undefined,
+        })}
+      />,
+    );
+
+    expect(html).toContain('ECPM 数据');
+    expect(html).toContain('更新报告');
+    expect(html).not.toContain('ECPM 看板等待接入');
+  });
+
   it('renders platform config center for super admins', () => {
     const html = renderToStaticMarkup(
       <OperationsWorkspace

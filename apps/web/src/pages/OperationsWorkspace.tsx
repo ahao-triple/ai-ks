@@ -478,9 +478,9 @@ export function OperationsWorkspace({
   onCreateCompanyAdmin,
   onCreateGame,
   onCreateSession,
-  onEcpmDashboardQuery = () => undefined,
-  onEcpmJobSelect = () => undefined,
-  onEcpmUpdate = () => undefined,
+  onEcpmDashboardQuery,
+  onEcpmJobSelect,
+  onEcpmUpdate,
   onGameChange,
   onJsCodeChange,
   onKuaishouAppIdChange,
@@ -587,6 +587,15 @@ export function OperationsWorkspace({
     busyAction === 'ecpm-jobs'
       ? busyAction
       : '';
+  const ecpmOperationsWiring =
+    onEcpmDashboardQuery && onEcpmJobSelect && onEcpmUpdate
+      ? {
+          onDashboardQuery: onEcpmDashboardQuery,
+          onJobSelect: onEcpmJobSelect,
+          onUpdate: onEcpmUpdate,
+        }
+      : undefined;
+  const canUpdateEcpm = ecpmOperationsWiring ? isSuperAdmin : false;
   const [activePane, setActivePane] = useState<OperationsPane>('overview');
   const [activeDialog, setActiveDialog] = useState<SuperAdminDialog>('');
   const [resetConfirmation, setResetConfirmation] = useState('');
@@ -1181,67 +1190,7 @@ export function OperationsWorkspace({
                 </Button>
               </article>
             </div>
-          ) : (
-            <>
-              <div className="query-form">
-                <InputField
-                  disabled={workspaceBusy}
-                  label="公司名称"
-                  onChange={onNewCompanyNameChange}
-                  value={newCompanyName}
-                />
-                <Button
-                  disabled={workspaceBusy || !canCreateCompany}
-                  onClick={onCreateCompany}
-                  variant="secondary"
-                >
-                  {busyAction === 'company-create' ? '创建中' : '创建公司'}
-                </Button>
-              </div>
-              <div className="query-form">
-                <label className="ui-input-field">
-                  <span className="ui-input-label">充值公司</span>
-                  <span className="ui-input-control">
-                    <select
-                      disabled={workspaceBusy}
-                      onChange={(event) =>
-                        onBalanceCompanyIdChange(event.currentTarget.value)
-                      }
-                      value={balanceCompanyId}
-                    >
-                      <option value="">选择公司</option>
-                      {adminCompanies.map((company) => (
-                        <option key={company.id} value={company.id}>
-                          {company.name}
-                        </option>
-                      ))}
-                    </select>
-                  </span>
-                </label>
-                <InputField
-                  disabled={workspaceBusy}
-                  label="充值金额"
-                  onChange={onBalanceAmountChange}
-                  placeholder="例如 100.00"
-                  value={balanceAmountYuan}
-                />
-                <InputField
-                  disabled={workspaceBusy}
-                  label="充值原因"
-                  onChange={onBalanceReasonChange}
-                  placeholder="可选"
-                  value={balanceReason}
-                />
-                <Button
-                  disabled={workspaceBusy || !canAdjustCompanyBalance}
-                  onClick={onAdjustCompanyBalance}
-                  variant="secondary"
-                >
-                  {busyAction === 'company-balance' ? '提交中' : '充值公司余额'}
-                </Button>
-              </div>
-            </>
-          )}
+          ) : null}
         </Panel>
       </section>
 
@@ -1350,98 +1299,7 @@ export function OperationsWorkspace({
                 </Button>
               </article>
             </div>
-          ) : (
-            <>
-              <div className="query-form">
-                <label className="ui-input-field">
-                  <span className="ui-input-label">所属公司</span>
-                  <span className="ui-input-control">
-                    <select
-                      disabled={workspaceBusy}
-                      onChange={(event) =>
-                        onNewGameCompanyIdChange(event.currentTarget.value)
-                      }
-                      value={newGameCompanyId}
-                    >
-                      <option value="">选择公司</option>
-                      {adminCompanies.map((company) => (
-                        <option key={company.id} value={company.id}>
-                          {company.name}
-                        </option>
-                      ))}
-                    </select>
-                  </span>
-                </label>
-                <InputField
-                  disabled={workspaceBusy}
-                  label="游戏名称"
-                  onChange={onNewGameNameChange}
-                  value={newGameName}
-                />
-                <InputField
-                  disabled={workspaceBusy}
-                  label="game_app_id"
-                  onChange={onNewGameAppIdChange}
-                  value={newGameAppId}
-                />
-                <InputField
-                  disabled={workspaceBusy}
-                  label="game_secret"
-                  onChange={onNewGameSecretChange}
-                  value={newGameSecret}
-                />
-                <Button
-                  disabled={workspaceBusy || !canCreateGame}
-                  onClick={onCreateGame}
-                  variant="secondary"
-                >
-                  {busyAction === 'game-create' ? '创建中' : '创建游戏'}
-                </Button>
-              </div>
-              <div className="query-form">
-                <label className="ui-input-field">
-                  <span className="ui-input-label">预算游戏</span>
-                  <span className="ui-input-control">
-                    <select
-                      disabled={workspaceBusy}
-                      onChange={(event) =>
-                        onBudgetGameIdChange(event.currentTarget.value)
-                      }
-                      value={budgetGameId}
-                    >
-                      <option value="">选择游戏</option>
-                      {adminGames.map((game) => (
-                        <option key={game.id} value={game.id}>
-                          {game.name}
-                        </option>
-                      ))}
-                    </select>
-                  </span>
-                </label>
-                <InputField
-                  disabled={workspaceBusy}
-                  label="分配金额"
-                  onChange={onBudgetAmountChange}
-                  placeholder="例如 50.00"
-                  value={budgetAmountYuan}
-                />
-                <InputField
-                  disabled={workspaceBusy}
-                  label="分配原因"
-                  onChange={onBudgetReasonChange}
-                  placeholder="可选"
-                  value={budgetReason}
-                />
-                <Button
-                  disabled={workspaceBusy || !canAllocateBudget}
-                  onClick={onAllocateGameBudget}
-                  variant="secondary"
-                >
-                  {busyAction === 'game-budget' ? '提交中' : '分配游戏预算'}
-                </Button>
-              </div>
-            </>
-          )}
+          ) : null}
         </Panel>
 
         {selectedConfigGame && configGameDraft ? (
@@ -1470,18 +1328,30 @@ export function OperationsWorkspace({
       </section>
 
       <section className={paneClass('ecpm')}>
-        <EcpmOperationsCenter
-          canUpdate={isSuperAdmin}
-          companies={adminCompanies}
-          games={adminGames}
-          jobs={ecpmJobs}
-          loadingAction={ecpmLoadingAction}
-          onDashboardQuery={onEcpmDashboardQuery}
-          onJobSelect={onEcpmJobSelect}
-          onUpdate={onEcpmUpdate}
-          rows={ecpmRows}
-          selectedJob={selectedEcpmJob}
-        />
+        {ecpmOperationsWiring ? (
+          <EcpmOperationsCenter
+            canUpdate={canUpdateEcpm}
+            companies={adminCompanies}
+            games={adminGames}
+            jobs={ecpmJobs}
+            loadingAction={ecpmLoadingAction}
+            onDashboardQuery={ecpmOperationsWiring.onDashboardQuery}
+            onJobSelect={ecpmOperationsWiring.onJobSelect}
+            onUpdate={ecpmOperationsWiring.onUpdate}
+            rows={ecpmRows}
+            selectedJob={selectedEcpmJob}
+          />
+        ) : (
+          <Panel
+            actions={<StatusBadge tone="muted">未接入</StatusBadge>}
+            description="等待 Task 9 接入数据与操作回调"
+            title="ECPM 看板等待接入"
+          >
+            <p className="overview-empty">
+              当前仅保留一级入口，暂不展示查询、更新或任务按钮。
+            </p>
+          </Panel>
+        )}
       </section>
 
       <section className={paneClass('kuaishou')}>
