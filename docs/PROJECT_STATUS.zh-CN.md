@@ -17,7 +17,12 @@
 - 前端共享基础：`useThrottledRefresh` hook、`EcpmRecordTable` 通用组件、`AppShell` 左侧导航、`menusForScope` 按身份返回菜单项、`formatUserId/formatAccountId` ID 格式化
 - 接入：账号视图（`activeView === 'account'`）现在先渲染 `UserDashboardPage`，旧 `AccountWorkspace` 继续保留在下方提供提现 / 资料 / open_id 绑定等功能；不破坏现有可用性
 
-下一步（Plan 2）覆盖代理 / 公司管理员 / 超级管理员看板，以及 IA 全面切换到 `AppShell` 的左侧 10/4/3 项导航结构。
+**Plan 2A（超级管理员看板）已落地**：
+
+- 后端 `SuperAdminDashboardModule`：提供 `/admin/dashboard/{overview,companies,anomalies}` 三个接口，覆盖全平台 KPI（今日 ECPM 条数 / 平均 / 最高 / 活跃游戏 / 活跃用户）+ 按公司分布数据 + 异常聚合（最近 24h 同步失败 + 长时间无数据游戏）。受 `SuperAdminGuard + RateLimitGuard` 保护并启用静默节流
+- 前端 `SuperAdminDashboardPage`：复用 Plan 1 的 `useThrottledRefresh` 与 KPI 卡视觉风格，接入 `OperationsWorkspace` 顶部，旧 10 tab 留在下方。超级管理员登录后第一眼看到新看板（KPI / 异常区 / 公司分布表）
+
+下一步（Plan 2B/2C/2D）：代理看板 + 公司管理员看板 + 公司/游戏/用户下钻视图 + AppShell 替换 DashboardLayout 完整 IA 切换 + 拆除旧 OperationsWorkspace。
 
 本文档是当前项目进度的主入口，用于替代早期 `docs/superpowers/specs` 和 `docs/superpowers/plans` 下的阶段性设计文档。旧文档已归档，只作为历史设计记录，不再代表当前实现状态。
 
