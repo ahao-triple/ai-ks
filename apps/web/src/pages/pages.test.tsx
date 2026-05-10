@@ -639,15 +639,17 @@ describe('OperationsWorkspace', () => {
     );
 
     expect(html).toContain('运营功能栏');
-    expect(html).toContain(
-      '<button aria-current="page" class="operations-feature-nav-item" type="button">总览</button>',
-    );
+    expect(html).toContain('class="operations-feature-nav-label">总览</span>');
     expect(html).toContain('class="operations-feature-rail"');
-    expect(html).toContain('>公司</button>');
-    expect(html).toContain('>游戏</button>');
-    expect(html).toContain('>ECPM 看板</button>');
-    expect(html).toContain('>维护</button>');
-    expect(html).toContain('>权限</button>');
+    expect(html).toContain('class="operations-feature-nav-label">公司</span>');
+    expect(html).toContain('公司相关操作');
+    expect(html).toContain('class="operations-feature-nav-label">游戏</span>');
+    expect(html).toContain('游戏相关操作');
+    expect(html).toContain('class="operations-feature-nav-label">ECPM 看板</span>');
+    expect(html).toContain('查询/更新/报告');
+    expect(html).toContain('授权/同步');
+    expect(html).toContain('平台配置');
+    expect(html).toContain('测试维护');
     expect(html).not.toContain('operations-nav');
     expect(html).toContain('operations-pane operations-pane-active');
   });
@@ -673,7 +675,17 @@ describe('OperationsWorkspace', () => {
         {...operationsWorkspaceProps({
           adminCompanies: [adminCompany],
           adminGames: [adminGame],
+          configGameDraft: {
+            ecpmAutoSyncEnabled: true,
+            ecpmAutoSyncIntervalHours: 3,
+            gameSecret: 'secret-1',
+            name: 'Runner',
+            settlementPaused: false,
+          },
+          configSection: 'basic',
           isSuperAdmin: false,
+          selectedConfigGame: adminGame,
+          selectedConfigGameId: 'game-1',
         })}
       />,
     );
@@ -682,12 +694,54 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('游戏管理');
     expect(html).toContain('Acme Studio');
     expect(html).toContain('Runner');
+    expect(html).not.toContain('配置');
+    expect(html).not.toContain('game_secret');
+    expect(html).not.toContain('保存配置');
+    expect(html).not.toContain('分配预算');
+    expect(html).not.toContain('手动刷新 ECPM');
     expect(html).not.toContain('创建公司');
     expect(html).not.toContain('充值公司余额');
     expect(html).not.toContain('创建游戏');
     expect(html).not.toContain('分配游戏预算');
     expect(html).not.toContain('打开创建公司弹窗');
     expect(html).not.toContain('打开预算分配弹窗');
+  });
+
+  it('keeps company admins read-only for Kuaishou authorization and settlement', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          isSuperAdmin: false,
+          settlementPreview: confirmableSettlementPreview,
+        })}
+      />,
+    );
+
+    expect(html).toContain('平台授权');
+    expect(html).toContain('结算确认');
+    expect(html).toContain('预览结算');
+    expect(html).not.toContain('提交授权');
+    expect(html).not.toContain('刷新 token');
+    expect(html).not.toContain('确认结算');
+  });
+
+  it('keeps game integration in the game pane and Kuaishou focused on authorization and sync', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace {...operationsWorkspaceProps()} />,
+    );
+    const gameIndex = html.indexOf('游戏管理');
+    const integrationIndex = html.indexOf('游戏端登录');
+    const ecpmIndex = html.indexOf('ECPM 看板等待接入');
+    const authorizationIndex = html.indexOf(
+      '<h2 class="ui-panel-title">平台授权</h2>',
+    );
+    const syncIndex = html.indexOf('<h2 class="ui-panel-title">同步任务</h2>');
+
+    expect(gameIndex).toBeGreaterThanOrEqual(0);
+    expect(integrationIndex).toBeGreaterThan(gameIndex);
+    expect(integrationIndex).toBeLessThan(ecpmIndex);
+    expect(authorizationIndex).toBeGreaterThan(ecpmIndex);
+    expect(syncIndex).toBeGreaterThan(authorizationIndex);
   });
 
   it('renders an ECPM wiring fallback until operations handlers are supplied', () => {
@@ -900,24 +954,23 @@ describe('OperationsWorkspace', () => {
     expect(html).toContain('刷新日志');
   });
 
-  it('requires a confirmable settlement preview before enabling confirmation', () => {
+  it('requires a confirmable settlement preview before enabling super-admin confirmation', () => {
     const withoutPreview = renderToStaticMarkup(
-      <OperationsWorkspace {...operationsWorkspaceProps({ isSuperAdmin: false })} />,
+      <OperationsWorkspace {...operationsWorkspaceProps()} />,
     );
     const withPreview = renderToStaticMarkup(
       <OperationsWorkspace
         {...operationsWorkspaceProps({
-          isSuperAdmin: false,
           settlementPreview: confirmableSettlementPreview,
         })}
       />,
     );
 
     expect(withoutPreview).toContain(
-      '<button class="ui-button ui-button-primary" type="button" disabled="">确认结算</button>',
+      '<button class="ui-button ui-button-primary" type="button" disabled="">打开确认弹窗</button>',
     );
     expect(withPreview).toContain(
-      '<button class="ui-button ui-button-primary" type="button">确认结算</button>',
+      '<button class="ui-button ui-button-primary" type="button">打开确认弹窗</button>',
     );
   });
 

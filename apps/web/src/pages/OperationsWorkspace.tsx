@@ -626,21 +626,29 @@ export function OperationsWorkspace({
     companyAdminEditDisplayName.trim().length > 0 &&
     (companyAdminEditPassword.length === 0 ||
       companyAdminEditPassword.length >= 8);
-  const paneItems: Array<{ key: OperationsPane; label: string }> = [
+  const paneItems: Array<{
+    description?: string;
+    key: OperationsPane;
+    label: string;
+  }> = [
     { key: 'overview', label: '总览' },
-    { key: 'company', label: '公司' },
-    { key: 'game', label: '游戏' },
-    { key: 'ecpm', label: 'ECPM 看板' },
-    { key: 'kuaishou', label: '快手' },
+    { description: '公司相关操作', key: 'company', label: '公司' },
+    { description: '游戏相关操作', key: 'game', label: '游戏' },
+    { description: '查询/更新/报告', key: 'ecpm', label: 'ECPM 看板' },
+    { description: '授权/同步', key: 'kuaishou', label: '快手' },
     { key: 'settlement', label: '结算' },
     { key: 'withdrawal', label: '提现' },
     { key: 'audit', label: '审计' },
   ];
   if (isSuperAdmin) {
-    paneItems.push({ key: 'config', label: '配置' });
+    paneItems.push({ description: '平台配置', key: 'config', label: '配置' });
     paneItems.push({ key: 'agents', label: '代理' });
     paneItems.push({ key: 'company-admins', label: '权限' });
-    paneItems.push({ key: 'maintenance', label: '维护' });
+    paneItems.push({
+      description: '测试维护',
+      key: 'maintenance',
+      label: '维护',
+    });
   }
   const paneClass = (pane: OperationsPane) =>
     activePane === pane ? 'operations-pane operations-pane-active' : 'operations-pane';
@@ -803,7 +811,12 @@ export function OperationsWorkspace({
               onClick={() => setActivePane(item.key)}
               type="button"
             >
-              {item.label}
+              <span className="operations-feature-nav-label">{item.label}</span>
+              {item.description ? (
+                <span className="operations-feature-nav-description">
+                  {item.description}
+                </span>
+              ) : null}
             </button>
           ))}
         </nav>
@@ -988,131 +1001,6 @@ export function OperationsWorkspace({
         </Panel>
       </section>
 
-      <section className={paneClass('kuaishou')}>
-        {isSuperAdmin ? (
-          <Panel
-            description="联调页用于验证游戏登录换取 open_id 与 ECPM 明细写入链路。"
-            title="联调操作说明"
-          >
-            <div className="workflow-grid">
-              <article className="workflow-card">
-                <h3>换取 open_id</h3>
-                <p>输入 js_code 并选择游戏，调用 code2Session 生成可读 ID。</p>
-                <dl className="workflow-meta">
-                  <dt>按钮说明</dt>
-                  <dd>“换取 open_id”：验证游戏登录链路是否可用。</dd>
-                </dl>
-              </article>
-              <article className="workflow-card">
-                <h3>刷新游戏 ECPM</h3>
-                <p>按当前游戏触发 ECPM 拉取，检查写入数量与来源状态。</p>
-                <dl className="workflow-meta">
-                  <dt>按钮说明</dt>
-                  <dd>“刷新游戏 ECPM”：手动触发一次同步检查。</dd>
-                </dl>
-              </article>
-            </div>
-          </Panel>
-        ) : null}
-
-        <section className="metric-grid" aria-label="联调状态">
-        <MetricCard
-          detail={gameAppId || '-'}
-          label="测试游戏"
-          value={selectedGame?.name ?? '-'}
-        />
-        <MetricCard
-          detail={session?.openId ?? '等待游戏登录'}
-          label="最新可读 ID"
-          value={session?.readableId ?? '-'}
-        />
-        <MetricCard
-          detail={`${refreshResult?.requestedOpenIds.length ?? 0} 个 open_id`}
-          label="最近写入"
-          value={`${refreshResult?.savedCount ?? 0} 条`}
-        />
-        </section>
-
-        <section className="tool-grid">
-          <Panel description="code2Session" title="游戏端登录">
-            <div className="query-form">
-              <label className="ui-input-field">
-                <span className="ui-input-label">游戏</span>
-                <span className="ui-input-control">
-                  <select
-                    disabled={workspaceBusy}
-                    onChange={(event) => onGameChange(event.currentTarget.value)}
-                    value={gameAppId}
-                  >
-                    {games.map((game) => (
-                      <option key={game.gameAppId} value={game.gameAppId}>
-                        {game.name} / {game.gameAppId}
-                      </option>
-                    ))}
-                  </select>
-                </span>
-              </label>
-              <InputField
-                label="js_code"
-                list="sample-js-codes"
-                onChange={onJsCodeChange}
-                value={jsCode}
-              />
-              <datalist id="sample-js-codes">
-                {sampleJsCodes.map((code) => (
-                  <option key={code} value={code} />
-                ))}
-              </datalist>
-              <Button
-                disabled={!gameAppId || !jsCode || workspaceBusy}
-                icon={<Send size={16} />}
-                onClick={onCreateSession}
-              >
-                {busyAction === 'session' ? '获取中' : '换取 open_id'}
-              </Button>
-            </div>
-          </Panel>
-
-          <Panel
-            description={adminName ? `管理员 ${adminName}` : '管理员未登录'}
-            title="快手 ECPM"
-          >
-            <div className="query-form">
-              <ReadoutGrid
-                items={[
-                  { label: '游戏 AppID', value: gameAppId || '-' },
-                  { label: '刷新来源', value: refreshResult?.source ?? '等待刷新' },
-                ]}
-              />
-              <Button
-                disabled={!gameAppId || workspaceBusy}
-                icon={<RefreshCw size={16} />}
-                onClick={onRefreshEcpm}
-              >
-                {busyAction === 'refresh' ? '刷新中' : '刷新游戏 ECPM'}
-              </Button>
-            </div>
-          </Panel>
-
-          <Panel description={session?.game.name ?? '未获取'} title="最新 open_id">
-            <ReadoutGrid
-              items={[
-                { label: '可读 ID', value: session?.readableId ?? '-' },
-                { label: 'open_id', value: session?.openId ?? '-' },
-                { label: '写入明细', value: `${refreshResult?.savedCount ?? 0} 条` },
-              ]}
-            />
-          </Panel>
-        </section>
-
-        <EcpmTable
-          emptyLabel="暂无刷新明细"
-          meta={`${refreshResult?.requestedOpenIds.length ?? 0} 个 open_id`}
-          rows={refreshResult?.rows ?? []}
-          title="刷新明细"
-        />
-      </section>
-
       <section className={paneClass('company')}>
         <Panel
           actions={
@@ -1206,7 +1094,7 @@ export function OperationsWorkspace({
               {busyAction === 'admin-resources' ? '加载中' : '刷新游戏'}
             </Button>
           }
-          description="游戏配置与预算分配"
+          description="游戏列表与预算"
           title="游戏管理"
         >
           <ReadoutGrid
@@ -1224,7 +1112,7 @@ export function OperationsWorkspace({
                   <th>AppID</th>
                   <th>预算</th>
                   <th>状态</th>
-                  <th>操作</th>
+                  {isSuperAdmin ? <th>操作</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -1241,26 +1129,28 @@ export function OperationsWorkspace({
                         {game.settlementPaused ? '已暂停' : '可结算'}
                       </StatusBadge>
                     </td>
-                    <td>
-                      <Button
-                        compact
-                        disabled={workspaceBusy}
-                        icon={<Settings size={14} />}
-                        onClick={() => onOpenGameConfig(game.id)}
-                        variant={
-                          selectedConfigGameId === game.id
-                            ? 'primary'
-                            : 'secondary'
-                        }
-                      >
-                        配置
-                      </Button>
-                    </td>
+                    {isSuperAdmin ? (
+                      <td>
+                        <Button
+                          compact
+                          disabled={workspaceBusy}
+                          icon={<Settings size={14} />}
+                          onClick={() => onOpenGameConfig(game.id)}
+                          variant={
+                            selectedConfigGameId === game.id
+                              ? 'primary'
+                              : 'secondary'
+                          }
+                        >
+                          配置
+                        </Button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
                 {adminGames.length === 0 ? (
                   <tr>
-                    <td colSpan={6}>暂无游戏</td>
+                    <td colSpan={isSuperAdmin ? 6 : 5}>暂无游戏</td>
                   </tr>
                 ) : null}
               </tbody>
@@ -1302,7 +1192,130 @@ export function OperationsWorkspace({
           ) : null}
         </Panel>
 
-        {selectedConfigGame && configGameDraft ? (
+        {isSuperAdmin ? (
+          <Panel
+            description="联调页用于验证游戏登录换取 open_id 与 ECPM 明细写入链路。"
+            title="联调操作说明"
+          >
+            <div className="workflow-grid">
+              <article className="workflow-card">
+                <h3>换取 open_id</h3>
+                <p>输入 js_code 并选择游戏，调用 code2Session 生成可读 ID。</p>
+                <dl className="workflow-meta">
+                  <dt>按钮说明</dt>
+                  <dd>“换取 open_id”：验证游戏登录链路是否可用。</dd>
+                </dl>
+              </article>
+              <article className="workflow-card">
+                <h3>刷新游戏 ECPM</h3>
+                <p>按当前游戏触发 ECPM 拉取，检查写入数量与来源状态。</p>
+                <dl className="workflow-meta">
+                  <dt>按钮说明</dt>
+                  <dd>“刷新游戏 ECPM”：手动触发一次同步检查。</dd>
+                </dl>
+              </article>
+            </div>
+          </Panel>
+        ) : null}
+
+        <section className="metric-grid" aria-label="联调状态">
+          <MetricCard
+            detail={gameAppId || '-'}
+            label="测试游戏"
+            value={selectedGame?.name ?? '-'}
+          />
+          <MetricCard
+            detail={session?.openId ?? '等待游戏登录'}
+            label="最新可读 ID"
+            value={session?.readableId ?? '-'}
+          />
+          <MetricCard
+            detail={`${refreshResult?.requestedOpenIds.length ?? 0} 个 open_id`}
+            label="最近写入"
+            value={`${refreshResult?.savedCount ?? 0} 条`}
+          />
+        </section>
+
+        <section className="tool-grid">
+          <Panel description="code2Session" title="游戏端登录">
+            <div className="query-form">
+              <label className="ui-input-field">
+                <span className="ui-input-label">游戏</span>
+                <span className="ui-input-control">
+                  <select
+                    disabled={workspaceBusy}
+                    onChange={(event) => onGameChange(event.currentTarget.value)}
+                    value={gameAppId}
+                  >
+                    {games.map((game) => (
+                      <option key={game.gameAppId} value={game.gameAppId}>
+                        {game.name} / {game.gameAppId}
+                      </option>
+                    ))}
+                  </select>
+                </span>
+              </label>
+              <InputField
+                label="js_code"
+                list="sample-js-codes"
+                onChange={onJsCodeChange}
+                value={jsCode}
+              />
+              <datalist id="sample-js-codes">
+                {sampleJsCodes.map((code) => (
+                  <option key={code} value={code} />
+                ))}
+              </datalist>
+              <Button
+                disabled={!gameAppId || !jsCode || workspaceBusy}
+                icon={<Send size={16} />}
+                onClick={onCreateSession}
+              >
+                {busyAction === 'session' ? '获取中' : '换取 open_id'}
+              </Button>
+            </div>
+          </Panel>
+
+          <Panel
+            description={adminName ? `管理员 ${adminName}` : '管理员未登录'}
+            title="快手 ECPM"
+          >
+            <div className="query-form">
+              <ReadoutGrid
+                items={[
+                  { label: '游戏 AppID', value: gameAppId || '-' },
+                  { label: '刷新来源', value: refreshResult?.source ?? '等待刷新' },
+                ]}
+              />
+              <Button
+                disabled={!gameAppId || workspaceBusy}
+                icon={<RefreshCw size={16} />}
+                onClick={onRefreshEcpm}
+              >
+                {busyAction === 'refresh' ? '刷新中' : '刷新游戏 ECPM'}
+              </Button>
+            </div>
+          </Panel>
+
+          <Panel description={session?.game.name ?? '未获取'} title="最新 open_id">
+            <ReadoutGrid
+              items={[
+                { label: '可读 ID', value: session?.readableId ?? '-' },
+                { label: 'open_id', value: session?.openId ?? '-' },
+                { label: '写入明细', value: `${refreshResult?.savedCount ?? 0} 条` },
+              ]}
+            />
+          </Panel>
+        </section>
+
+        <EcpmTable
+          emptyLabel="暂无刷新明细"
+          meta={`${refreshResult?.requestedOpenIds.length ?? 0} 个 open_id`}
+          rows={refreshResult?.rows ?? []}
+          title="刷新明细"
+        />
+
+        {isSuperAdmin && selectedConfigGame && configGameDraft ? (
           <GameConfigView
           budgetAmountYuan={configBudgetAmountYuan}
           budgetReason={configBudgetReason}
@@ -1442,48 +1455,7 @@ export function OperationsWorkspace({
               </Button>
             </div>
           </div>
-        ) : (
-          <div className="query-form">
-            <InputField
-              disabled={workspaceBusy}
-              label="平台 app_id"
-              onChange={onKuaishouAppIdChange}
-              value={kuaishouAppId}
-            />
-            <InputField
-              disabled={workspaceBusy}
-              label="secret"
-              onChange={onKuaishouSecretChange}
-              type="password"
-              value={kuaishouSecret}
-            />
-            <InputField
-              disabled={workspaceBusy}
-              label="auth_code"
-              onChange={onKuaishouAuthCodeChange}
-              value={kuaishouAuthCode}
-            />
-            <div className="button-row">
-              <Button
-                disabled={workspaceBusy || !canAuthorizeKuaishou}
-                icon={<KeyRound size={16} />}
-                onClick={onKuaishouAuthorize}
-              >
-                {busyAction === 'kuaishou-authorize' ? '提交中' : '提交授权'}
-              </Button>
-              <Button
-                disabled={workspaceBusy || !canRefreshKuaishouToken}
-                icon={<RefreshCw size={16} />}
-                onClick={onKuaishouRefreshToken}
-                variant="secondary"
-              >
-                {busyAction === 'kuaishou-refresh-token'
-                  ? '刷新中'
-                  : '刷新 token'}
-              </Button>
-            </div>
-          </div>
-        )}
+        ) : null}
         </Panel>
       </section>
 
@@ -1620,25 +1592,21 @@ export function OperationsWorkspace({
             >
               {busyAction === 'settlement-preview' ? '预览中' : '预览结算'}
             </Button>
-            <Button
-              disabled={
-                !gameAppId ||
-                workspaceBusy ||
-                !settlementPreview?.canConfirm ||
-                settlementPreview.settlementCount === 0
-              }
-              onClick={
-                isSuperAdmin
-                  ? () => setActiveDialog('confirm-settlement')
-                  : onConfirmSettlement
-              }
-            >
-              {busyAction === 'settlement-confirm'
-                ? '结算中'
-                : isSuperAdmin
-                  ? '打开确认弹窗'
-                  : '确认结算'}
-            </Button>
+            {isSuperAdmin ? (
+              <Button
+                disabled={
+                  !gameAppId ||
+                  workspaceBusy ||
+                  !settlementPreview?.canConfirm ||
+                  settlementPreview.settlementCount === 0
+                }
+                onClick={() => setActiveDialog('confirm-settlement')}
+              >
+                {busyAction === 'settlement-confirm'
+                  ? '结算中'
+                  : '打开确认弹窗'}
+              </Button>
+            ) : null}
           </div>
         </div>
         <ReadoutGrid

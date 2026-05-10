@@ -360,6 +360,8 @@ select {
 }
 
 .operations-feature-nav-item {
+  display: grid;
+  gap: 3px;
   width: 100%;
   min-height: 38px;
   border: 1px solid var(--border);
@@ -375,6 +377,23 @@ select {
   cursor: pointer;
 }
 
+.operations-feature-nav-label,
+.operations-feature-nav-description {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.operations-feature-nav-label {
+  color: var(--foreground);
+}
+
+.operations-feature-nav-description {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
 .operations-feature-nav-item:hover {
   border-color: var(--border-strong);
   background: var(--surface-soft);
@@ -384,6 +403,12 @@ select {
 .operations-feature-nav-item[aria-current="page"] {
   border-color: rgba(204, 120, 92, 0.32);
   background: var(--primary-soft);
+  color: var(--primary-hover);
+}
+
+.operations-feature-nav-item[aria-current="page"] .operations-feature-nav-label,
+.operations-feature-nav-item[aria-current="page"]
+  .operations-feature-nav-description {
   color: var(--primary-hover);
 }
 
