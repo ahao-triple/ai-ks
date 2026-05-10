@@ -585,15 +585,16 @@ export function OperationsWorkspace({
     busyAction === 'ecpm-jobs'
       ? busyAction
       : '';
-  const ecpmOperationsWiring =
-    onEcpmDashboardQuery && onEcpmJobSelect && onEcpmUpdate
-      ? {
-          onDashboardQuery: onEcpmDashboardQuery,
-          onJobSelect: onEcpmJobSelect,
-          onUpdate: onEcpmUpdate,
-        }
-      : undefined;
-  const canUpdateEcpm = ecpmOperationsWiring ? isSuperAdmin : false;
+  const ecpmOperationsWiring = onEcpmDashboardQuery
+    ? {
+        onDashboardQuery: onEcpmDashboardQuery,
+        onJobSelect: onEcpmJobSelect ?? (() => undefined),
+        onUpdate: onEcpmUpdate ?? (() => undefined),
+      }
+    : undefined;
+  const canUpdateEcpm = Boolean(
+    ecpmOperationsWiring && isSuperAdmin && onEcpmUpdate,
+  );
   const [activePane, setActivePane] = useState<OperationsPane>('overview');
   const [activeDialog, setActiveDialog] = useState<SuperAdminDialog>('');
   const [resetConfirmation, setResetConfirmation] = useState('');
@@ -1361,13 +1362,13 @@ export function OperationsWorkspace({
             canUpdate={canUpdateEcpm}
             companies={adminCompanies}
             games={adminGames}
-            jobs={ecpmJobs}
+            jobs={onEcpmJobSelect ? ecpmJobs : []}
             loadingAction={ecpmLoadingAction}
             onDashboardQuery={ecpmOperationsWiring.onDashboardQuery}
             onJobSelect={ecpmOperationsWiring.onJobSelect}
             onUpdate={ecpmOperationsWiring.onUpdate}
             rows={ecpmRows}
-            selectedJob={selectedEcpmJob}
+            selectedJob={onEcpmJobSelect ? selectedEcpmJob : undefined}
           />
         ) : (
           <Panel

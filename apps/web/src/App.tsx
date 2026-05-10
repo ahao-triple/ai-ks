@@ -67,8 +67,12 @@ import type {
   BusinessClosureReport,
   DemoGame,
   EarningsResult,
+  EcpmDashboardRow,
+  EcpmDashboardScope,
   EcpmLookbackHours,
   EcpmRefreshResult,
+  EcpmUpdateJob,
+  EcpmUpdateRequest,
   GameSessionResult,
   IntegrationStatus,
   KuaishouEcpmSyncJob,
@@ -271,6 +275,12 @@ export function App() {
   const [jsCode, setJsCode] = useState('');
   const [gameSession, setGameSession] = useState<GameSessionResult>();
   const [refreshResult, setRefreshResult] = useState<EcpmRefreshResult>();
+  const [ecpmDashboardRows, setEcpmDashboardRows] = useState<
+    EcpmDashboardRow[]
+  >([]);
+  const [ecpmUpdateJobs, setEcpmUpdateJobs] = useState<EcpmUpdateJob[]>([]);
+  const [selectedEcpmUpdateJob, setSelectedEcpmUpdateJob] =
+    useState<EcpmUpdateJob>();
   const [identity, setIdentity] = useState('');
   const [bindIdentity, setBindIdentity] = useState('');
   const [earnings, setEarnings] = useState<EarningsResult>();
@@ -1169,6 +1179,7 @@ export function App() {
     setBudgetReason('');
     resetPlatformConfigState();
     clearGameConfigState();
+    clearEcpmOperationsState();
   }
 
   function resetPlatformConfigState() {
@@ -1194,6 +1205,12 @@ export function App() {
     setKuaishouAppId('');
     setKuaishouSecret('');
     setKuaishouAuthCode('');
+  }
+
+  function clearEcpmOperationsState() {
+    setEcpmDashboardRows([]);
+    setEcpmUpdateJobs([]);
+    setSelectedEcpmUpdateJob(undefined);
   }
 
   function applyAdminResources(
@@ -1238,6 +1255,9 @@ export function App() {
           loadAdminAgentsForToken(token, isCurrent),
           loadBusinessClosureForToken(token, isCurrent),
           loadCompanyAdminsForToken(token, isCurrent),
+          loadEcpmUpdateJobsForToken(token, isCurrent, {
+            reportError: false,
+          }),
           loadPlatformConfigForToken(token, isCurrent),
         ]);
       } else {
@@ -1245,6 +1265,8 @@ export function App() {
         setAdminAgents([]);
         setBusinessClosure(undefined);
         setCompanyAdmins([]);
+        setEcpmUpdateJobs([]);
+        setSelectedEcpmUpdateJob(undefined);
         resetPlatformConfigState();
       }
       const settlementGameId = getAdminEntrySettlementGameRowId(
@@ -2021,6 +2043,174 @@ export function App() {
       }
 
       setNotice('同步任务已刷新');
+    }, 'admin');
+  }
+
+  function mergeEcpmUpdateJob(
+    currentJob: EcpmUpdateJob | undefined,
+    nextJob: EcpmUpdateJob,
+  ): EcpmUpdateJob {
+    return {
+      ...currentJob,
+      ...nextJob,
+      items: nextJob.items ?? currentJob?.items,
+    };
+  }
+
+  function upsertEcpmUpdateJob(nextJob: EcpmUpdateJob) {
+    setEcpmUpdateJobs((current) => {
+      const existingIndex = current.findIndex((job) => job.id === nextJob.id);
+      if (existingIndex < 0) {
+        return [nextJob, ...current].slice(0, 20);
+      }
+
+      const merged = [...current];
+      merged[existingIndex] = mergeEcpmUpdateJob(
+        merged[existingIndex],
+        nextJob,
+      );
+      return merged;
+    });
+  }
+
+  async function queryEcpmDashboard(
+    scope: EcpmDashboardScope,
+    query: Record<string, string | undefined>,
+  ) {
+    if (!adminAccessToken) {
+      reportActionError('ecpm-dashboard', '请先登录管理员账号');
+      return;
+    }
+
+    await runAction('ecpm-dashboard', async (isCurrent) => {
+      const result = await aiKsApi.getEcpmDashboard(
+        adminAccessToken,
+        scope,
+        query,
+      );
+      if (!isCurrent()) {
+        return;
+      }
+
+      setEcpmDashboardRows(result.rows);
+      setNotice(`ECPM 看板已查询，返回 ${result.rows.length} 条数据`);
+    }, 'admin');
+  }
+
+  async function loadEcpmUpdateJobsForToken(
+    token: string,
+    isCurrent = () => true,
+    options: LoadOptions = {},
+  ) {
+    try {
+      const result = await aiKsApi.getEcpmUpdateJobs(token, 20);
+      if (!isCurrent()) {
+        return false;
+      }
+
+      setEcpmUpdateJobs(result.jobs);
+      return true;
+    } catch (nextError) {
+      if (!isCurrent()) {
+        return false;
+      }
+
+      if (nextError instanceof ApiError && nextError.status === 401) {
+        handleUnauthorized('admin');
+        setError(nextError.message);
+        return false;
+      }
+
+      if (options.reportError ?? true) {
+        setError(
+          nextError instanceof Error ? nextError.message : '请求失败，请检查 API',
+        );
+      }
+      return false;
+    }
+  }
+
+  async function loadEcpmUpdateJobs() {
+    if (!adminAccessToken) {
+      reportActionError('ecpm-jobs', '请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin('ecpm-jobs')) {
+      return;
+    }
+
+    await runAction('ecpm-jobs', async (isCurrent) => {
+      const loaded = await loadEcpmUpdateJobsForToken(
+        adminAccessToken,
+        isCurrent,
+      );
+      if (!isCurrent()) {
+        return;
+      }
+      if (!loaded) {
+        return false;
+      }
+
+      setNotice('ECPM 更新任务已刷新');
+    }, 'admin');
+  }
+
+  async function loadEcpmUpdateJob(jobId: string) {
+    if (!adminAccessToken) {
+      reportActionError('ecpm-jobs', '请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin('ecpm-jobs')) {
+      return;
+    }
+
+    await runAction('ecpm-jobs', async (isCurrent) => {
+      const job = await aiKsApi.getEcpmUpdateJob(adminAccessToken, jobId);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setSelectedEcpmUpdateJob(job);
+      upsertEcpmUpdateJob(job);
+      setNotice(`ECPM 更新任务 ${job.id} 已加载，状态 ${job.status}`);
+    }, 'admin');
+  }
+
+  async function updateEcpm(request: EcpmUpdateRequest) {
+    if (!adminAccessToken) {
+      reportActionError('ecpm-update', '请先登录管理员账号');
+      return;
+    }
+    if (!ensureSuperAdmin('ecpm-update')) {
+      return;
+    }
+
+    await runAction('ecpm-update', async (isCurrent) => {
+      const job = await aiKsApi.updateEcpm(adminAccessToken, request);
+      if (!isCurrent()) {
+        return;
+      }
+
+      setSelectedEcpmUpdateJob(job);
+      upsertEcpmUpdateJob(job);
+      await Promise.allSettled([
+        loadEcpmUpdateJobsForToken(adminAccessToken, isCurrent, {
+          reportError: false,
+        }),
+        aiKsApi
+          .getEcpmDashboard(adminAccessToken, 'latest', {})
+          .then((result) => {
+            if (isCurrent()) {
+              setEcpmDashboardRows(result.rows);
+            }
+          }),
+      ]);
+      if (!isCurrent()) {
+        return;
+      }
+
+      upsertEcpmUpdateJob(job);
+      setNotice(`ECPM 更新任务 ${job.id} 已提交，状态 ${job.status}`);
     }, 'admin');
   }
 
@@ -3343,6 +3533,8 @@ export function App() {
           configGameDraft={configGameDraft}
           configKuaishouEcpmJobs={configKuaishouEcpmJobs}
           configSection={configSection}
+          ecpmJobs={isSuperAdmin(currentAdmin) ? ecpmUpdateJobs : []}
+          ecpmRows={ecpmDashboardRows}
           gameAppId={gameAppId}
           games={games}
           isSuperAdmin={isSuperAdmin(currentAdmin)}
@@ -3388,6 +3580,11 @@ export function App() {
           onCreateCompanyAdmin={createCompanyAdmin}
           onCreateGame={createAdminGame}
           onCreateSession={createGameSession}
+          onEcpmDashboardQuery={queryEcpmDashboard}
+          onEcpmJobSelect={
+            isSuperAdmin(currentAdmin) ? loadEcpmUpdateJob : undefined
+          }
+          onEcpmUpdate={isSuperAdmin(currentAdmin) ? updateEcpm : undefined}
           onGameChange={changeGameAppId}
           onJsCodeChange={setJsCode}
           onKuaishouAppIdChange={setKuaishouAppId}
@@ -3439,6 +3636,9 @@ export function App() {
           sampleJsCodes={sampleJsCodes}
           selectedConfigGame={selectedConfigGame}
           selectedConfigGameId={selectedConfigGameId}
+          selectedEcpmJob={
+            isSuperAdmin(currentAdmin) ? selectedEcpmUpdateJob : undefined
+          }
           selectedSettlementDetail={selectedSettlementDetail}
           selectedGame={selectedGame}
           selectedWithdrawalDetail={selectedWithdrawalDetail}
@@ -3537,6 +3737,9 @@ function isOperationsBusyAction(
     case 'company-admins':
     case 'company-balance':
     case 'company-create':
+    case 'ecpm-dashboard':
+    case 'ecpm-jobs':
+    case 'ecpm-update':
     case 'game-budget':
     case 'game-config':
     case 'game-config-budget':

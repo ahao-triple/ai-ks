@@ -881,6 +881,24 @@ describe('OperationsWorkspace', () => {
     expect(html).not.toContain('ECPM 看板等待接入');
   });
 
+  it('lets company admins use dashboard-only ECPM wiring with update disabled', () => {
+    const html = renderToStaticMarkup(
+      <OperationsWorkspace
+        {...operationsWorkspaceProps({
+          isSuperAdmin: false,
+          onEcpmDashboardQuery: () => undefined,
+        })}
+      />,
+    );
+
+    expect(html).toContain('ECPM 数据');
+    expect(html).toContain('更新报告');
+    expect(html).not.toContain('ECPM 看板等待接入');
+    expect(html).toContain(
+      '<button class="ui-button ui-button-primary ui-button-compact" type="button" disabled="">更新</button>',
+    );
+  });
+
   it('renders platform config center for super admins', () => {
     const html = renderToStaticMarkup(
       <OperationsWorkspace

@@ -35,6 +35,18 @@ describe('operation feedback text', () => {
       resolveOperationFeedbackText('settlement-detail-batch-1').runningMessage,
     ).toBe('正在加载结算批次详情...');
   });
+
+  it('names ecpm dashboard, update, and job operations', () => {
+    expect(resolveOperationFeedbackText('ecpm-dashboard').runningMessage).toBe(
+      '正在查询 ECPM 看板...',
+    );
+    expect(resolveOperationFeedbackText('ecpm-update').runningMessage).toBe(
+      '正在更新 ECPM 数据...',
+    );
+    expect(resolveOperationFeedbackText('ecpm-jobs').runningMessage).toBe(
+      '正在刷新 ECPM 更新任务...',
+    );
+  });
 });
 
 describe('operation feedback state helpers', () => {
