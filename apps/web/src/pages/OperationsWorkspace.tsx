@@ -331,7 +331,7 @@ function tokenStatusText(status?: KuaishouTokenStatusResult['status']) {
       return '异常';
     case 'UNCONFIGURED':
     default:
-      return '未配置';
+      return '未授权';
   }
 }
 

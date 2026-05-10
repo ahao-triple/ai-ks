@@ -1419,7 +1419,7 @@ describe('OperationsWorkspace', () => {
     );
 
     expect(html).toContain('平台授权');
-    expect(html).toContain('ACTIVE');
+    expect(html).toContain('已授权');
     expect(html).toContain('database');
     expect(html).toContain('advertiser-1');
     expect(html).toContain('2026-05-09');
