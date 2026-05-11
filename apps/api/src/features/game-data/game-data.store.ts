@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException, Optional } from '@nestjs/common';
-import { SettlementStatus } from '@prisma/client';
+import { Prisma, SettlementStatus } from '@prisma/client';
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { generateReadableId } from '../../domain/identity/readable-id';
 import { computeDisplayAmount } from '../../domain/money/display-amount.strategy';
@@ -10,7 +10,7 @@ import {
 
 type GameDataPrisma = Pick<
   PrismaService,
-  'game' | 'gameOpenId' | 'rawEcpm'
+  'game' | 'gameOpenId' | 'rawEcpm' | '$transaction' | '$executeRaw' | '$queryRaw'
 >;
 
 type GameWithCompany = {
@@ -170,60 +170,70 @@ export class GameDataStore {
     if (!game) {
       throw new NotFoundException(`游戏 ${input.gameAppId} 未配置或已删除`);
     }
+    if (input.rows.length === 0) {
+      return [];
+    }
 
     const platformConfig =
       (await this.platformConfigService?.getConfig()) ??
       DEFAULT_PLATFORM_CONFIG;
     const ratioPercent = platformConfig.displayRatioPercent;
-    const savedRows = [];
-    for (const row of input.rows) {
-      const openIdRecord = await this.prisma.gameOpenId.findUnique({
-        where: {
-          openId: row.openId,
-        },
-      });
+
+    // 性能关键：原实现 N 行 = 2N 次远端 SQL（findUnique + upsert，每次 RTT ~300ms）。
+    // 改成两条 SQL：一次批量查 open_id 关联 + 一句 INSERT ... ON CONFLICT DO UPDATE。
+    const uniqueOpenIds = Array.from(new Set(input.rows.map((r) => r.openId)));
+    const openIdRecords = await this.prisma.gameOpenId.findMany({
+      where: { openId: { in: uniqueOpenIds } },
+      select: { id: true, openId: true },
+    });
+    const openIdMap = new Map(openIdRecords.map((r) => [r.openId, r.id]));
+    const configSnapshot = JSON.stringify({ ratioPercent });
+    const status = SettlementStatus.PENDING;
+
+    const tuples = input.rows.map((row) => {
       const displayAmount = computeDisplayAmount({
         rawCostLi: row.rawCostLi,
-        rule: {
-          ratioPercent,
-        },
+        rule: { ratioPercent },
       });
-      const savedRow = await this.prisma.rawEcpm.upsert({
-        create: {
-          configSnapshot: {
-            ratioPercent,
-          },
-          displayAmountLi: displayAmount.displayAmountLi,
-          eventTime: row.eventTime,
-          gameId: game.id,
-          openId: row.openId,
-          openIdRecordId: openIdRecord?.id,
-          platformEventId: row.platformEventId,
-          rawCostLi: row.rawCostLi,
-          status: SettlementStatus.PENDING,
-        },
-        update: {
-          configSnapshot: {
-            ratioPercent,
-          },
-          displayAmountLi: displayAmount.displayAmountLi,
-          eventTime: row.eventTime,
-          openId: row.openId,
-          openIdRecordId: openIdRecord?.id,
-          rawCostLi: row.rawCostLi,
-        },
-        where: {
-          gameId_platformEventId: {
-            gameId: game.id,
-            platformEventId: row.platformEventId,
-          },
-        },
-      });
+      return Prisma.sql`(
+        gen_random_uuid(),
+        ${game.id},
+        ${openIdMap.get(row.openId) ?? null},
+        ${row.platformEventId},
+        ${row.openId},
+        ${row.rawCostLi}::bigint,
+        ${displayAmount.displayAmountLi}::bigint,
+        ${row.eventTime},
+        ${status}::"SettlementStatus",
+        ${configSnapshot}::jsonb,
+        NOW()
+      )`;
+    });
 
-      savedRows.push(this.presentEcpmRow(savedRow, game.gameAppId));
-    }
+    await this.prisma.$executeRaw`
+      INSERT INTO raw_ecpms (
+        id, game_id, open_id_record_id, platform_event_id, open_id,
+        raw_cost_li, display_amount_li, event_time, status, config_snapshot, created_at
+      ) VALUES ${Prisma.join(tuples)}
+      ON CONFLICT (game_id, platform_event_id) DO UPDATE SET
+        open_id_record_id = EXCLUDED.open_id_record_id,
+        open_id = EXCLUDED.open_id,
+        raw_cost_li = EXCLUDED.raw_cost_li,
+        display_amount_li = EXCLUDED.display_amount_li,
+        event_time = EXCLUDED.event_time,
+        config_snapshot = EXCLUDED.config_snapshot
+    `;
 
-    return savedRows;
+    // 用一次 findMany 把刚写入的行（含 update 后的）拉回来供调用方使用
+    const savedRowEntities = await this.prisma.rawEcpm.findMany({
+      where: {
+        gameId: game.id,
+        platformEventId: { in: input.rows.map((r) => r.platformEventId) },
+      },
+    });
+    return savedRowEntities.map((row) =>
+      this.presentEcpmRow(row, game.gameAppId),
+    );
   }
 
   async queryEarnings(input: QueryEarningsInput) {
