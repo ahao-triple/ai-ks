@@ -16,57 +16,39 @@ export function resolveChinaDayRange(date?: string) {
   };
 }
 
-function currentChinaDate() {
+export function currentChinaDate(now?: Date) {
   return new Intl.DateTimeFormat('en-CA', {
     day: '2-digit',
     month: '2-digit',
     timeZone: 'Asia/Shanghai',
     year: 'numeric',
-  }).format(new Date());
+  }).format(now ?? new Date());
 }
 
-// 看板时间筛选 tab：今天 / 昨天 / 三天总 / 七天总（"总"= 累计含今天）。
-export type DashboardRangeKey = 'today' | 'yesterday' | 'last3' | 'last7';
-
-const DASHBOARD_RANGE_KEYS: ReadonlySet<DashboardRangeKey> = new Set([
-  'today',
-  'yesterday',
-  'last3',
-  'last7',
-]);
-
-export function isDashboardRangeKey(value: unknown): value is DashboardRangeKey {
-  return (
-    typeof value === 'string' &&
-    DASHBOARD_RANGE_KEYS.has(value as DashboardRangeKey)
-  );
-}
-
-export function resolveDashboardRange(key: DashboardRangeKey) {
+// 看板查询的日期范围（颗粒度天）。
+// startDay / endDay 都接受 YYYY-MM-DD，缺省 = 当天 ~ 当天。
+export function resolveDashboardDayRange(input: {
+  startDay?: string;
+  endDay?: string;
+}) {
   const today = currentChinaDate();
-  const todayStart = new Date(`${today}T00:00:00+08:00`);
-  const dayMs = 24 * 60 * 60 * 1000;
-
-  switch (key) {
-    case 'today':
-      return {
-        startAt: todayStart,
-        endAt: new Date(todayStart.getTime() + dayMs),
-      };
-    case 'yesterday':
-      return {
-        startAt: new Date(todayStart.getTime() - dayMs),
-        endAt: todayStart,
-      };
-    case 'last3':
-      return {
-        startAt: new Date(todayStart.getTime() - 2 * dayMs),
-        endAt: new Date(todayStart.getTime() + dayMs),
-      };
-    case 'last7':
-      return {
-        startAt: new Date(todayStart.getTime() - 6 * dayMs),
-        endAt: new Date(todayStart.getTime() + dayMs),
-      };
+  const startDay = input.startDay ?? today;
+  const endDay = input.endDay ?? today;
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(startDay) ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(endDay)
+  ) {
+    throw new BadRequestException('start / end 必须是 YYYY-MM-DD');
   }
+  const startAt = new Date(`${startDay}T00:00:00+08:00`);
+  const endExclusive = new Date(
+    new Date(`${endDay}T00:00:00+08:00`).getTime() + 24 * 60 * 60 * 1000,
+  );
+  if (Number.isNaN(startAt.getTime()) || Number.isNaN(endExclusive.getTime())) {
+    throw new BadRequestException('start / end 日期无效');
+  }
+  if (startAt.getTime() >= endExclusive.getTime()) {
+    throw new BadRequestException('start 必须早于或等于 end');
+  }
+  return { startAt, endAt: endExclusive, startDay, endDay };
 }

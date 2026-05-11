@@ -6,21 +6,21 @@ import {
 import { KuaishouRefreshController } from './kuaishou-refresh.controller';
 
 describe('KuaishouRefreshController', () => {
-  it('delegates manual lookback refresh to the range sync service', async () => {
+  it('delegates manual refresh with explicit dataDays to the range sync service', async () => {
     const dependencies = createDependencies();
     const controller = createController(dependencies);
 
     const result = await controller.refresh(admin, {
       gameAppId: 'game-1',
-      lookbackHours: 5,
+      dataDays: ['2026-05-06', '2026-05-07'],
       openIds: ['open-1', 'open-2'],
     });
 
     expect(dependencies.rangeSyncService.refreshRange).toHaveBeenCalledWith({
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
+      dataDays: ['2026-05-06', '2026-05-07'],
       gameAppId: 'game-1',
-      lookbackHours: 5,
       markTokenError: true,
       openIds: ['open-1', 'open-2'],
     });
@@ -40,7 +40,7 @@ describe('KuaishouRefreshController', () => {
     expect(dependencies.rangeSyncService.refreshRange).not.toHaveBeenCalled();
   });
 
-  it('defaults missing lookbackHours to 1 when delegating refresh', async () => {
+  it('defaults missing dataDays/openIds when delegating refresh', async () => {
     const dependencies = createDependencies();
     const controller = createController(dependencies);
 
@@ -51,14 +51,14 @@ describe('KuaishouRefreshController', () => {
     expect(dependencies.rangeSyncService.refreshRange).toHaveBeenCalledWith({
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
+      dataDays: undefined,
       gameAppId: 'game-1',
-      lookbackHours: 1,
       markTokenError: true,
       openIds: undefined,
     });
   });
 
-  it('rejects legacy dataHour requests instead of silently ignoring them', async () => {
+  it('rejects legacy dataHour requests (strict schema)', async () => {
     const dependencies = createDependencies();
     const controller = createController(dependencies);
 
@@ -136,7 +136,7 @@ describe('KuaishouRefreshController', () => {
     });
   });
 
-  it('retries failed ECPM sync jobs with their original data-hour range', async () => {
+  it('retries failed ECPM sync jobs with the original data day(s)', async () => {
     const dependencies = createDependencies();
     const controller = createController(dependencies);
 
@@ -145,16 +145,13 @@ describe('KuaishouRefreshController', () => {
     expect(dependencies.syncJobService.findJobById).toHaveBeenCalledWith(
       'job-1',
     );
+    // syncJob fixture 的 startedDataHour=2026-05-08 endedDataHour=2026-05-08
+    // 重试时 buildDataDaysBetween 返回单日 ['2026-05-08']
     expect(dependencies.rangeSyncService.refreshRange).toHaveBeenCalledWith({
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
-      dataHours: [
-        '2026-05-08T12:00:00+08:00',
-        '2026-05-08T13:00:00+08:00',
-        '2026-05-08T14:00:00+08:00',
-      ],
+      dataDays: ['2026-05-08'],
       gameAppId: 'game-1',
-      lookbackHours: 5,
       markTokenError: true,
     });
     expect(result).toEqual(refreshResult);

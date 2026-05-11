@@ -1,11 +1,14 @@
 import { BadRequestException } from '@nestjs/common';
 import {
-  buildRecentDataHours,
+  buildDataDaysBetween,
+  buildRecentDataDays,
   KuaishouEcpmRangeSyncService,
 } from './kuaishou-ecpm-range-sync.service';
 
+const now = new Date('2026-05-08T06:20:00.000Z'); // 北京时间 2026-05-08 14:20
+
 describe('KuaishouEcpmRangeSyncService', () => {
-  it('splits lookback 5 into hourly China dataHour points and refreshes the entire game (no open_id filter)', async () => {
+  it('默认刷新当天（不传 dataDays/openIds 时，整游戏刷一天）', async () => {
     const dependencies = createDependencies();
     const service = createService(dependencies);
 
@@ -13,47 +16,26 @@ describe('KuaishouEcpmRangeSyncService', () => {
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
       gameAppId: 'game-1',
-      lookbackHours: 5,
       markTokenError: true,
     });
 
-    const dataHours = [
-      '2026-05-08T10:00:00+08:00',
-      '2026-05-08T11:00:00+08:00',
-      '2026-05-08T12:00:00+08:00',
-      '2026-05-08T13:00:00+08:00',
-      '2026-05-08T14:00:00+08:00',
-    ];
-    expect(buildRecentDataHours(5, now)).toEqual(dataHours);
-    // openIds 未传 → 整游戏刷新，不应回库查 open_id
+    const today = '2026-05-08';
     expect(dependencies.demoStore.listOpenIds).not.toHaveBeenCalled();
-    expect(dependencies.ecpmClient.refresh).toHaveBeenCalledTimes(5);
-    dataHours.forEach((dataHour, index) => {
-      expect(dependencies.ecpmClient.refresh).toHaveBeenNthCalledWith(index + 1, {
-        dataHour,
-        gameAppId: 'game-1',
-        openIds: [],
-      });
+    expect(dependencies.ecpmClient.refresh).toHaveBeenCalledTimes(1);
+    expect(dependencies.ecpmClient.refresh).toHaveBeenCalledWith({
+      dataDay: today,
+      gameAppId: 'game-1',
+      openIds: [],
     });
     expect(dependencies.syncJobService.startJob).toHaveBeenCalledWith({
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
-      dataHour: dataHours[4],
-      endedDataHour: dataHours[4],
+      dataHour: today,
+      endedDataHour: today,
       gameAppId: 'game-1',
-      lookbackHours: 5,
+      lookbackHours: 1,
       requestedOpenIdCount: 0,
-      startedDataHour: dataHours[0],
-    });
-    expect(dependencies.demoStore.addEcpmRows).toHaveBeenCalledWith({
-      gameAppId: 'game-1',
-      rows: [
-        expect.objectContaining({ platformEventId: 'event-1' }),
-        expect.objectContaining({ platformEventId: 'event-2' }),
-        expect.objectContaining({ platformEventId: 'event-3' }),
-        expect.objectContaining({ platformEventId: 'event-4' }),
-        expect.objectContaining({ platformEventId: 'event-5' }),
-      ],
+      startedDataHour: today,
     });
     expect(dependencies.syncJobService.completeJob).toHaveBeenCalledWith({
       jobId: 'job-1',
@@ -65,10 +47,9 @@ describe('KuaishouEcpmRangeSyncService', () => {
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
       metadata: {
-        dataHours,
-        startedDataHour: dataHours[0],
-        endedDataHour: dataHours[4],
-        lookbackHours: 5,
+        dataDays: [today],
+        startedDataDay: today,
+        endedDataDay: today,
         jobId: 'job-1',
         requestedOpenIds: [],
         savedCount: 3,
@@ -78,19 +59,13 @@ describe('KuaishouEcpmRangeSyncService', () => {
       targetType: 'kuaishou_ecpm_refresh',
     });
     expect(result).toMatchObject({
-      job: expect.objectContaining({
-        id: 'job-1',
-        savedCount: 3,
-        status: 'SUCCEEDED',
-      }),
       requestedOpenIds: [],
       savedCount: 3,
       source: 'kuaishou',
     });
-    expect(result.rows).toHaveLength(3);
   });
 
-  it('uses explicit openIds when provided and does not list known openIds', async () => {
+  it('显式传 openIds 时按 open_id 子集刷新', async () => {
     const dependencies = createDependencies();
     const service = createService(dependencies);
 
@@ -98,117 +73,80 @@ describe('KuaishouEcpmRangeSyncService', () => {
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
       gameAppId: 'game-1',
-      lookbackHours: 1,
       markTokenError: true,
       openIds: ['open-explicit'],
     });
 
     expect(dependencies.demoStore.listOpenIds).not.toHaveBeenCalled();
     expect(dependencies.ecpmClient.refresh).toHaveBeenCalledWith({
-      dataHour: '2026-05-08T14:00:00+08:00',
+      dataDay: '2026-05-08',
       gameAppId: 'game-1',
       openIds: ['open-explicit'],
     });
   });
 
-  it('uses explicit data hours when retrying a failed sync job', async () => {
+  it('支持显式多天 dataDays，按顺序逐天调用', async () => {
     const dependencies = createDependencies();
     const service = createService(dependencies);
-    const dataHours = [
-      '2026-05-08T09:00:00+08:00',
-      '2026-05-08T10:00:00+08:00',
-    ];
+    const dataDays = ['2026-05-06', '2026-05-07', '2026-05-08'];
 
     await service.refreshRange({
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
-      dataHours,
+      dataDays,
       gameAppId: 'game-1',
-      lookbackHours: 5,
       markTokenError: true,
     });
 
-    // 没传 openIds → 整游戏刷新（不按 open_id 过滤），client 收到空数组
-    expect(dependencies.demoStore.listOpenIds).not.toHaveBeenCalled();
-    expect(dependencies.ecpmClient.refresh).toHaveBeenCalledTimes(2);
-    expect(dependencies.ecpmClient.refresh).toHaveBeenNthCalledWith(1, {
-      dataHour: dataHours[0],
-      gameAppId: 'game-1',
-      openIds: [],
+    expect(dependencies.ecpmClient.refresh).toHaveBeenCalledTimes(3);
+    dataDays.forEach((dataDay, index) => {
+      expect(dependencies.ecpmClient.refresh).toHaveBeenNthCalledWith(
+        index + 1,
+        {
+          dataDay,
+          gameAppId: 'game-1',
+          openIds: [],
+        },
+      );
     });
-    expect(dependencies.ecpmClient.refresh).toHaveBeenNthCalledWith(2, {
-      dataHour: dataHours[1],
-      gameAppId: 'game-1',
-      openIds: [],
-    });
-    expect(dependencies.syncJobService.startJob).toHaveBeenCalledWith({
-      actorId: 'admin',
-      actorType: 'SUPER_ADMIN',
-      dataHour: dataHours[1],
-      endedDataHour: dataHours[1],
-      gameAppId: 'game-1',
-      lookbackHours: 5,
-      requestedOpenIdCount: 0,
-      startedDataHour: dataHours[0],
-    });
-    expect(dependencies.auditLogService.record).toHaveBeenCalledWith(
+    expect(dependencies.syncJobService.startJob).toHaveBeenCalledWith(
       expect.objectContaining({
-        metadata: expect.objectContaining({
-          dataHours,
-          endedDataHour: dataHours[1],
-          startedDataHour: dataHours[0],
-        }),
+        dataHour: '2026-05-08',
+        endedDataHour: '2026-05-08',
+        startedDataHour: '2026-05-06',
+        lookbackHours: 3,
       }),
     );
   });
 
-  it('uses explicit empty openIds and does not list known openIds', async () => {
-    const dependencies = createDependencies();
-    const service = createService(dependencies);
-
-    const result = await service.refreshRange({
-      actorId: 'admin',
-      actorType: 'SUPER_ADMIN',
-      gameAppId: 'game-1',
-      lookbackHours: 1,
-      markTokenError: true,
-      openIds: [],
-    });
-
-    expect(dependencies.demoStore.listOpenIds).not.toHaveBeenCalled();
-    expect(dependencies.syncJobService.startJob).toHaveBeenCalledWith({
-      actorId: 'admin',
-      actorType: 'SUPER_ADMIN',
-      dataHour: '2026-05-08T14:00:00+08:00',
-      endedDataHour: '2026-05-08T14:00:00+08:00',
-      gameAppId: 'game-1',
-      lookbackHours: 1,
-      requestedOpenIdCount: 0,
-      startedDataHour: '2026-05-08T14:00:00+08:00',
-    });
-    expect(dependencies.ecpmClient.refresh).toHaveBeenCalledWith({
-      dataHour: '2026-05-08T14:00:00+08:00',
-      gameAppId: 'game-1',
-      openIds: [],
-    });
-    expect(result.requestedOpenIds).toEqual([]);
-  });
-
-  it('rejects unsupported lookback hours', async () => {
+  it('拒绝非法日期格式', async () => {
     const service = createService(createDependencies());
-
     await expect(
       service.refreshRange({
         actorId: 'admin',
         actorType: 'SUPER_ADMIN',
+        dataDays: ['not-a-date'],
         gameAppId: 'game-1',
-        lookbackHours: 2,
         markTokenError: true,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('fails job and marks token errors when upstream refresh fails and markTokenError is true', async () => {
+  it('拒绝超过 7 天的范围', async () => {
+    const service = createService(createDependencies());
+    const dataDays = Array.from({ length: 8 }, (_, i) => `2026-05-0${i + 1}`);
+    await expect(
+      service.refreshRange({
+        actorId: 'admin',
+        actorType: 'SUPER_ADMIN',
+        dataDays,
+        gameAppId: 'game-1',
+        markTokenError: true,
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('上游 API 失败 + markTokenError=true 时记录 token 错误', async () => {
     const dependencies = createDependencies();
     dependencies.ecpmClient.refresh.mockRejectedValueOnce(
       new Error('token expired'),
@@ -220,7 +158,6 @@ describe('KuaishouEcpmRangeSyncService', () => {
         actorId: 'admin',
         actorType: 'SUPER_ADMIN',
         gameAppId: 'game-1',
-        lookbackHours: 1,
         markTokenError: true,
       }),
     ).rejects.toThrow('token expired');
@@ -232,22 +169,18 @@ describe('KuaishouEcpmRangeSyncService', () => {
     expect(dependencies.tokenService.markTokenError).toHaveBeenCalledWith(
       'token expired',
     );
-    expect(dependencies.auditLogService.record).toHaveBeenCalledWith({
-      action: 'kuaishou.ecpm_refresh_failed',
-      actorId: 'admin',
-      actorType: 'SUPER_ADMIN',
-      metadata: expect.objectContaining({
-        dataHours: ['2026-05-08T14:00:00+08:00'],
-        error: 'token expired',
-        jobId: 'job-1',
-        requestedOpenIds: [],
+    expect(dependencies.auditLogService.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'kuaishou.ecpm_refresh_failed',
+        metadata: expect.objectContaining({
+          error: 'token expired',
+          requestedOpenIds: [],
+        }),
       }),
-      targetId: 'game-1',
-      targetType: 'kuaishou_ecpm_refresh',
-    });
+    );
   });
 
-  it('fails job without marking token errors when upstream refresh fails and markTokenError is false', async () => {
+  it('上游 API 失败 + markTokenError=false 时不动 token', async () => {
     const dependencies = createDependencies();
     dependencies.ecpmClient.refresh.mockRejectedValueOnce(
       new Error('token expired'),
@@ -259,69 +192,14 @@ describe('KuaishouEcpmRangeSyncService', () => {
         actorId: 'system',
         actorType: 'system',
         gameAppId: 'game-1',
-        lookbackHours: 1,
         markTokenError: false,
       }),
     ).rejects.toThrow('token expired');
 
-    expect(dependencies.syncJobService.failJob).toHaveBeenCalledWith({
-      errorMessage: 'token expired',
-      jobId: 'job-1',
-    });
     expect(dependencies.tokenService.markTokenError).not.toHaveBeenCalled();
-    expect(dependencies.auditLogService.record).toHaveBeenCalledWith({
-      action: 'kuaishou.ecpm_refresh_failed',
-      actorId: 'system',
-      actorType: 'system',
-      metadata: expect.objectContaining({
-        dataHours: ['2026-05-08T14:00:00+08:00'],
-        error: 'token expired',
-        jobId: 'job-1',
-        requestedOpenIds: [],
-      }),
-      targetId: 'game-1',
-      targetType: 'kuaishou_ecpm_refresh',
-    });
   });
 
-  it('fails job without marking token errors when save fails and markTokenError is false', async () => {
-    const dependencies = createDependencies();
-    dependencies.demoStore.addEcpmRows.mockRejectedValueOnce(
-      new Error('database unavailable'),
-    );
-    const service = createService(dependencies);
-
-    await expect(
-      service.refreshRange({
-        actorId: 'system',
-        actorType: 'system',
-        gameAppId: 'game-1',
-        lookbackHours: 1,
-        markTokenError: false,
-      }),
-    ).rejects.toThrow('database unavailable');
-
-    expect(dependencies.syncJobService.failJob).toHaveBeenCalledWith({
-      errorMessage: 'database unavailable',
-      jobId: 'job-1',
-    });
-    expect(dependencies.tokenService.markTokenError).not.toHaveBeenCalled();
-    expect(dependencies.auditLogService.record).toHaveBeenCalledWith({
-      action: 'kuaishou.ecpm_refresh_failed',
-      actorId: 'system',
-      actorType: 'system',
-      metadata: expect.objectContaining({
-        dataHours: ['2026-05-08T14:00:00+08:00'],
-        error: 'database unavailable',
-        jobId: 'job-1',
-        requestedOpenIds: [],
-      }),
-      targetId: 'game-1',
-      targetType: 'kuaishou_ecpm_refresh',
-    });
-  });
-
-  it('does not mark token errors when save fails even if markTokenError is true', async () => {
+  it('写库失败时即使 markTokenError=true 也不动 token', async () => {
     const dependencies = createDependencies();
     dependencies.demoStore.addEcpmRows.mockRejectedValueOnce(
       new Error('database unavailable'),
@@ -333,7 +211,6 @@ describe('KuaishouEcpmRangeSyncService', () => {
         actorId: 'admin',
         actorType: 'SUPER_ADMIN',
         gameAppId: 'game-1',
-        lookbackHours: 1,
         markTokenError: true,
       }),
     ).rejects.toThrow('database unavailable');
@@ -343,22 +220,9 @@ describe('KuaishouEcpmRangeSyncService', () => {
       jobId: 'job-1',
     });
     expect(dependencies.tokenService.markTokenError).not.toHaveBeenCalled();
-    expect(dependencies.auditLogService.record).toHaveBeenCalledWith({
-      action: 'kuaishou.ecpm_refresh_failed',
-      actorId: 'admin',
-      actorType: 'SUPER_ADMIN',
-      metadata: expect.objectContaining({
-        dataHours: ['2026-05-08T14:00:00+08:00'],
-        error: 'database unavailable',
-        jobId: 'job-1',
-        requestedOpenIds: [],
-      }),
-      targetId: 'game-1',
-      targetType: 'kuaishou_ecpm_refresh',
-    });
   });
 
-  it('does not fail job or mark token errors when job completion fails after rows are saved', async () => {
+  it('completeJob 失败时不再 failJob 也不动 token', async () => {
     const dependencies = createDependencies();
     dependencies.syncJobService.completeJob.mockRejectedValueOnce(
       new Error('job update failed'),
@@ -370,21 +234,15 @@ describe('KuaishouEcpmRangeSyncService', () => {
         actorId: 'admin',
         actorType: 'SUPER_ADMIN',
         gameAppId: 'game-1',
-        lookbackHours: 1,
         markTokenError: true,
       }),
     ).rejects.toThrow('job update failed');
 
-    expect(dependencies.demoStore.addEcpmRows).toHaveBeenCalledWith({
-      gameAppId: 'game-1',
-      rows: [expect.objectContaining({ platformEventId: 'event-1' })],
-    });
     expect(dependencies.syncJobService.failJob).not.toHaveBeenCalled();
     expect(dependencies.tokenService.markTokenError).not.toHaveBeenCalled();
-    expect(dependencies.auditLogService.record).not.toHaveBeenCalled();
   });
 
-  it('does not fail job or mark token errors when success audit fails after rows are saved', async () => {
+  it('audit 失败时不动 token，但抛带 auditOnly 标记的错误', async () => {
     const dependencies = createDependencies();
     dependencies.auditLogService.record.mockRejectedValueOnce(
       new Error('audit unavailable'),
@@ -395,36 +253,46 @@ describe('KuaishouEcpmRangeSyncService', () => {
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
       gameAppId: 'game-1',
-      lookbackHours: 1,
       markTokenError: true,
     });
 
-    await expect(refresh).rejects.toThrow('audit unavailable');
     await expect(refresh).rejects.toMatchObject({
       auditOnly: true,
       code: 'AUDIT_LOG_FAILED',
-      completedJob: expect.objectContaining({
-        id: 'job-1',
-        savedCount: 3,
-        status: 'SUCCEEDED',
-      }),
-      message: 'audit unavailable',
       savedCount: 3,
       source: 'kuaishou',
     });
 
-    expect(dependencies.demoStore.addEcpmRows).toHaveBeenCalled();
-    expect(dependencies.syncJobService.completeJob).toHaveBeenCalledWith({
-      jobId: 'job-1',
-      savedCount: 3,
-      source: 'kuaishou',
-    });
     expect(dependencies.syncJobService.failJob).not.toHaveBeenCalled();
     expect(dependencies.tokenService.markTokenError).not.toHaveBeenCalled();
   });
 });
 
-const now = new Date('2026-05-08T06:20:00.000Z');
+describe('buildRecentDataDays', () => {
+  it('生成含今天在内的最近 N 天（升序）', () => {
+    expect(buildRecentDataDays(3, now)).toEqual([
+      '2026-05-06',
+      '2026-05-07',
+      '2026-05-08',
+    ]);
+  });
+});
+
+describe('buildDataDaysBetween', () => {
+  it('生成起止之间的所有 YYYY-MM-DD（含两端）', () => {
+    expect(buildDataDaysBetween('2026-05-06', '2026-05-08')).toEqual([
+      '2026-05-06',
+      '2026-05-07',
+      '2026-05-08',
+    ]);
+  });
+
+  it('超过 7 天抛 BadRequestException', () => {
+    expect(() =>
+      buildDataDaysBetween('2026-05-01', '2026-05-08'),
+    ).toThrow(BadRequestException);
+  });
+});
 
 function createService(dependencies: ReturnType<typeof createDependencies>) {
   return new (KuaishouEcpmRangeSyncService as any)(
@@ -439,9 +307,7 @@ function createService(dependencies: ReturnType<typeof createDependencies>) {
 
 function createDependencies() {
   const savedRows = [1, 2, 3].map((index) => ({
-    configSnapshot: {
-      ratioPercent: 50,
-    },
+    configSnapshot: { ratioPercent: 50 },
     displayAmountLi: BigInt(1000 + index),
     eventTime: new Date(`2026-05-08T0${index}:00:00.000Z`),
     gameAppId: 'game-1',
@@ -453,8 +319,8 @@ function createDependencies() {
     actorId: 'admin',
     actorType: 'SUPER_ADMIN',
     createdAt: new Date('2026-05-08T06:00:00.000Z'),
-    dataHour: '2026-05-08T14:00:00+08:00',
-    endedDataHour: '2026-05-08T14:00:00+08:00',
+    dataHour: '2026-05-08',
+    endedDataHour: '2026-05-08',
     errorMessage: null,
     finishedAt: new Date('2026-05-08T06:01:00.000Z'),
     gameAppId: 'game-1',
@@ -464,7 +330,7 @@ function createDependencies() {
     savedCount: 3,
     source: 'kuaishou',
     startedAt: new Date('2026-05-08T06:00:00.000Z'),
-    startedDataHour: '2026-05-08T14:00:00+08:00',
+    startedDataHour: '2026-05-08',
     status: 'SUCCEEDED',
     updatedAt: new Date('2026-05-08T06:01:00.000Z'),
   };

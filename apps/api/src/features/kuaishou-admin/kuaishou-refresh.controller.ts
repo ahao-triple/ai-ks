@@ -27,22 +27,17 @@ import {
   presentKuaishouEcpmSyncJob,
 } from './kuaishou-ecpm-sync-job.service';
 import {
-  buildDataHoursBetween,
+  buildDataDaysBetween,
   KuaishouEcpmRangeSyncService,
 } from './kuaishou-ecpm-range-sync.service';
 
-const lookbackHoursSchema = z.union([
-  z.literal(1),
-  z.literal(5),
-  z.literal(24),
-  z.literal(72),
-  z.literal(168),
-]);
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const refreshEcpmSchema = z
   .object({
     gameAppId: z.string().min(1),
-    lookbackHours: lookbackHoursSchema.optional(),
+    // 可选：要刷的日期列表（YYYY-MM-DD[]），不传 = 默认当天
+    dataDays: z.array(z.string().regex(DAY_RE)).optional(),
     openIds: z.array(z.string().min(1)).optional(),
   })
   .strict();
@@ -70,7 +65,7 @@ export class KuaishouRefreshController {
       actorId: actor.username,
       actorType: actor.role,
       gameAppId: input.gameAppId,
-      lookbackHours: input.lookbackHours ?? 1,
+      dataDays: input.dataDays,
       markTokenError: true,
       openIds: input.openIds,
     });
@@ -112,9 +107,8 @@ export class KuaishouRefreshController {
     return this.rangeSyncService.refreshRange({
       actorId: actor.username,
       actorType: actor.role,
-      dataHours: buildRetryDataHours(job),
+      dataDays: buildRetryDataDays(job),
       gameAppId: job.gameAppId,
-      lookbackHours: resolveRetryLookbackHours(job),
       markTokenError: true,
     });
   }
@@ -133,15 +127,8 @@ function parseLimit(value?: string) {
   return Math.min(Math.max(Math.trunc(parsed), 1), 100);
 }
 
-function buildRetryDataHours(job: KuaishouEcpmSyncJob) {
-  return buildDataHoursBetween(
-    job.startedDataHour ?? job.dataHour,
-    job.endedDataHour ?? job.dataHour,
-  );
-}
-
-function resolveRetryLookbackHours(job: KuaishouEcpmSyncJob) {
-  return job.lookbackHours && [1, 5, 24, 72, 168].includes(job.lookbackHours)
-    ? job.lookbackHours
-    : 1;
+function buildRetryDataDays(job: KuaishouEcpmSyncJob) {
+  const startDay = (job.startedDataHour ?? job.dataHour).slice(0, 10);
+  const endDay = (job.endedDataHour ?? job.dataHour).slice(0, 10);
+  return buildDataDaysBetween(startDay, endDay);
 }

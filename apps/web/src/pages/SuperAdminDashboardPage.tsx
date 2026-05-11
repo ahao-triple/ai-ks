@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  DashboardRangeTabs,
-  RefreshWindowSelect,
+  DateRangeInput,
   RowRefreshButton,
-  type DashboardRangeKey,
-  type RefreshLookbackHours,
+  defaultDashboardDayRange,
+  type DashboardDayRange,
 } from '../components/domain';
 import { useThrottledRefresh } from '../lib/useThrottledRefresh';
 import type {
@@ -21,26 +20,29 @@ import {
   type DrilldownPath,
 } from './SuperAdminDrilldown';
 
+type DayRangeInput = { startDay?: string; endDay?: string };
+
 export type SuperAdminDashboardApi = {
   getSuperAdminDashboardOverview: (
-    range?: DashboardRangeKey,
+    input?: DayRangeInput,
   ) => Promise<SuperAdminOverview>;
   getSuperAdminDashboardCompanies: (
-    range?: DashboardRangeKey,
+    input?: DayRangeInput,
   ) => Promise<SuperAdminCompanyRow[]>;
   getSuperAdminDashboardAnomalies: () => Promise<SuperAdminAnomalies>;
   getSuperAdminGamesUnderCompany: (
     companyId: string,
-    range?: DashboardRangeKey,
+    input?: DayRangeInput,
   ) => Promise<SuperAdminUnderCompanyResult>;
   getSuperAdminUsersUnderGame: (
     gameId: string,
-    range?: DashboardRangeKey,
+    input?: DayRangeInput,
   ) => Promise<SuperAdminUnderGameResult>;
   getSuperAdminUserRecords: (
     userId: string,
     input?: {
-      range?: DashboardRangeKey;
+      startDay?: string;
+      endDay?: string;
       gameId?: string;
       accountId?: string;
       limit?: number;
@@ -48,22 +50,9 @@ export type SuperAdminDashboardApi = {
   ) => Promise<UserDashboardEcpmRecordsResult>;
   refreshSuperAdminScope: (
     body:
-      | {
-          scope: 'company';
-          companyId: string;
-          lookbackHours?: RefreshLookbackHours;
-        }
-      | {
-          scope: 'game';
-          gameId: string;
-          lookbackHours?: RefreshLookbackHours;
-        }
-      | {
-          scope: 'user';
-          gameId: string;
-          userId: string;
-          lookbackHours?: RefreshLookbackHours;
-        },
+      | { scope: 'company'; companyId: string }
+      | { scope: 'game'; gameId: string }
+      | { scope: 'user'; gameId: string; userId: string },
   ) => Promise<unknown>;
 };
 
@@ -80,29 +69,31 @@ export type SuperAdminDashboardPageProps = {
 
 export function SuperAdminDashboardPage(props: SuperAdminDashboardPageProps) {
   const { api, initialData } = props;
-  const [rangeKey, setRangeKey] = useState<DashboardRangeKey>('today');
+  const [dayRange, setDayRange] = useState<DashboardDayRange>(
+    defaultDashboardDayRange(),
+  );
   const [drilldown, setDrilldown] = useState<DrilldownPath | null>(null);
-  const [companyRefreshHours, setCompanyRefreshHours] =
-    useState<RefreshLookbackHours>(1);
 
+  const rangeInput = { startDay: dayRange.startDay, endDay: dayRange.endDay };
   const drilldownApi: DrilldownApi = {
     loadCompanyGames: (companyId) =>
-      api.getSuperAdminGamesUnderCompany(companyId, rangeKey),
+      api.getSuperAdminGamesUnderCompany(companyId, rangeInput),
     loadGameUsers: (gameId) =>
-      api.getSuperAdminUsersUnderGame(gameId, rangeKey),
+      api.getSuperAdminUsersUnderGame(gameId, rangeInput),
     loadUserRecords: (userId) =>
-      api.getSuperAdminUserRecords(userId, { range: rangeKey, limit: 50 }),
+      api.getSuperAdminUserRecords(userId, { ...rangeInput, limit: 50 }),
     refreshScope: (body) => api.refreshSuperAdminScope(body),
   };
 
   const fetchAll = useCallback(async (): Promise<SuperAdminDashboardData> => {
+    const range = { startDay: dayRange.startDay, endDay: dayRange.endDay };
     const [overview, companies, anomalies] = await Promise.all([
-      api.getSuperAdminDashboardOverview(rangeKey),
-      api.getSuperAdminDashboardCompanies(rangeKey),
+      api.getSuperAdminDashboardOverview(range),
+      api.getSuperAdminDashboardCompanies(range),
       api.getSuperAdminDashboardAnomalies(),
     ]);
     return { overview, companies, anomalies };
-  }, [api, rangeKey]);
+  }, [api, dayRange.startDay, dayRange.endDay]);
 
   const {
     data: liveData,
@@ -141,7 +132,7 @@ export function SuperAdminDashboardPage(props: SuperAdminDashboardPageProps) {
           </div>
         </div>
         <div className="user-dashboard-time-filters">
-          <DashboardRangeTabs value={rangeKey} onChange={setRangeKey} />
+          <DateRangeInput value={dayRange} onChange={setDayRange} />
           <button
             type="button"
             className="user-dashboard-refresh"
@@ -207,15 +198,10 @@ export function SuperAdminDashboardPage(props: SuperAdminDashboardPageProps) {
             <span className="user-dashboard-subtitle">
               点击公司名进入下钻
             </span>
-            <RefreshWindowSelect
-              value={companyRefreshHours}
-              onChange={setCompanyRefreshHours}
-            />
           </div>
         </div>
         <CompanyDistributionTable
           companies={data?.companies ?? []}
-          refreshHours={companyRefreshHours}
           onSelect={(row) =>
             setDrilldown({
               kind: 'company',
@@ -224,12 +210,25 @@ export function SuperAdminDashboardPage(props: SuperAdminDashboardPageProps) {
             })
           }
           onRefresh={async (row) => {
+            const tStart = performance.now();
+            // eslint-disable-next-line no-console
+            console.log(
+              `[刷新链路:UI] 点击行级 ⟳ companyId=${row.companyId} companyName=${row.companyName}`,
+            );
             await api.refreshSuperAdminScope({
               scope: 'company',
               companyId: row.companyId,
-              lookbackHours: companyRefreshHours,
             });
+            const tApi = performance.now();
+            // eslint-disable-next-line no-console
+            console.log(
+              `[刷新链路:UI] 后端刷新返回 耗时=${Math.round(tApi - tStart)}ms 开始重拉看板数据`,
+            );
             await refresh();
+            // eslint-disable-next-line no-console
+            console.log(
+              `[刷新链路:UI] 全链路完成 看板重拉耗时=${Math.round(performance.now() - tApi)}ms 总耗时=${Math.round(performance.now() - tStart)}ms`,
+            );
           }}
         />
       </section>
@@ -300,12 +299,10 @@ function CompanyDistributionTable({
   companies,
   onSelect,
   onRefresh,
-  refreshHours,
 }: {
   companies: SuperAdminCompanyRow[];
   onSelect?: (row: SuperAdminCompanyRow) => void;
   onRefresh?: (row: SuperAdminCompanyRow) => Promise<void>;
-  refreshHours?: RefreshLookbackHours;
 }) {
   if (companies.length === 0) {
     return (
@@ -356,10 +353,7 @@ function CompanyDistributionTable({
             </td>
             {onRefresh && (
               <td className="user-dashboard-col-num">
-                <RowRefreshButton
-                  hours={refreshHours}
-                  onRefresh={() => onRefresh(row)}
-                />
+                <RowRefreshButton onRefresh={() => onRefresh(row)} />
               </td>
             )}
           </tr>

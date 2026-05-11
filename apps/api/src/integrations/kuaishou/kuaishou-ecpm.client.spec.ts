@@ -22,7 +22,7 @@ describe('KuaishouEcpmClient', () => {
 
     await expect(
       client.refresh({
-        dataHour: '2026-05-08',
+        dataDay: '2026-05-08',
         gameAppId: 'game-1',
         openIds: ['open-1'],
       }),
@@ -46,7 +46,7 @@ describe('KuaishouEcpmClient', () => {
     });
 
     const result = await client.refresh({
-      dataHour: '2026-05-08',
+      dataDay: '2026-05-08',
       gameAppId: 'game-1',
       openIds: ['open-1'],
     });
@@ -96,7 +96,7 @@ describe('KuaishouEcpmClient', () => {
     });
 
     await client.refresh({
-      dataHour: '2026-05-08',
+      dataDay: '2026-05-08',
       gameAppId: 'game-1',
       openIds: ['open-1'],
     });
@@ -134,7 +134,7 @@ describe('KuaishouEcpmClient', () => {
 
     await expect(
       client.refresh({
-        dataHour: '2026-05-08',
+        dataDay: '2026-05-08',
         gameAppId: 'game-1',
         openIds: ['open-1'],
       }),
@@ -155,7 +155,7 @@ describe('KuaishouEcpmClient', () => {
     });
 
     await client.refresh({
-      dataHour: '2026-05-08',
+      dataDay: '2026-05-08',
       gameAppId: 'game-1',
       openIds: [],
     });
@@ -200,7 +200,7 @@ describe('KuaishouEcpmClient', () => {
     });
 
     const result = await client.refresh({
-      dataHour: '2026-05-08',
+      dataDay: '2026-05-08',
       gameAppId: 'game-1',
       openIds: [],
     });
@@ -213,7 +213,7 @@ describe('KuaishouEcpmClient', () => {
     expect(result.rows).toHaveLength(500 + 495 + 3);
   });
 
-  it('normalizes ISO+timezone dataHour into "yyyy-MM-dd HH:00:00" and casts numeric advertiser_id', async () => {
+  it('normalizes various dataDay inputs into "yyyy-MM-dd" and casts numeric advertiser_id', async () => {
     mockEcpmResponse();
     const tokenService = createTokenService({
       accessToken: 'tk',
@@ -225,8 +225,9 @@ describe('KuaishouEcpmClient', () => {
       tokenService,
     });
 
+    // 入参可以是 ISO 全字符串，client 内部截到 "YYYY-MM-DD"
     await client.refresh({
-      dataHour: '2026-05-10T06:00:00+08:00',
+      dataDay: '2026-05-10T06:00:00+08:00',
       gameAppId: 'ks693554344267236216',
       openIds: [],
     });
@@ -237,7 +238,7 @@ describe('KuaishouEcpmClient', () => {
         body: JSON.stringify({
           advertiser_id: 65777275,
           app_id: 'ks693554344267236216',
-          data_hour: '2026-05-10 06:00:00',
+          data_hour: '2026-05-10',
           page: 1,
           page_size: 500,
         }),
@@ -274,7 +275,7 @@ describe('KuaishouEcpmClient', () => {
     });
 
     const result = await client.refresh({
-      dataHour: '2026-05-10T06:00:00+08:00',
+      dataDay: '2026-05-10T06:00:00+08:00',
       gameAppId: 'ks693554344267236216',
       openIds: [],
     });
@@ -311,14 +312,14 @@ describe('KuaishouEcpmClient', () => {
 
     await expect(
       client.refresh({
-        dataHour: '2026-05-08',
+        dataDay: '2026-05-08',
         gameAppId: 'game-1',
         openIds: ['open-1'],
       }),
     ).rejects.toThrow(BadGatewayException);
     await expect(
       client.refresh({
-        dataHour: '2026-05-08',
+        dataDay: '2026-05-08',
         gameAppId: 'game-1',
         openIds: ['open-1'],
       }),

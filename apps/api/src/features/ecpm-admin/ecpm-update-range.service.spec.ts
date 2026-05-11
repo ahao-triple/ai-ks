@@ -21,23 +21,21 @@ describe('EcpmUpdateRangeService', () => {
     expect(rangeSyncService.refreshRange).toHaveBeenNthCalledWith(1, {
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
-      dataHours: ['2026-05-08T14:00:00+08:00'],
+      dataDays: ["2026-05-08"],
       gameAppId: 'game-app-1',
-      lookbackHours: 1,
       markTokenError: true,
       openIds: ['open-a', 'open-b'],
     });
     expect(rangeSyncService.refreshRange).toHaveBeenNthCalledWith(2, {
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
-      dataHours: ['2026-05-08T14:00:00+08:00'],
+      dataDays: ["2026-05-08"],
       gameAppId: 'game-app-2',
-      lookbackHours: 1,
       markTokenError: true,
       openIds: ['open-c'],
     });
     expect(job).toMatchObject({
-      endedDataHour: '2026-05-08T14:00:00+08:00',
+      endedDataHour: '2026-05-08',
       failedCount: 0,
       mode: 'latest',
       requestedGameCount: 2,
@@ -46,7 +44,7 @@ describe('EcpmUpdateRangeService', () => {
       scopeId: 'company-1',
       scopeType: 'company',
       skippedCount: 0,
-      startedDataHour: '2026-05-08T14:00:00+08:00',
+      startedDataHour: '2026-05-08',
       status: EcpmUpdateJobStatus.SUCCEEDED,
     });
   });
@@ -56,33 +54,32 @@ describe('EcpmUpdateRangeService', () => {
 
     const job = await service.update({
       ...baseActor(),
-      endedDataHour: '2026-05-08T15:00:00+08:00',
+      endedDataHour: '2026-05-08',
       mode: 'range',
       scopeId: 'game-1',
       scopeType: 'game',
-      startedDataHour: '2026-05-08T13:00:00+08:00',
+      startedDataHour: '2026-05-06',
     });
 
     expect(rangeSyncService.refreshRange).toHaveBeenCalledTimes(1);
     expect(rangeSyncService.refreshRange).toHaveBeenCalledWith({
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
-      dataHours: [
-        '2026-05-08T13:00:00+08:00',
-        '2026-05-08T14:00:00+08:00',
-        '2026-05-08T15:00:00+08:00',
+      dataDays: [
+        '2026-05-06',
+        '2026-05-07',
+        '2026-05-08',
       ],
       gameAppId: 'game-app-1',
-      lookbackHours: 5,
       markTokenError: true,
       openIds: ['open-a', 'open-b'],
     });
     expect(job).toMatchObject({
-      endedDataHour: '2026-05-08T15:00:00+08:00',
+      endedDataHour: '2026-05-08',
       requestedGameCount: 1,
       requestedOpenIdCount: 2,
       savedCount: 3,
-      startedDataHour: '2026-05-08T13:00:00+08:00',
+      startedDataHour: '2026-05-06',
       status: EcpmUpdateJobStatus.SUCCEEDED,
     });
   });
@@ -165,7 +162,7 @@ describe('EcpmUpdateRangeService', () => {
     expect(rangeSyncService.refreshRange).not.toHaveBeenCalled();
     expect(prisma.items).toHaveLength(1);
     expect(prisma.items[0]).toMatchObject({
-      dataHour: '2026-05-08T14:00:00+08:00',
+      dataHour: '2026-05-08',
       jobId: job.id,
       savedCount: 0,
       skipReason: 'NO_OPEN_IDS',
@@ -188,11 +185,11 @@ describe('EcpmUpdateRangeService', () => {
     await expect(
       service.update({
         ...baseActor(),
-        endedDataHour: '2026-05-08T00:00:00+08:00',
+        endedDataHour: '2026-05-08',
         mode: 'range',
         scopeId: 'game-1',
         scopeType: 'game',
-        startedDataHour: '2026-04-30T23:00:00+08:00',
+        startedDataHour: '2026-04-30',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
@@ -207,11 +204,11 @@ describe('EcpmUpdateRangeService', () => {
     await expect(
       service.update({
         ...baseActor(),
-        endedDataHour: '2026-03-02T01:00:00+08:00',
+        endedDataHour: '2026-03-02',
         mode: 'range',
         scopeId: 'game-1',
         scopeType: 'game',
-        startedDataHour: '2026-02-30T00:00:00+08:00',
+        startedDataHour: '2026-02-30',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
@@ -226,11 +223,11 @@ describe('EcpmUpdateRangeService', () => {
     await expect(
       service.update({
         ...baseActor(),
-        endedDataHour: '2026-05-08T14:00:00+08:00',
+        endedDataHour: '2026-05-08',
         mode: 'range',
         scopeId: 'game-1',
         scopeType: 'game',
-        startedDataHour: '2026-05-08T13:30:00+08:00',
+        startedDataHour: '2026-05-08 13:30',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
@@ -245,11 +242,11 @@ describe('EcpmUpdateRangeService', () => {
     await expect(
       service.update({
         ...baseActor(),
-        endedDataHour: '2026-05-08T14:00:00+08:00',
+        endedDataHour: '2026-05-08',
         mode: 'range',
         scopeId: 'game-1',
         scopeType: 'game',
-        startedDataHour: '2026-05-08T05:00:00Z',
+        startedDataHour: '2026-05-08Z',
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
 
@@ -338,11 +335,11 @@ describe('EcpmUpdateRangeService', () => {
 
     const job = await service.update({
       ...baseActor(),
-      endedDataHour: '2026-05-08T15:00:00+08:00',
+      endedDataHour: '2026-05-08',
       mode: 'range',
       scopeId: 'game-1',
       scopeType: 'game',
-      startedDataHour: '2026-05-08T13:00:00+08:00',
+      startedDataHour: '2026-05-06',
     });
 
     expect(auditLogService.record).toHaveBeenCalledWith({
@@ -350,7 +347,7 @@ describe('EcpmUpdateRangeService', () => {
       actorId: 'admin',
       actorType: 'SUPER_ADMIN',
       metadata: {
-        endedDataHour: '2026-05-08T15:00:00+08:00',
+        endedDataHour: '2026-05-08',
         failedCount: 0,
         jobId: job.id,
         mode: 'range',
@@ -360,7 +357,7 @@ describe('EcpmUpdateRangeService', () => {
         scopeId: 'game-1',
         scopeType: 'game',
         skippedCount: 0,
-        startedDataHour: '2026-05-08T13:00:00+08:00',
+        startedDataHour: '2026-05-06',
       },
       targetId: job.id,
       targetType: 'ecpm_update_job',
@@ -397,11 +394,11 @@ describe('EcpmUpdateRangeService', () => {
       .mockRejectedValueOnce(new Error('second game failed'));
     const failedJob = await service.update({
       ...baseActor(),
-      endedDataHour: '2026-05-08T15:00:00+08:00',
+      endedDataHour: '2026-05-08',
       mode: 'range',
       scopeId: 'company-1',
       scopeType: 'company',
-      startedDataHour: '2026-05-08T13:00:00+08:00',
+      startedDataHour: '2026-05-06',
     });
     rangeSyncService.refreshRange.mockClear();
     rangeSyncService.refreshRange.mockResolvedValue(syncResult('sync-retry', 2));
@@ -420,10 +417,10 @@ describe('EcpmUpdateRangeService', () => {
       1,
       expect.objectContaining({
         actorId: 'admin-retry',
-        dataHours: [
-          '2026-05-08T13:00:00+08:00',
-          '2026-05-08T14:00:00+08:00',
-          '2026-05-08T15:00:00+08:00',
+        dataDays: [
+          '2026-05-06',
+          '2026-05-07',
+          '2026-05-08',
         ],
         gameAppId: 'game-app-1',
         openIds: ['open-a', 'open-b'],
@@ -434,7 +431,7 @@ describe('EcpmUpdateRangeService', () => {
       mode: 'range',
       scopeId: 'company-1',
       scopeType: 'company',
-      startedDataHour: '2026-05-08T13:00:00+08:00',
+      startedDataHour: '2026-05-06',
       status: EcpmUpdateJobStatus.SUCCEEDED,
     });
     expect(prisma.jobs).toHaveLength(2);

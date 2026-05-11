@@ -97,11 +97,12 @@ export class KuaishouEcpmSchedulerService
         }
 
         try {
+          // 定时同步：只刷"当天"。ecpmAutoSyncIntervalHours 字段仅用作触发间隔，
+          // 不再决定回看窗口（快手 API 现按天颗粒拉取）。
           await this.rangeSyncService.refreshRange({
             actorId: 'system',
             actorType: 'SYSTEM',
             gameAppId: game.gameAppId,
-            lookbackHours: game.ecpmAutoSyncIntervalHours,
             markTokenError: false,
           });
         } catch (error) {

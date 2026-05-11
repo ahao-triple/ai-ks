@@ -28,7 +28,6 @@ describe('KuaishouEcpmSchedulerService', () => {
       actorId: 'system',
       actorType: 'SYSTEM',
       gameAppId: 'app-1',
-      lookbackHours: 5,
       markTokenError: false,
     });
     expect(dependencies.prisma.game.update).toHaveBeenCalledWith({

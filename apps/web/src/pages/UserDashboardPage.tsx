@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  DashboardRangeTabs,
+  DateRangeInput,
   EcpmRecordTable,
-  type DashboardRangeKey,
+  defaultDashboardDayRange,
+  type DashboardDayRange,
   type EcpmRecordExtraColumn,
   type EcpmRecordView,
 } from '../components/domain';
@@ -14,15 +15,18 @@ import type {
   UserDashboardOverview,
 } from '../types/api';
 
+type DayRangeInput = { startDay?: string; endDay?: string };
+
 export type UserDashboardApi = {
   getUserDashboardOverview: (
-    range?: DashboardRangeKey,
+    input?: DayRangeInput,
   ) => Promise<UserDashboardOverview>;
   getUserDashboardGroups: (
-    range?: DashboardRangeKey,
+    input?: DayRangeInput,
   ) => Promise<UserDashboardGameGroup[]>;
   getUserDashboardRecords: (input: {
-    range?: DashboardRangeKey;
+    startDay?: string;
+    endDay?: string;
     gameId?: string;
     accountId?: string;
     limit?: number;
@@ -43,24 +47,27 @@ export type UserDashboardPageProps = {
 
 export function UserDashboardPage(props: UserDashboardPageProps) {
   const { api, userReadableId, initialData } = props;
-  const [rangeKey, setRangeKey] = useState<DashboardRangeKey>('today');
+  const [dayRange, setDayRange] = useState<DashboardDayRange>(
+    defaultDashboardDayRange(),
+  );
   const [selectedGameId, setSelectedGameId] = useState<string | undefined>();
   const [extraColumns, setExtraColumns] = useState<EcpmRecordExtraColumn[]>([]);
   const [autoRefreshOn, setAutoRefreshOn] = useState(false);
   const [autoIntervalMs, setAutoIntervalMs] = useState(10_000);
 
   const fetchAll = useCallback(async (): Promise<UserDashboardData> => {
+    const range = { startDay: dayRange.startDay, endDay: dayRange.endDay };
     const [overview, groups, records] = await Promise.all([
-      api.getUserDashboardOverview(rangeKey),
-      api.getUserDashboardGroups(rangeKey),
+      api.getUserDashboardOverview(range),
+      api.getUserDashboardGroups(range),
       api.getUserDashboardRecords({
-        range: rangeKey,
+        ...range,
         gameId: selectedGameId,
         limit: 50,
       }),
     ]);
     return { overview, groups, records };
-  }, [api, rangeKey, selectedGameId]);
+  }, [api, dayRange.startDay, dayRange.endDay, selectedGameId]);
 
   const {
     data: liveData,
@@ -137,7 +144,7 @@ export function UserDashboardPage(props: UserDashboardPageProps) {
           )}
         </div>
         <div className="user-dashboard-time-filters">
-          <DashboardRangeTabs value={rangeKey} onChange={setRangeKey} />
+          <DateRangeInput value={dayRange} onChange={setDayRange} />
           <button
             type="button"
             className="user-dashboard-refresh"

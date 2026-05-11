@@ -124,10 +124,8 @@ describe('UserDashboardPage SSR', () => {
         initialData={stubData}
       />,
     );
-    expect(markup).toContain('今天');
-    expect(markup).toContain('昨天');
-    expect(markup).toContain('三天总');
-    expect(markup).toContain('七天总');
+    // 起止两个日期框 + 立即刷新
+    expect(markup).toContain('dashboard-date-input');
     expect(markup).toContain('立即刷新');
   });
 });

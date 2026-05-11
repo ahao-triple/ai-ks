@@ -1,5 +1,4 @@
 import { requestJson } from './api';
-import type { DashboardRangeKey } from '../components/domain';
 import type {
   AccountAgentBindingResult,
   AccountEarningsResult,
@@ -710,18 +709,22 @@ export const aiKsApi = {
     });
   },
 
-  getUserDashboardOverview(accessToken: string, range?: DashboardRangeKey) {
-    const qs = range ? `?range=${range}` : '';
+  getUserDashboardOverview(
+    accessToken: string,
+    input?: { startDay?: string; endDay?: string },
+  ) {
     return requestJson<UserDashboardOverview>(
-      `/users/me/dashboard/overview${qs}`,
+      `/users/me/dashboard/overview${dayRangeQs(input)}`,
       { accessToken },
     );
   },
 
-  getUserDashboardGroups(accessToken: string, range?: DashboardRangeKey) {
-    const qs = range ? `?range=${range}` : '';
+  getUserDashboardGroups(
+    accessToken: string,
+    input?: { startDay?: string; endDay?: string },
+  ) {
     return requestJson<UserDashboardGameGroup[]>(
-      `/users/me/dashboard/groups${qs}`,
+      `/users/me/dashboard/groups${dayRangeQs(input)}`,
       { accessToken },
     );
   },
@@ -729,14 +732,16 @@ export const aiKsApi = {
   getUserDashboardRecords(
     accessToken: string,
     input: {
-      range?: DashboardRangeKey;
+      startDay?: string;
+      endDay?: string;
       gameId?: string;
       accountId?: string;
       limit?: number;
     } = {},
   ) {
     const params = new URLSearchParams();
-    if (input.range) params.set('range', input.range);
+    if (input.startDay) params.set('start', input.startDay);
+    if (input.endDay) params.set('end', input.endDay);
     if (input.gameId) params.set('gameId', input.gameId);
     if (input.accountId) params.set('accountId', input.accountId);
     if (input.limit) params.set('limit', String(input.limit));
@@ -749,21 +754,20 @@ export const aiKsApi = {
 
   getSuperAdminDashboardOverview(
     adminAccessToken: string,
-    range?: DashboardRangeKey,
+    input?: { startDay?: string; endDay?: string },
   ) {
-    const qs = range ? `?range=${range}` : '';
-    return requestJson<SuperAdminOverview>(`/admin/dashboard/overview${qs}`, {
-      accessToken: adminAccessToken,
-    });
+    return requestJson<SuperAdminOverview>(
+      `/admin/dashboard/overview${dayRangeQs(input)}`,
+      { accessToken: adminAccessToken },
+    );
   },
 
   getSuperAdminDashboardCompanies(
     adminAccessToken: string,
-    range?: DashboardRangeKey,
+    input?: { startDay?: string; endDay?: string },
   ) {
-    const qs = range ? `?range=${range}` : '';
     return requestJson<SuperAdminCompanyRow[]>(
-      `/admin/dashboard/companies${qs}`,
+      `/admin/dashboard/companies${dayRangeQs(input)}`,
       { accessToken: adminAccessToken },
     );
   },
@@ -777,11 +781,10 @@ export const aiKsApi = {
   getSuperAdminGamesUnderCompany(
     adminAccessToken: string,
     companyId: string,
-    range?: DashboardRangeKey,
+    input?: { startDay?: string; endDay?: string },
   ) {
-    const qs = range ? `?range=${range}` : '';
     return requestJson<SuperAdminUnderCompanyResult>(
-      `/admin/dashboard/companies/${encodeURIComponent(companyId)}/games${qs}`,
+      `/admin/dashboard/companies/${encodeURIComponent(companyId)}/games${dayRangeQs(input)}`,
       { accessToken: adminAccessToken },
     );
   },
@@ -789,54 +792,63 @@ export const aiKsApi = {
   getSuperAdminUsersUnderGame(
     adminAccessToken: string,
     gameId: string,
-    range?: DashboardRangeKey,
+    input?: { startDay?: string; endDay?: string },
   ) {
-    const qs = range ? `?range=${range}` : '';
     return requestJson<SuperAdminUnderGameResult>(
-      `/admin/dashboard/games/${encodeURIComponent(gameId)}/users${qs}`,
+      `/admin/dashboard/games/${encodeURIComponent(gameId)}/users${dayRangeQs(input)}`,
       { accessToken: adminAccessToken },
     );
   },
 
-  refreshSuperAdminScope(
+  async refreshSuperAdminScope(
     adminAccessToken: string,
     body:
-      | {
-          scope: 'company';
-          companyId: string;
-          lookbackHours?: 1 | 5 | 24 | 72 | 168;
-        }
-      | {
-          scope: 'game';
-          gameId: string;
-          lookbackHours?: 1 | 5 | 24 | 72 | 168;
-        }
-      | {
-          scope: 'user';
-          gameId: string;
-          userId: string;
-          lookbackHours?: 1 | 5 | 24 | 72 | 168;
-        },
+      | { scope: 'company'; companyId: string }
+      | { scope: 'game'; gameId: string }
+      | { scope: 'user'; gameId: string; userId: string },
   ) {
-    return requestJson<{ results: unknown[] }>(`/admin/dashboard/refresh`, {
-      accessToken: adminAccessToken,
-      body,
-      method: 'POST',
-    });
+    const tStart = performance.now();
+    // eslint-disable-next-line no-console
+    console.log('[刷新链路:API] 发起 POST /admin/dashboard/refresh', body);
+    try {
+      const result = await requestJson<{ results: unknown[] }>(
+        `/admin/dashboard/refresh`,
+        {
+          accessToken: adminAccessToken,
+          body,
+          method: 'POST',
+        },
+      );
+      // eslint-disable-next-line no-console
+      console.log(
+        `[刷新链路:API] 完成 耗时=${Math.round(performance.now() - tStart)}ms results 数=${result.results?.length ?? 0}`,
+        result,
+      );
+      return result;
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(
+        `[刷新链路:API] 失败 耗时=${Math.round(performance.now() - tStart)}ms`,
+        err,
+      );
+      throw err;
+    }
   },
 
   getSuperAdminUserRecords(
     adminAccessToken: string,
     userId: string,
     input: {
-      date?: string;
+      startDay?: string;
+      endDay?: string;
       gameId?: string;
       accountId?: string;
       limit?: number;
     } = {},
   ) {
     const params = new URLSearchParams();
-    if (input.date) params.set('date', input.date);
+    if (input.startDay) params.set('start', input.startDay);
+    if (input.endDay) params.set('end', input.endDay);
     if (input.gameId) params.set('gameId', input.gameId);
     if (input.accountId) params.set('accountId', input.accountId);
     if (input.limit) params.set('limit', String(input.limit));
@@ -849,23 +861,30 @@ export const aiKsApi = {
 
   getAgentDashboardOverview(
     agentAccessToken: string,
-    range?: DashboardRangeKey,
+    input?: { startDay?: string; endDay?: string },
   ) {
-    const qs = range ? `?range=${range}` : '';
     return requestJson<AgentDashboardOverview>(
-      `/agents/me/dashboard/overview${qs}`,
+      `/agents/me/dashboard/overview${dayRangeQs(input)}`,
       { accessToken: agentAccessToken },
     );
   },
 
   getAgentDashboardUsers(
     agentAccessToken: string,
-    range?: DashboardRangeKey,
+    input?: { startDay?: string; endDay?: string },
   ) {
-    const qs = range ? `?range=${range}` : '';
     return requestJson<AgentDashboardUserRow[]>(
-      `/agents/me/dashboard/users${qs}`,
+      `/agents/me/dashboard/users${dayRangeQs(input)}`,
       { accessToken: agentAccessToken },
     );
   },
 };
+
+function dayRangeQs(input?: { startDay?: string; endDay?: string }) {
+  if (!input) return '';
+  const params = new URLSearchParams();
+  if (input.startDay) params.set('start', input.startDay);
+  if (input.endDay) params.set('end', input.endDay);
+  const qs = params.toString();
+  return qs ? '?' + qs : '';
+}

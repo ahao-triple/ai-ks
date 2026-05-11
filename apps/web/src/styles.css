@@ -1550,6 +1550,27 @@ select {
   border-color: var(--info);
 }
 
+.dashboard-date-range {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dashboard-date-input {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+.dashboard-date-range-sep {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .user-dashboard-time:disabled:not(.user-dashboard-time-active) {
   opacity: 0.55;
   cursor: not-allowed;

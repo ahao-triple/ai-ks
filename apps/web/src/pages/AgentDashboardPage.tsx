@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  DashboardRangeTabs,
-  type DashboardRangeKey,
+  DateRangeInput,
+  defaultDashboardDayRange,
+  type DashboardDayRange,
 } from '../components/domain';
 import { formatAgentInvitationCode, formatUserId } from '../lib/idFormat';
 import { useThrottledRefresh } from '../lib/useThrottledRefresh';
@@ -10,12 +11,14 @@ import type {
   AgentDashboardUserRow,
 } from '../types/api';
 
+type DayRangeInput = { startDay?: string; endDay?: string };
+
 export type AgentDashboardApi = {
   getAgentDashboardOverview: (
-    range?: DashboardRangeKey,
+    input?: DayRangeInput,
   ) => Promise<AgentDashboardOverview>;
   getAgentDashboardUsers: (
-    range?: DashboardRangeKey,
+    input?: DayRangeInput,
   ) => Promise<AgentDashboardUserRow[]>;
 };
 
@@ -32,16 +35,19 @@ export type AgentDashboardPageProps = {
 
 export function AgentDashboardPage(props: AgentDashboardPageProps) {
   const { api, agentName, initialData } = props;
-  const [rangeKey, setRangeKey] = useState<DashboardRangeKey>('today');
+  const [dayRange, setDayRange] = useState<DashboardDayRange>(
+    defaultDashboardDayRange(),
+  );
   const [search, setSearch] = useState('');
 
   const fetchAll = useCallback(async (): Promise<AgentDashboardData> => {
+    const range = { startDay: dayRange.startDay, endDay: dayRange.endDay };
     const [overview, users] = await Promise.all([
-      api.getAgentDashboardOverview(rangeKey),
-      api.getAgentDashboardUsers(rangeKey),
+      api.getAgentDashboardOverview(range),
+      api.getAgentDashboardUsers(range),
     ]);
     return { overview, users };
-  }, [api, rangeKey]);
+  }, [api, dayRange.startDay, dayRange.endDay]);
 
   const {
     data: liveData,
@@ -71,7 +77,7 @@ export function AgentDashboardPage(props: AgentDashboardPageProps) {
           <div className="user-dashboard-subtitle">代理工作台</div>
         </div>
         <div className="user-dashboard-time-filters">
-          <DashboardRangeTabs value={rangeKey} onChange={setRangeKey} />
+          <DateRangeInput value={dayRange} onChange={setDayRange} />
           <button
             type="button"
             className="user-dashboard-refresh"

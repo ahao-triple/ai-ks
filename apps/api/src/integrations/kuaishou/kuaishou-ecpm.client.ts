@@ -3,6 +3,7 @@ import {
   BadRequestException,
   Inject,
   Injectable,
+  Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { KuaishouTokenService } from '../../features/kuaishou-admin/kuaishou-token.service';
@@ -19,7 +20,9 @@ export type KuaishouEcpmRow = {
 
 export type KuaishouEcpmRefreshInput = {
   gameAppId: string;
-  dataHour: string;
+  // 中国时区下的目标日期，格式 "YYYY-MM-DD"。
+  // 快手 ECPM 接口按天查询，单次请求返回该日全天数据（含翻页）。
+  dataDay: string;
   openIds: string[];
 };
 
@@ -35,6 +38,8 @@ const ECPM_MAX_PAGES = 50;
 
 @Injectable()
 export class KuaishouEcpmClient {
+  private readonly logger = new Logger('刷新链路:KuaishouClient');
+
   constructor(
     @Inject(ConfigService) private readonly configService: ConfigReader,
     private readonly tokenService: KuaishouTokenService,
@@ -49,11 +54,13 @@ export class KuaishouEcpmClient {
     const allRows: KuaishouEcpmRow[] = [];
     let lastPayload: Record<string, unknown> | undefined;
 
+    const dataDay = formatKuaishouDataDay(input.dataDay);
+
     for (let page = 1; page <= ECPM_MAX_PAGES; page += 1) {
       const requestBody: Record<string, unknown> = {
         advertiser_id: parseAdvertiserId(credentials.advertiserId),
         app_id: input.gameAppId,
-        data_hour: formatKuaishouDataHour(input.dataHour),
+        data_hour: dataDay,
         ...(input.openIds && input.openIds.length > 0
           ? { open_id: input.openIds }
           : {}),
@@ -61,6 +68,7 @@ export class KuaishouEcpmClient {
         page_size: ECPM_PAGE_SIZE,
       };
 
+      const tPage = Date.now();
       const response = await fetch(
         'https://ad.e.kuaishou.com/rest/openapi/gw/dsp/v1/report/ecpm_report',
         {
@@ -74,6 +82,9 @@ export class KuaishouEcpmClient {
       );
       const payload = (await response.json()) as Record<string, unknown>;
       if (!response.ok) {
+        this.logger.error(
+          `[快手 API 返非 2xx] dataDay=${dataDay} page=${page} 耗时=${Date.now() - tPage}ms payload=${JSON.stringify(payload).slice(0, 200)}`,
+        );
         throw new BadGatewayException(
           `快手 ECPM 刷新失败：${summarizeKuaishouPayload(payload)}`,
         );
@@ -81,6 +92,9 @@ export class KuaishouEcpmClient {
       lastPayload = payload;
 
       const details = extractDetails(payload);
+      this.logger.log(
+        `[快手 API] dataDay=${dataDay} page=${page} 拿到 ${details.length} 条 耗时=${Date.now() - tPage}ms`,
+      );
       allRows.push(...details.flatMap(detailToRow));
       if (details.length < ECPM_PAGE_CONTINUE_THRESHOLD) {
         break;
@@ -180,13 +194,16 @@ function readDate(payload: Record<string, unknown>, key: string) {
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 }
 
-// 我们内部的 dataHour 形如 "2026-05-08T14:00:00+08:00"（ISO + 时区），
-// 但快手 ECPM 接口只接受 "2026-05-08 14:00:00"（空格分隔，无时区）。
-function formatKuaishouDataHour(input: string): string {
-  if (!input.includes('T')) {
+// 快手 ECPM 接口的 data_hour 字段实际同时接受天级（YYYY-MM-DD，返回该日全天数据）
+// 和小时级（YYYY-MM-DD HH:00:00）。我们统一用天级，单次请求拉一整天。
+// 该函数接受 "YYYY-MM-DD" 或带时分秒/ISO 的输入，归一化为天级字符串。
+function formatKuaishouDataDay(input: string): string {
+  if (!input) return input;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(input)) {
     return input;
   }
-  return input.replace('T', ' ').replace(/[+-]\d{2}:?\d{2}$|Z$/, '');
+  // 兼容历史调用方传入的 "YYYY-MM-DDTHH:00:00+08:00" / "YYYY-MM-DD HH:00:00"
+  return input.slice(0, 10);
 }
 
 // 快手 ECPM 接口要求 advertiser_id 是 number。

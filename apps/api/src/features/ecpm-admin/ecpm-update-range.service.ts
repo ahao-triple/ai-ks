@@ -7,10 +7,10 @@ import {
 import { PrismaService } from '../../common/prisma/prisma.service';
 import { AuditLogService } from '../audit/audit-log.service';
 import {
-  buildDataHoursBetween,
-  buildRecentDataHours,
+  buildDataDaysBetween,
   KuaishouEcpmRangeSyncService,
 } from '../kuaishou-admin/kuaishou-ecpm-range-sync.service';
+import { currentChinaDate } from '../user/china-day-range';
 import {
   EcpmUpdateJobService,
   presentEcpmUpdateJob,
@@ -60,8 +60,7 @@ type ResolvedGameBatch = {
   openIds: ResolvedOpenId[];
 };
 
-const DATA_HOUR_PATTERN =
-  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?\+08:00$/;
+const DATA_DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 @Injectable()
 export class EcpmUpdateRangeService {
@@ -76,9 +75,9 @@ export class EcpmUpdateRangeService {
   ) {}
 
   async update(input: EcpmUpdateRequest & EcpmUpdateActor) {
-    const dataHours = this.resolveDataHours(input);
-    const startedDataHour = dataHours[0];
-    const endedDataHour = dataHours[dataHours.length - 1];
+    const dataDays = this.resolveDataDays(input);
+    const startedDataHour = dataDays[0];
+    const endedDataHour = dataDays[dataDays.length - 1];
     const batches = await this.resolveBatches(input);
     const requestedOpenIdCount = batches.reduce(
       (total, batch) => total + batch.openIds.length,
@@ -108,7 +107,7 @@ export class EcpmUpdateRangeService {
         await this.refreshBatch({
           actor: input,
           batch,
-          dataHours,
+          dataDays,
           endedDataHour,
           jobId: aggregateJob.id,
         });
@@ -163,7 +162,7 @@ export class EcpmUpdateRangeService {
   private async refreshBatch(input: {
     actor: EcpmUpdateActor;
     batch: ResolvedGameBatch;
-    dataHours: string[];
+    dataDays: string[];
     endedDataHour: string;
     jobId: string;
   }) {
@@ -171,9 +170,8 @@ export class EcpmUpdateRangeService {
       const result = await this.rangeSyncService.refreshRange({
         actorId: input.actor.actorId,
         actorType: input.actor.actorType,
-        dataHours: input.dataHours,
+        dataDays: input.dataDays,
         gameAppId: input.batch.gameAppId,
-        lookbackHours: resolveDelegatedLookbackHours(input.dataHours.length),
         markTokenError: true,
         openIds: input.batch.openIds.map((record) => record.openId),
       });
@@ -206,9 +204,9 @@ export class EcpmUpdateRangeService {
     }
   }
 
-  private resolveDataHours(input: EcpmUpdateRequest) {
+  private resolveDataDays(input: EcpmUpdateRequest) {
     if (input.mode === 'latest') {
-      return [buildRecentDataHours(1, this.now())[0]];
+      return [currentChinaDate(this.now())];
     }
 
     if (!input.startedDataHour || !input.endedDataHour) {
@@ -216,10 +214,10 @@ export class EcpmUpdateRangeService {
         'startedDataHour and endedDataHour are required for range ECPM updates',
       );
     }
-    assertValidChinaDataHour(input.startedDataHour);
-    assertValidChinaDataHour(input.endedDataHour);
+    assertValidChinaDataDay(input.startedDataHour);
+    assertValidChinaDataDay(input.endedDataHour);
 
-    return buildDataHoursBetween(input.startedDataHour, input.endedDataHour);
+    return buildDataDaysBetween(input.startedDataHour, input.endedDataHour);
   }
 
   private async resolveBatches(input: EcpmUpdateRequest) {
@@ -399,23 +397,6 @@ function singleUserId(batch: ResolvedGameBatch) {
   return userIds.length === 1 ? userIds[0] : undefined;
 }
 
-function resolveDelegatedLookbackHours(dataHourCount: number) {
-  if (dataHourCount <= 1) {
-    return 1;
-  }
-  if (dataHourCount <= 5) {
-    return 5;
-  }
-  if (dataHourCount <= 24) {
-    return 24;
-  }
-  if (dataHourCount <= 72) {
-    return 72;
-  }
-
-  return 168;
-}
-
 function resolveSuccessfulItemStatus(status: string) {
   return status === 'PARTIAL' ? 'PARTIAL' : 'SUCCEEDED';
 }
@@ -424,30 +405,18 @@ function readErrorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'unknown error';
 }
 
-function assertValidChinaDataHour(value: string) {
-  const match = DATA_HOUR_PATTERN.exec(value);
-  if (!match) {
-    throw new BadRequestException('Invalid ECPM update data-hour range');
+function assertValidChinaDataDay(value: string) {
+  if (!DATA_DAY_PATTERN.test(value)) {
+    throw new BadRequestException('Invalid ECPM update day');
   }
-
-  const [, yearText, monthText, dayText, hourText, minuteText, secondText, ms] =
-    match;
-  if (minuteText !== '00' || secondText !== '00' || Number(ms ?? 0) !== 0) {
-    throw new BadRequestException('Invalid ECPM update data-hour range');
-  }
-
-  const year = Number(yearText);
-  const month = Number(monthText);
-  const day = Number(dayText);
-  const hour = Number(hourText);
-  const date = new Date(Date.UTC(year, month - 1, day, hour));
+  const [year, month, day] = value.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
   if (
     date.getUTCFullYear() !== year ||
     date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day ||
-    date.getUTCHours() !== hour
+    date.getUTCDate() !== day
   ) {
-    throw new BadRequestException('Invalid ECPM update data-hour range');
+    throw new BadRequestException('Invalid ECPM update day');
   }
 }
 

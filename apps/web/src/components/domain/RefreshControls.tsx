@@ -1,64 +1,18 @@
 import { useState } from 'react';
 
-export type RefreshLookbackHours = 1 | 5 | 24 | 72 | 168;
-
-export const REFRESH_LOOKBACK_OPTIONS: ReadonlyArray<{
-  hours: RefreshLookbackHours;
-  label: string;
-  short: string;
-}> = [
-  { hours: 1, label: '最近 1 小时', short: '1h' },
-  { hours: 5, label: '最近 5 小时', short: '5h' },
-  { hours: 24, label: '最近 1 天', short: '1d' },
-  { hours: 72, label: '最近 3 天', short: '3d' },
-  { hours: 168, label: '最近 7 天（最长）', short: '7d' },
-];
-
-function shortLabelFor(hours: RefreshLookbackHours): string {
-  return (
-    REFRESH_LOOKBACK_OPTIONS.find((opt) => opt.hours === hours)?.short ??
-    `${hours}h`
-  );
-}
-
-export function RefreshWindowSelect(props: {
-  value: RefreshLookbackHours;
-  onChange: (value: RefreshLookbackHours) => void;
-  disabled?: boolean;
-}) {
-  return (
-    <label className="refresh-window-select">
-      刷新窗口
-      <select
-        value={props.value}
-        disabled={props.disabled}
-        onChange={(event) =>
-          props.onChange(Number(event.target.value) as RefreshLookbackHours)
-        }
-      >
-        {REFRESH_LOOKBACK_OPTIONS.map((opt) => (
-          <option key={opt.hours} value={opt.hours}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
+// 行级刷新按钮：触发后端调快手 API 拉"当天"数据落库，写完上层负责重拉看板。
+// 不再有窗口选择（系统统一刷当天），按钮只显示 ⟳ / "同步中…"。
 export function RowRefreshButton(props: {
   onRefresh: () => Promise<void>;
-  hours?: RefreshLookbackHours;
   label?: string;
 }) {
   const [busy, setBusy] = useState(false);
-  const suffix = props.hours ? ` ${shortLabelFor(props.hours)}` : '';
   return (
     <button
       type="button"
       className="row-refresh-button"
       disabled={busy}
-      title={props.label ?? `刷新该行 ECPM${suffix ? `（${suffix.trim()}）` : ''}`}
+      title={props.label ?? '刷新该行（拉当天快手数据）'}
       onClick={async () => {
         setBusy(true);
         try {
@@ -68,7 +22,7 @@ export function RowRefreshButton(props: {
         }
       }}
     >
-      {busy ? `同步中${suffix}…` : `⟳${suffix}`}
+      {busy ? '同步中…' : '⟳'}
     </button>
   );
 }

@@ -130,7 +130,7 @@ describe('SuperAdminDashboardController', () => {
     );
   });
 
-  it('POST /refresh game scope 缺省 lookbackHours 为 1', async () => {
+  it('POST /refresh game scope 透传 gameAppId，不再使用 lookbackHours（默认刷当天）', async () => {
     prismaStub.game.findUnique.mockResolvedValue({ gameAppId: 'app-1' });
     rangeSyncService.refreshRange.mockClear();
 
@@ -142,33 +142,18 @@ describe('SuperAdminDashboardController', () => {
     expect(rangeSyncService.refreshRange).toHaveBeenCalledWith(
       expect.objectContaining({
         gameAppId: 'app-1',
-        lookbackHours: 1,
       }),
     );
+    // 不应再传 lookbackHours 字段
+    const callArg = rangeSyncService.refreshRange.mock.calls[0][0];
+    expect(callArg).not.toHaveProperty('lookbackHours');
   });
 
-  it('POST /refresh 透传 lookbackHours=5 给同步服务', async () => {
-    prismaStub.game.findUnique.mockResolvedValue({ gameAppId: 'app-1' });
-    rangeSyncService.refreshRange.mockClear();
-
-    await controller.refresh(
-      { username: 'admin', role: 'SUPER_ADMIN' } as never,
-      { scope: 'game', gameId: 'g1', lookbackHours: 5 },
-    );
-
-    expect(rangeSyncService.refreshRange).toHaveBeenCalledWith(
-      expect.objectContaining({
-        gameAppId: 'app-1',
-        lookbackHours: 5,
-      }),
-    );
-  });
-
-  it('POST /refresh 拒绝非法 lookbackHours（如 7）', async () => {
+  it('POST /refresh 拒绝 body 携带未知字段（如 lookbackHours）', async () => {
     await expect(
       controller.refresh(
         { username: 'admin', role: 'SUPER_ADMIN' } as never,
-        { scope: 'game', gameId: 'g1', lookbackHours: 7 },
+        { scope: 'foo', gameId: 'g1' },
       ),
     ).rejects.toThrow('刷新范围参数无效');
   });
